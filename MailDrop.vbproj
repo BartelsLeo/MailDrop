@@ -213,6 +213,10 @@
   <ItemGroup>
     <AppDesigner Include="My Project\" />
     <Compile Include="MailDropRibbon.vb" />
+    <Compile Include="MailDropTaskPaneControl.Designer.vb" />
+    <Compile Include="MailDropTaskPaneControl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="ThisAddIn.vb">
       <SubType>Code</SubType>
     </Compile>

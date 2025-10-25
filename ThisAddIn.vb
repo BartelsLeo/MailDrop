@@ -4,6 +4,7 @@ Imports Microsoft.Office.Core
 
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
+    Private taskPane As Microsoft.Office.Tools.CustomTaskPane
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
 
@@ -20,8 +21,14 @@ Public Class ThisAddIn
 
     ' Callback for Ribbon button
     Public Sub MailAblegen_Click(control As Object)
-        ' Hier die gewünschte Logik einfügen
-        System.Windows.Forms.MessageBox.Show("Mail ablegen geklickt!")
+        ' TaskPane erzeugen, falls noch nicht vorhanden
+        If taskPane Is Nothing Then
+            Dim paneControl As New MailDropTaskPaneControl()
+            taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
+            taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
+            taskPane.Width = 300
+        End If
+        taskPane.Visible = True
     End Sub
 
 End Class
