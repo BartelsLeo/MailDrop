@@ -1,0 +1,15 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+  <ribbon>
+    <tabs>
+      <tab idMso="TabMail">
+        <group id="MailDropGroup" label="MailDrop">
+          <button id="MailAblegenButton"
+                  label="Mail ablegen"
+                  size="large"
+                  onAction="MailAblegen_Click"
+                  imageMso="FileSave" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
