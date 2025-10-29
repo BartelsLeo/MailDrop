@@ -217,6 +217,7 @@
     <Compile Include="MailDropTaskPaneControl.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Session.vb" />
     <Compile Include="ThisAddIn.vb">
       <SubType>Code</SubType>
     </Compile>
