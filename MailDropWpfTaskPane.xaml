@@ -1,0 +1,82 @@
+<UserControl x:Class="MailDropWpfTaskPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:MailDrop"
+             Height="400" Width="250">
+    <UserControl.Resources>
+        <local:PathShortenerConverter x:Key="PathShortenerConverter"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="5" Orientation="Vertical">
+            <!-- LabelProjektordner -->
+            <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis"/>
+            <!-- ListBox1 -->
+            <ListBox x:Name="ListBox1"
+                     Height="69"
+                     ItemsSource="{Binding ProjektVerzeichnisse}"
+                     SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}"
+                                   ToolTipService.ShowDuration="60000">
+                            <TextBlock.ToolTip>
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Width="350"/>
+                            </TextBlock.ToolTip>
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <!-- LabelAblageordner -->
+            <Label x:Name="LabelAblageordner" Content="Projektstruktur"/>
+            <!-- TreeView1 -->
+            <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300">
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}"/>
+                        </StackPanel>
+                        <HierarchicalDataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter Property="TreeViewItem.IsExpanded" Value="True"/>
+                            </DataTrigger>
+                        </HierarchicalDataTemplate.Triggers>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+            <!-- LabelTitel & TextBoxTitel -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+                <Label x:Name="LabelTitel" Content="Titel" Width="85"/>
+                <TextBox x:Name="TextBoxTitel" Width="155" Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <!-- LabelAblageordnerField & TextBoxAblageordner -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+                <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Width="85"/>
+                <TextBox x:Name="TextBoxAblageordner" Width="155" Text="{Binding Ablageordner, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <!-- LabelMsgDateiname & TextBoxMsgDateiname -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+                <Label x:Name="LabelMsgDateiname" Content="msg Dateiname" Width="85"/>
+                <TextBox x:Name="TextBoxMsgDateiname" Width="155" Text="{Binding MsgDateiname, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <!-- LabelAnhaenge & CheckBoxAnhaenge -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+                <Label x:Name="LabelAnhaenge" Content="Anh&#228;nge ablegen" Width="110"/>
+                <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center" IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <!-- LabelMetadaten -->
+            <Label x:Name="LabelMetadaten" Content="Email Metadaten" Margin="0,5,0,0"/>
+            <!-- ListViewMetadaten -->
+            <ListView x:Name="ListViewMetadaten" Height="56" IsHitTestVisible="False">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Metadatum" DisplayMemberBinding="{Binding Content}" />
+                    </GridView>
+                </ListView.View>
+                <ListViewItem Content="Von"/>
+                <ListViewItem Content="An"/>
+                <ListViewItem Content="Betreff"/>
+                <ListViewItem Content="Datum"/>
+            </ListView>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

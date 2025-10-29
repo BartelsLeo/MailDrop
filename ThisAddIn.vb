@@ -23,7 +23,7 @@ Public Class ThisAddIn
     Public Sub MailAblegen_Click(control As Object)
         ' TaskPane erzeugen, falls noch nicht vorhanden
         If taskPane Is Nothing Then
-            Dim paneControl As New MailDropTaskPaneControl()
+            Dim paneControl As New MailDropWpfHostControl()
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
             taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
             taskPane.Width = 300
