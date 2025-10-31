@@ -11,9 +11,9 @@ Public Class Session
     Private _ablageordner As String
     Private _msgDateiname As String
     Private _anhaengeAblegen As Boolean
-    Private _selectedMetadaten As New List(Of String)()
     Private _selectedOrdner As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
+    Private _mailMetaInfo As New MailMetaInfo()
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -81,18 +81,6 @@ Public Class Session
         End Set
     End Property
 
-    Public Property SelectedMetadaten As List(Of String)
-        Get
-            Return _selectedMetadaten
-        End Get
-        Set(value As List(Of String))
-            If Not _selectedMetadaten.SequenceEqual(value) Then
-                _selectedMetadaten = value
-                OnPropertyChanged(NameOf(SelectedMetadaten))
-            End If
-        End Set
-    End Property
-
     Public Property SelectedOrdner As String
         Get
             Return _selectedOrdner
@@ -125,6 +113,32 @@ Public Class Session
         "anderes..."
     }
 
+    Public Property MailMetaInfo As MailMetaInfo
+        Get
+            Return _mailMetaInfo
+        End Get
+        Set(value As MailMetaInfo)
+            _mailMetaInfo = value
+            OnPropertyChanged(NameOf(MailMetaInfo))
+            OnPropertyChanged(NameOf(MailMetaInfoList))
+        End Set
+    End Property
+
+    Public ReadOnly Property MailMetaInfoList As List(Of KeyValuePair(Of String, String))
+        Get
+            If MailMetaInfo Is Nothing Then Return New List(Of KeyValuePair(Of String, String))()
+            Return New List(Of KeyValuePair(Of String, String)) From {
+                New KeyValuePair(Of String, String)("Sender", MailMetaInfo.Sender),
+                New KeyValuePair(Of String, String)("Sender Domain", MailMetaInfo.SenderDomain),
+                New KeyValuePair(Of String, String)("Empfänger", MailMetaInfo.Empfaenger),
+                New KeyValuePair(Of String, String)("Empfänger kurz", MailMetaInfo.EmpfaengerKurz),
+                New KeyValuePair(Of String, String)("Betreff", MailMetaInfo.Betreff),
+                New KeyValuePair(Of String, String)("Datum", MailMetaInfo.Datum.ToString()),
+                New KeyValuePair(Of String, String)("Datum formatiert", MailMetaInfo.DatumFormatiert)
+            }
+        End Get
+    End Property
+
     ' Setzt alle Properties auf Standardwerte zurück
     Public Sub Reset()
         SelectedProjekt = Nothing
@@ -132,14 +146,14 @@ Public Class Session
         Ablageordner = String.Empty
         MsgDateiname = String.Empty
         AnhaengeAblegen = False
-        SelectedMetadaten.Clear()
-        OnPropertyChanged(NameOf(SelectedMetadaten))
+        MailMetaInfo = New MailMetaInfo()
         SelectedOrdner = Nothing
         Debug.WriteLine("[Session] Reset ausgeführt")
     End Sub
 
     ' Vorbereitung der Session. Mail Daten auslesen und Felder aus- und vorausfüllen
     Public Sub PrepareSession()
+        Reset()
         ReadMailMeta()
         TreeviewEngine()
         SchemaEngine()
@@ -149,7 +163,38 @@ Public Class Session
     ' Methoden für die Verarbeitungslogik
     Public Sub ReadMailMeta()
         Debug.WriteLine("[Session] ReadMailMeta ausgeführt")
-        ' TODO: Implementiere das Auslesen der E-Mail-Metadaten
+        Try
+            ' Verwende die VSTO-Instanz für Outlook
+            Dim app As Outlook.Application = Globals.ThisAddIn.Application
+            Dim explorer = app.ActiveExplorer()
+            If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
+                System.Windows.MessageBox.Show("Eine Mail auswählen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                Return
+            End If
+            Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            If mail Is Nothing Then
+                System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail auswählen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                Return
+            End If
+            Dim info As New MailMetaInfo()
+            info.Sender = mail.SenderName
+            If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
+                info.SenderDomain = mail.SenderEmailAddress.Split("@"c).Last()
+            End If
+            info.Empfaenger = mail.To
+            If Not String.IsNullOrEmpty(mail.To) Then
+                Dim firstTo = mail.To.Split({";"}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                If Not String.IsNullOrEmpty(firstTo) Then
+                    info.EmpfaengerKurz = firstTo.Split("@"c)(0).Trim()
+                End If
+            End If
+            info.Betreff = mail.Subject
+            info.Datum = mail.ReceivedTime
+            info.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
+            MailMetaInfo = info
+        Catch ex As Exception
+            System.Windows.MessageBox.Show($"Fehler beim Auslesen der E-Mail: {ex.Message}", "Fehler", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error)
+        End Try
     End Sub
 
     ' Methode zum Bauen der Directory-Struktur
@@ -240,4 +285,14 @@ Public Class DirectoryNode
     Public Property FullPath As String
     Public Property Children As ObservableCollection(Of DirectoryNode)
     Public Property IsExpanded As Boolean ' Für automatische Expansion im TreeView
+End Class
+
+Public Class MailMetaInfo
+    Public Property Sender As String
+    Public Property SenderDomain As String
+    Public Property Empfaenger As String
+    Public Property EmpfaengerKurz As String
+    Public Property Betreff As String
+    Public Property Datum As DateTime
+    Public Property DatumFormatiert As String
 End Class

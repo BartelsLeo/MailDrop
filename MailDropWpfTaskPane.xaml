@@ -6,19 +6,25 @@
     <UserControl.Resources>
         <local:PathShortenerConverter x:Key="PathShortenerConverter"/>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="5" Orientation="Vertical">
-            <!-- LabelProjektordner -->
-            <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis"/>
-            <!-- ListBox1 -->
-            <ListBox x:Name="ListBox1"
-                     Height="69"
-                     ItemsSource="{Binding ProjektVerzeichnisse}"
-                     SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <Grid Margin="5">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="0"/>
+            <ListBox x:Name="ListBox1" Height="69" ItemsSource="{Binding ProjektVerzeichnisse}" SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}"
-                                   ToolTipService.ShowDuration="60000">
+                        <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">
                             <TextBlock.ToolTip>
                                 <TextBlock Text="{Binding}" TextWrapping="Wrap" Width="350"/>
                             </TextBlock.ToolTip>
@@ -26,10 +32,8 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-            <!-- LabelAblageordner -->
-            <Label x:Name="LabelAblageordner" Content="Projektstruktur"/>
-            <!-- TreeView1 -->
-            <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300">
+            <Label x:Name="LabelAblageordner" Content="Projektstruktur" Grid.Row="2"/>
+            <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300" Grid.Row="3">
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
@@ -43,40 +47,40 @@
                     </HierarchicalDataTemplate>
                 </TreeView.ItemTemplate>
             </TreeView>
-            <!-- LabelTitel & TextBoxTitel -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0" Grid.Row="4">
                 <Label x:Name="LabelTitel" Content="Titel" Width="85"/>
                 <TextBox x:Name="TextBoxTitel" Width="155" Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
-            <!-- LabelAblageordnerField & TextBoxAblageordner -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0" Grid.Row="5">
                 <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Width="85"/>
                 <TextBox x:Name="TextBoxAblageordner" Width="155" Text="{Binding Ablageordner, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
-            <!-- LabelMsgDateiname & TextBoxMsgDateiname -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0" Grid.Row="6">
                 <Label x:Name="LabelMsgDateiname" Content="msg Dateiname" Width="85"/>
                 <TextBox x:Name="TextBoxMsgDateiname" Width="155" Text="{Binding MsgDateiname, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
-            <!-- LabelAnhaenge & CheckBoxAnhaenge -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0" Grid.Row="7">
                 <Label x:Name="LabelAnhaenge" Content="Anh&#228;nge ablegen" Width="110"/>
                 <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center" IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
-            <!-- LabelMetadaten -->
-            <Label x:Name="LabelMetadaten" Content="Email Metadaten" Margin="0,5,0,0"/>
-            <!-- ListViewMetadaten -->
-            <ListView x:Name="ListViewMetadaten" Height="56" IsHitTestVisible="False">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="Metadatum" DisplayMemberBinding="{Binding Content}" />
-                    </GridView>
-                </ListView.View>
-                <ListViewItem Content="Von"/>
-                <ListViewItem Content="An"/>
-                <ListViewItem Content="Betreff"/>
-                <ListViewItem Content="Datum"/>
-            </ListView>
-        </StackPanel>
+            <Label x:Name="LabelMetadaten" Content="Email Metadaten" Margin="0,5,0,0" Grid.Row="8"/>
+            <DataGrid x:Name="DataGridMetadaten"
+                      ItemsSource="{Binding MailMetaInfoList}"
+                      IsReadOnly="True"
+                      AutoGenerateColumns="False"
+                      HeadersVisibility="Column"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserResizeRows="False"
+                      Margin="0,5,0,0"
+                      Height="120"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto" Grid.Row="9">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Metadatum" Binding="{Binding Key}" Width="100" />
+                    <DataGridTextColumn Header="Wert" Binding="{Binding Value}" Width="SizeToCells" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
     </ScrollViewer>
 </UserControl>

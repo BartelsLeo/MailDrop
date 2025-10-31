@@ -21,13 +21,29 @@ Public Class ThisAddIn
 
     ' Callback for Ribbon button
     Public Sub MailAblegen_Click(control As Object)
-        ' TaskPane erzeugen, falls noch nicht vorhanden
+        Dim wpfTaskPane As MailDropWpfTaskPane = Nothing
+
         If taskPane Is Nothing Then
             Dim paneControl As New MailDropWpfHostControl()
+            Dim wpfPane = TryCast(paneControl.Controls(0), System.Windows.Forms.Integration.ElementHost)
+            If wpfPane IsNot Nothing Then
+                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
+            End If
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
             taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
             taskPane.Width = 300
+        Else
+            Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
+            If wpfPane IsNot Nothing Then
+                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
+            End If
         End If
+
+        ' Session Vorbereiten
+        If wpfTaskPane IsNot Nothing Then
+            wpfTaskPane.Session.PrepareSession()
+        End If
+
         taskPane.Visible = True
     End Sub
 
