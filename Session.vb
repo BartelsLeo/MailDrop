@@ -8,8 +8,6 @@ Public Class Session
 
     Private _selectedProjekt As String
     Private _titel As String
-    Private _ablageordner As String
-    Private _msgDateiname As String
     Private _anhaengeAblegen As Boolean
     Private _selectedOrdner As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
@@ -41,30 +39,8 @@ Public Class Session
             If _titel <> value Then
                 _titel = value
                 OnPropertyChanged(NameOf(Titel))
-            End If
-        End Set
-    End Property
-
-    Public Property Ablageordner As String
-        Get
-            Return _ablageordner
-        End Get
-        Set(value As String)
-            If _ablageordner <> value Then
-                _ablageordner = value
-                OnPropertyChanged(NameOf(Ablageordner))
-            End If
-        End Set
-    End Property
-
-    Public Property MsgDateiname As String
-        Get
-            Return _msgDateiname
-        End Get
-        Set(value As String)
-            If _msgDateiname <> value Then
-                _msgDateiname = value
-                OnPropertyChanged(NameOf(MsgDateiname))
+                ' Nach Änderung des Titels Resolved- und Feld-Properties aktualisieren
+                UpdateResolvedAfterTitelChange()
             End If
         End Set
     End Property
@@ -126,25 +102,119 @@ Public Class Session
 
     Public ReadOnly Property MailMetaInfoList As List(Of KeyValuePair(Of String, String))
         Get
-            If MailMetaInfo Is Nothing Then Return New List(Of KeyValuePair(Of String, String))()
-            Return New List(Of KeyValuePair(Of String, String)) From {
-                New KeyValuePair(Of String, String)("Sender", MailMetaInfo.Sender),
-                New KeyValuePair(Of String, String)("Sender Domain", MailMetaInfo.SenderDomain),
-                New KeyValuePair(Of String, String)("Empfänger", MailMetaInfo.Empfaenger),
-                New KeyValuePair(Of String, String)("Empfänger kurz", MailMetaInfo.EmpfaengerKurz),
-                New KeyValuePair(Of String, String)("Betreff", MailMetaInfo.Betreff),
-                New KeyValuePair(Of String, String)("Datum", MailMetaInfo.Datum.ToString()),
-                New KeyValuePair(Of String, String)("Datum formatiert", MailMetaInfo.DatumFormatiert)
-            }
+            Dim result As New List(Of KeyValuePair(Of String, String))()
+            If MailMetaInfo Is Nothing Then Return result
+            Dim props = GetType(MailMetaInfo).GetProperties()
+            For Each prop In props
+                Dim displayNameAttr = CType(Attribute.GetCustomAttribute(prop, GetType(DisplayNameAttribute)), DisplayNameAttribute)
+                Dim key As String = If(displayNameAttr IsNot Nothing, displayNameAttr.DisplayName, prop.Name)
+                Dim valueObj = prop.GetValue(MailMetaInfo)
+                Dim valueStr = If(valueObj IsNot Nothing, valueObj.ToString(), String.Empty)
+                result.Add(New KeyValuePair(Of String, String)(key, valueStr))
+            Next
+            Return result
         End Get
     End Property
+
+    ' Ablageordner mit Platzhaltern
+    Private _ablageordnerTemplate As String
+    Public Property AblageordnerTemplate As String
+        Get
+            Return _ablageordnerTemplate
+        End Get
+        Set(value As String)
+            If _ablageordnerTemplate <> value Then
+                _ablageordnerTemplate = value
+                OnPropertyChanged(NameOf(AblageordnerTemplate))
+                UpdateAblageordnerResolved()
+            End If
+        End Set
+    End Property
+
+    ' Ablageordner mit ausgewerteten Platzhaltern (readonly)
+    Private _ablageordnerResolved As String
+    Public ReadOnly Property AblageordnerResolved As String
+        Get
+            Return _ablageordnerResolved
+        End Get
+    End Property
+
+    ' MsgDateiname mit Platzhaltern
+    Private _msgDateinameTemplate As String
+    Public Property MsgDateinameTemplate As String
+        Get
+            Return _msgDateinameTemplate
+        End Get
+        Set(value As String)
+            If _msgDateinameTemplate <> value Then
+                _msgDateinameTemplate = value
+                OnPropertyChanged(NameOf(MsgDateinameTemplate))
+                UpdateMsgDateinameResolved()
+            End If
+        End Set
+    End Property
+
+    ' MsgDateiname mit ausgewerteten Platzhaltern (readonly)
+    Private _msgDateinameResolved As String
+    Public ReadOnly Property MsgDateinameResolved As String
+        Get
+            Return _msgDateinameResolved
+        End Get
+    End Property
+
+    ' Methode zum Ersetzen der Platzhalter im Ablageordner
+    Private Sub UpdateAblageordnerResolved()
+        _ablageordnerResolved = ReplacePlaceholders(_ablageordnerTemplate)
+        OnPropertyChanged(NameOf(AblageordnerResolved))
+    End Sub
+
+    ' Methode zum Ersetzen der Platzhalter im MsgDateiname
+    Private Sub UpdateMsgDateinameResolved()
+        _msgDateinameResolved = ReplacePlaceholders(_msgDateinameTemplate)
+        OnPropertyChanged(NameOf(MsgDateinameResolved))
+    End Sub
+
+    ' Hilfsmethode zum Ersetzen von Platzhaltern mit Friendly Names
+    Private Function ReplacePlaceholders(template As String) As String
+        If String.IsNullOrEmpty(template) Then Return String.Empty
+        Dim result = template
+        ' Titel als Platzhalter ersetzen
+        If Not String.IsNullOrEmpty(Titel) Then
+            result = result.Replace("[Titel]", Titel)
+        End If
+        If MailMetaInfo IsNot Nothing Then
+            Dim props = GetType(MailMetaInfo).GetProperties()
+            For Each prop In props
+                Dim displayNameAttr = CType(Attribute.GetCustomAttribute(prop, GetType(DisplayNameAttribute)), DisplayNameAttribute)
+                If displayNameAttr IsNot Nothing Then
+                    Dim friendlyName = displayNameAttr.DisplayName
+                    Dim valueObj = prop.GetValue(MailMetaInfo)
+                    Dim valueStr = If(valueObj IsNot Nothing, valueObj.ToString(), String.Empty)
+                    result = result.Replace($"[{friendlyName}]", valueStr)
+                End If
+            Next
+        End If
+        Return result
+    End Function
+
+    ' Methode zum Aktualisieren der Resolved- und Feld-Properties nach Titeländerung
+    Public Sub UpdateResolvedAfterTitelChange()
+        UpdateAblageordnerResolved()
+        AblageordnerFeld = AblageordnerResolved
+        UpdateMsgDateinameResolved()
+        MsgDateinameFeld = MsgDateinameResolved
+    End Sub
 
     ' Setzt alle Properties auf Standardwerte zurück
     Public Sub Reset()
         SelectedProjekt = Nothing
         Titel = String.Empty
-        Ablageordner = String.Empty
-        MsgDateiname = String.Empty
+        AblageordnerTemplate = String.Empty
+        _ablageordnerResolved = String.Empty
+        AblageordnerFeld = String.Empty
+        MsgDateinameTemplate = String.Empty
+        _msgDateinameResolved = String.Empty
+        MsgDateinameFeld = String.Empty
         AnhaengeAblegen = False
         MailMetaInfo = New MailMetaInfo()
         SelectedOrdner = Nothing
@@ -277,6 +347,55 @@ Public Class Session
         ' Treeview aktualisieren
         BuildDirectoryTree()
     End Sub
+
+    ' Ablageordner Feld für das UI
+    Private _ablageordnerFeld As String
+    Public Property AblageordnerFeld As String
+        Get
+            Return _ablageordnerFeld
+        End Get
+        Set(value As String)
+            If _ablageordnerFeld <> value Then
+                _ablageordnerFeld = value
+                OnPropertyChanged(NameOf(AblageordnerFeld))
+            End If
+        End Set
+    End Property
+
+    ' MsgDateiname Feld für das UI
+    Private _msgDateinameFeld As String
+    Public Property MsgDateinameFeld As String
+        Get
+            Return _msgDateinameFeld
+        End Get
+        Set(value As String)
+            If _msgDateinameFeld <> value Then
+                _msgDateinameFeld = value
+                OnPropertyChanged(NameOf(MsgDateinameFeld))
+            End If
+        End Set
+    End Property
+
+    ' Methoden für Focus Handling
+    Public Sub BeginAblageordnerEdit()
+        AblageordnerFeld = AblageordnerTemplate
+    End Sub
+
+    Public Sub EndAblageordnerEdit()
+        AblageordnerTemplate = AblageordnerFeld
+        UpdateAblageordnerResolved()
+        AblageordnerFeld = AblageordnerResolved
+    End Sub
+
+    Public Sub BeginMsgDateinameEdit()
+        MsgDateinameFeld = MsgDateinameTemplate
+    End Sub
+
+    Public Sub EndMsgDateinameEdit()
+        MsgDateinameTemplate = MsgDateinameFeld
+        UpdateMsgDateinameResolved()
+        MsgDateinameFeld = MsgDateinameResolved
+    End Sub
 End Class
 
 ' Datenmodell für TreeView
@@ -288,11 +407,18 @@ Public Class DirectoryNode
 End Class
 
 Public Class MailMetaInfo
+    <DisplayName("Absender")>
     Public Property Sender As String
+    <DisplayName("Absender-Domain")>
     Public Property SenderDomain As String
+    <DisplayName("Empfänger")>
     Public Property Empfaenger As String
+    <DisplayName("Empfänger (kurz)")>
     Public Property EmpfaengerKurz As String
+    <DisplayName("Betreff")>
     Public Property Betreff As String
+    <DisplayName("Datum")>
     Public Property Datum As DateTime
+    <DisplayName("Datum (formatiert)")>
     Public Property DatumFormatiert As String
 End Class

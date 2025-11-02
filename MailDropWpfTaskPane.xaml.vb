@@ -25,4 +25,20 @@ Public Class MailDropWpfTaskPane
             Session.TreeviewEngine()
         End If
     End Sub
+
+    Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.BeginAblageordnerEdit()
+    End Sub
+
+    Private Sub TextBoxAblageordner_LostFocus(sender As Object, e As RoutedEventArgs)
+        Session.EndAblageordnerEdit()
+    End Sub
+
+    Private Sub TextBoxMsgDateiname_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.BeginMsgDateinameEdit()
+    End Sub
+
+    Private Sub TextBoxMsgDateiname_LostFocus(sender As Object, e As RoutedEventArgs)
+        Session.EndMsgDateinameEdit()
+    End Sub
 End Class
