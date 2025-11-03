@@ -47,4 +47,10 @@ Public Class ThisAddIn
         taskPane.Visible = True
     End Sub
 
+    Public Sub HideTaskPane()
+        If taskPane IsNot Nothing Then
+            taskPane.Visible = False
+        End If
+    End Sub
+
 End Class

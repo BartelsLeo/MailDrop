@@ -217,7 +217,10 @@
   -->
   <ItemGroup>
     <AppDesigner Include="My Project\" />
-    <Compile Include="MailDropRibbon.vb" >
+    <Compile Include="InfoPopup.xaml.vb">
+      <DependentUpon>InfoPopup.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MailDropRibbon.vb">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="MailDropWpfHostControl.vb">
@@ -262,6 +265,9 @@
     <EmbeddedResource Include="MailDropRibbon.xml" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="InfoPopup.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="MailDropWpfTaskPane.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

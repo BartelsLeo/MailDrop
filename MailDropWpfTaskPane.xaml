@@ -21,7 +21,10 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="0"/>
-            <ListBox x:Name="ListBox1" Height="69" ItemsSource="{Binding ProjektVerzeichnisse}" SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1">
+            <ListBox x:Name="ListBox1"
+                     ItemsSource="{Binding ProjektVerzeichnisse}"
+                     SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Grid.Row="1">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">
@@ -49,61 +52,73 @@
             </TreeView>
             <Grid Margin="0,5,0,0" Grid.Row="4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="85"/>
+                    <ColumnDefinition Width="130"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Label x:Name="LabelTitel" Content="Titel" Grid.Column="0"/>
+                <Label x:Name="LabelTitel" Content="Titel" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox x:Name="TextBoxTitel"
                          Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Stretch"
+                         VerticalContentAlignment="Center"
                          Grid.Column="1"/>
             </Grid>
             <Grid Margin="0,5,0,0" Grid.Row="5">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="85"/>
+                    <ColumnDefinition Width="130"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Grid.Column="0"/>
+                <Label x:Name="LabelAbsenderKurz" Content="Absender (kurz)" Grid.Column="0" VerticalAlignment="Center"/>
+                <TextBox x:Name="TextBoxAbsenderKurz"
+                         Text="{Binding AbsenderKurz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         TextWrapping="Wrap"
+                         HorizontalAlignment="Stretch"
+                         VerticalContentAlignment="Center"
+                         Grid.Column="1"/>
+            </Grid>
+            <Grid Margin="0,5,0,0" Grid.Row="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox x:Name="TextBoxAblageordner"
                          Text="{Binding AblageordnerFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          GotFocus="TextBoxAblageordner_GotFocus"
                          LostFocus="TextBoxAblageordner_LostFocus"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Stretch"
+                         VerticalContentAlignment="Center"
                          Grid.Column="1"/>
             </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="6">
+            <Grid Margin="0,5,0,0" Grid.Row="7">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="85"/>
+                    <ColumnDefinition Width="130"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Label x:Name="LabelMsgDateiname" Content="msg Dateiname" Grid.Column="0"/>
+                <Label x:Name="LabelMsgDateiname" Content="msg Dateiname" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox x:Name="TextBoxMsgDateiname"
                          Text="{Binding MsgDateinameFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          GotFocus="TextBoxMsgDateiname_GotFocus"
                          LostFocus="TextBoxMsgDateiname_LostFocus"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Stretch"
+                         VerticalContentAlignment="Center"
                          Grid.Column="1"/>
             </Grid>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,0" Grid.Row="7">
-                <Label x:Name="LabelAnhaenge" Content="Anh&#228;nge ablegen" Width="110"/>
-                <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center" IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            <Grid Margin="0,5,0,0" Grid.Row="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Label x:Name="LabelAnhaenge" Content="Anh&#228;nge ablegen" Grid.Column="0" VerticalAlignment="Center"/>
+                <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center" IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1"/>
+            </Grid>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,5,0,0" Grid.Row="9">
+                <Button x:Name="ButtonInfo" Content="i" Width="24" Height="24" Margin="2,0,2,0" ToolTip="Hinweise zu Platzhaltern" Click="ButtonInfo_Click"/>
+                <Button x:Name="ButtonOk" Content="OK" Width="50" Height="24" Margin="2,0,2,0" Click="ButtonOk_Click"/>
+                <Button x:Name="ButtonAbbrechen" Content="Abbrechen" Width="80" Height="24" Margin="2,0,2,0" Click="ButtonAbbrechen_Click"/>
             </StackPanel>
-            <!-- Platzhalter  bersicht als Expander, ersetzt LabelMetadaten und DataGridMetadaten -->
-            <Expander Header="Platzhalter Übersicht" IsExpanded="False" Margin="0,5,0,0" Grid.Row="8" Grid.RowSpan="2">
-                <ItemsControl>
-                    <TextBlock Text="[Titel]" />
-                    <TextBlock Text="[Absender]" />
-                    <TextBlock Text="[Absender-Domain]" />
-                    <TextBlock Text="[Empfänger]" />
-                    <TextBlock Text="[Empfänger (kurz)]" />
-                    <TextBlock Text="[Betreff]" />
-                    <TextBlock Text="[Datum]" />
-                    <TextBlock Text="[Datum (formatiert)]" />
-                </ItemsControl>
-            </Expander>
         </Grid>
     </ScrollViewer>
 </UserControl>

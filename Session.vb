@@ -182,6 +182,10 @@ Public Class Session
         If Not String.IsNullOrEmpty(Titel) Then
             result = result.Replace("[Titel]", Titel)
         End If
+        ' AbsenderKurz als Platzhalter ersetzen
+        If Not String.IsNullOrEmpty(AbsenderKurz) Then
+            result = result.Replace("[Absender (kurz)]", AbsenderKurz)
+        End If
         If MailMetaInfo IsNot Nothing Then
             Dim props = GetType(MailMetaInfo).GetProperties()
             For Each prop In props
@@ -199,6 +203,29 @@ Public Class Session
 
     ' Methode zum Aktualisieren der Resolved- und Feld-Properties nach Titeländerung
     Public Sub UpdateResolvedAfterTitelChange()
+        UpdateAblageordnerResolved()
+        AblageordnerFeld = AblageordnerResolved
+        UpdateMsgDateinameResolved()
+        MsgDateinameFeld = MsgDateinameResolved
+    End Sub
+
+    ' AbsenderKurz analog zu Titel
+    Private _absenderKurz As String
+    Public Property AbsenderKurz As String
+        Get
+            Return _absenderKurz
+        End Get
+        Set(value As String)
+            If _absenderKurz <> value Then
+                _absenderKurz = value
+                OnPropertyChanged(NameOf(AbsenderKurz))
+                UpdateResolvedAfterAbsenderKurzChange()
+            End If
+        End Set
+    End Property
+
+    ' Methode zum Aktualisieren der Resolved- und Feld-Properties nach AbsenderKurz-Änderung
+    Public Sub UpdateResolvedAfterAbsenderKurzChange()
         UpdateAblageordnerResolved()
         AblageordnerFeld = AblageordnerResolved
         UpdateMsgDateinameResolved()
