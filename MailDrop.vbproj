@@ -217,9 +217,14 @@
   -->
   <ItemGroup>
     <AppDesigner Include="My Project\" />
+    <Compile Include="AttachmentRenameDialog.xaml.vb">
+      <DependentUpon>AttachmentRenameDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="DirectoryTreeHelper.vb" />
     <Compile Include="InfoPopup.xaml.vb">
       <DependentUpon>InfoPopup.xaml</DependentUpon>
     </Compile>
+    <Compile Include="InputChecker.vb" />
     <Compile Include="MailDropRibbon.vb">
       <SubType>UserControl</SubType>
     </Compile>
@@ -227,6 +232,7 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="MailDropWpfTaskPane.xaml.vb" />
+    <Compile Include="MailUtils.vb" />
     <Compile Include="PathShortenerConverter.vb" />
     <Compile Include="Session.vb" />
     <Compile Include="ThisAddIn.vb">
@@ -265,6 +271,9 @@
     <EmbeddedResource Include="MailDropRibbon.xml" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="AttachmentRenameDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="InfoPopup.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

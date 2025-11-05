@@ -11,7 +11,6 @@ Public Class Session
     Private _anhaengeAblegen As Boolean
     Private _selectedOrdner As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
-    Private _mailMetaInfo As New MailMetaInfo()
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -89,33 +88,6 @@ Public Class Session
         "anderes..."
     }
 
-    Public Property MailMetaInfo As MailMetaInfo
-        Get
-            Return _mailMetaInfo
-        End Get
-        Set(value As MailMetaInfo)
-            _mailMetaInfo = value
-            OnPropertyChanged(NameOf(MailMetaInfo))
-            OnPropertyChanged(NameOf(MailMetaInfoList))
-        End Set
-    End Property
-
-    Public ReadOnly Property MailMetaInfoList As List(Of KeyValuePair(Of String, String))
-        Get
-            Dim result As New List(Of KeyValuePair(Of String, String))()
-            If MailMetaInfo Is Nothing Then Return result
-            Dim props = GetType(MailMetaInfo).GetProperties()
-            For Each prop In props
-                Dim displayNameAttr = CType(Attribute.GetCustomAttribute(prop, GetType(DisplayNameAttribute)), DisplayNameAttribute)
-                Dim key As String = If(displayNameAttr IsNot Nothing, displayNameAttr.DisplayName, prop.Name)
-                Dim valueObj = prop.GetValue(MailMetaInfo)
-                Dim valueStr = If(valueObj IsNot Nothing, valueObj.ToString(), String.Empty)
-                result.Add(New KeyValuePair(Of String, String)(key, valueStr))
-            Next
-            Return result
-        End Get
-    End Property
-
     ' Ablageordner mit Platzhaltern
     Private _ablageordnerTemplate As String
     Public Property AblageordnerTemplate As String
@@ -186,18 +158,6 @@ Public Class Session
         If Not String.IsNullOrEmpty(AbsenderKurz) Then
             result = result.Replace("[Absender (kurz)]", AbsenderKurz)
         End If
-        If MailMetaInfo IsNot Nothing Then
-            Dim props = GetType(MailMetaInfo).GetProperties()
-            For Each prop In props
-                Dim displayNameAttr = CType(Attribute.GetCustomAttribute(prop, GetType(DisplayNameAttribute)), DisplayNameAttribute)
-                If displayNameAttr IsNot Nothing Then
-                    Dim friendlyName = displayNameAttr.DisplayName
-                    Dim valueObj = prop.GetValue(MailMetaInfo)
-                    Dim valueStr = If(valueObj IsNot Nothing, valueObj.ToString(), String.Empty)
-                    result = result.Replace($"[{friendlyName}]", valueStr)
-                End If
-            Next
-        End If
         Return result
     End Function
 
@@ -243,7 +203,6 @@ Public Class Session
         _msgDateinameResolved = String.Empty
         MsgDateinameFeld = String.Empty
         AnhaengeAblegen = False
-        MailMetaInfo = New MailMetaInfo()
         SelectedOrdner = Nothing
         Debug.WriteLine("[Session] Reset ausgeführt")
     End Sub
@@ -251,95 +210,19 @@ Public Class Session
     ' Vorbereitung der Session. Mail Daten auslesen und Felder aus- und vorausfüllen
     Public Sub PrepareSession()
         Reset()
-        ReadMailMeta()
+        MailUtils.ReadMailMeta()
         TreeviewEngine()
-        SchemaEngine()
         Debug.WriteLine("[Session] PrepareSession ausgeführt")
-    End Sub
-
-    ' Methoden für die Verarbeitungslogik
-    Public Sub ReadMailMeta()
-        Debug.WriteLine("[Session] ReadMailMeta ausgeführt")
-        Try
-            ' Verwende die VSTO-Instanz für Outlook
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer = app.ActiveExplorer()
-            If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
-                System.Windows.MessageBox.Show("Eine Mail auswählen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
-                Return
-            End If
-            Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
-            If mail Is Nothing Then
-                System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail auswählen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
-                Return
-            End If
-            Dim info As New MailMetaInfo()
-            info.Sender = mail.SenderName
-            If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
-                info.SenderDomain = mail.SenderEmailAddress.Split("@"c).Last()
-            End If
-            info.Empfaenger = mail.To
-            If Not String.IsNullOrEmpty(mail.To) Then
-                Dim firstTo = mail.To.Split({";"}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-                If Not String.IsNullOrEmpty(firstTo) Then
-                    info.EmpfaengerKurz = firstTo.Split("@"c)(0).Trim()
-                End If
-            End If
-            info.Betreff = mail.Subject
-            info.Datum = mail.ReceivedTime
-            info.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
-            MailMetaInfo = info
-        Catch ex As Exception
-            System.Windows.MessageBox.Show($"Fehler beim Auslesen der E-Mail: {ex.Message}", "Fehler", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error)
-        End Try
     End Sub
 
     ' Methode zum Bauen der Directory-Struktur
     Public Sub BuildDirectoryTree()
-        If String.IsNullOrEmpty(SelectedProjekt) OrElse Not Directory.Exists(SelectedProjekt) Then
-            TreeViewData = New ObservableCollection(Of DirectoryNode)()
-            Return
-        End If
-        ' Nur die Unterordner von SelectedProjekt als Wurzelknoten verwenden
-        Dim rootChildren As New ObservableCollection(Of DirectoryNode)()
-        For Each dir As String In Directory.GetDirectories(SelectedProjekt)
-            Dim childNode As DirectoryNode = CreateDirectoryNodeWithExpand(dir, 1)
-            rootChildren.Add(childNode)
-        Next
-        TreeViewData = rootChildren
+        TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(SelectedProjekt)
     End Sub
-
-    ' level: 1 = erste Ebene unter SelectedProjekt
-    Private Function CreateDirectoryNodeWithExpand(dirPath As String, level As Integer) As DirectoryNode
-        Dim node As New DirectoryNode With {
-            .Name = Path.GetFileName(dirPath),
-            .FullPath = dirPath,
-            .Children = New ObservableCollection(Of DirectoryNode)(),
-            .IsExpanded = (level <= 2)
-        }
-        Try
-            For Each dir As String In Directory.GetDirectories(dirPath)
-                node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1))
-            Next
-        Catch ex As Exception
-            Debug.WriteLine($"[Session] Zugriff verweigert auf {dirPath}")
-        End Try
-        Return node
-    End Function
 
     ' TreeviewEngine ruft BuildDirectoryTree auf
     Public Sub TreeviewEngine()
         BuildDirectoryTree()
-    End Sub
-
-    Public Sub SchemaEngine()
-        Debug.WriteLine("[Session] SchemaEngine ausgeführt")
-        ' TODO: Implementiere die Logik für das Schema-Handling
-    End Sub
-
-    Public Sub SubmitSession()
-        Debug.WriteLine("[Session] SubmitSession ausgeführt")
-        ' TODO: Implementiere die Logik für das Abschicken/Speichern der Session
     End Sub
 
     Public Sub CancelSession()
@@ -423,29 +306,45 @@ Public Class Session
         UpdateMsgDateinameResolved()
         MsgDateinameFeld = MsgDateinameResolved
     End Sub
-End Class
 
-' Datenmodell für TreeView
-Public Class DirectoryNode
-    Public Property Name As String
-    Public Property FullPath As String
-    Public Property Children As ObservableCollection(Of DirectoryNode)
-    Public Property IsExpanded As Boolean ' Für automatische Expansion im TreeView
-End Class
+    ' Prüft die Session-Eingaben und führt die Ablage durch
+    Public Function ProcessSession() As String
+        Dim checkedInput = InputChecker.CheckInput(Me)
+        If checkedInput.ErrorMessage <> String.Empty Then
+            Return checkedInput.ErrorMessage
+        End If
+        ' 1. Ablageordner erstellen
+        Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
+        If ablageResult <> String.Empty Then
+            Return ablageResult
+        End If
+        ' 2. Mail als msg speichern
+        Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
+        If mailResult <> String.Empty Then
+            Return mailResult
+        End If
+        ' 3. Anhänge speichern (nur wenn aktiviert)
+        If AnhaengeAblegen Then
+            Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
+            If anhangResult <> String.Empty Then
+                Return anhangResult
+            End If
+        End If
+        ' Nach erfolgreichem Abschluss alles zurücksetzen
+        Me.Reset()
+        Return String.Empty
+    End Function
 
-Public Class MailMetaInfo
-    <DisplayName("Absender")>
-    Public Property Sender As String
-    <DisplayName("Absender-Domain")>
-    Public Property SenderDomain As String
-    <DisplayName("Empfänger")>
-    Public Property Empfaenger As String
-    <DisplayName("Empfänger (kurz)")>
-    Public Property EmpfaengerKurz As String
-    <DisplayName("Betreff")>
-    Public Property Betreff As String
-    <DisplayName("Datum")>
-    Public Property Datum As DateTime
-    <DisplayName("Datum (formatiert)")>
-    Public Property DatumFormatiert As String
+    ' Erstellt den Ablageordner, falls nicht vorhanden
+    Private Function CreateAblageordner(ablageOrdnerPfad As String) As String
+        Try
+            If Not Directory.Exists(ablageOrdnerPfad) Then
+                Directory.CreateDirectory(ablageOrdnerPfad)
+            End If
+            Return String.Empty
+        Catch ex As Exception
+            Return $"Fehler beim Erstellen des Ablageordners: {ex.Message}"
+        End Try
+    End Function
+
 End Class

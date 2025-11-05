@@ -7,12 +7,39 @@ Public Class ThisAddIn
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
-
+        explorer = Application.ActiveExplorer()
+        AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
     End Sub
 
-    Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+    Private WithEvents explorer As Outlook.Explorer
 
+    ' Kapselt die Logik für die TaskPane-Initialisierung und Editierbarkeit
+    Private Sub MailSelected()
+        Dim wpfTaskPane As MailDropWpfTaskPane = GetWpfTaskPane()
+        If wpfTaskPane IsNot Nothing Then
+            If wpfTaskPane.SingleMailSelected() Then
+                wpfTaskPane.Session.PrepareSession()
+                wpfTaskPane.SetEditMode(True)
+            Else
+                wpfTaskPane.Session.Reset()
+                wpfTaskPane.SetEditMode(False)
+            End If
+        End If
     End Sub
+
+    Private Sub Explorer_SelectionChange()
+        MailSelected()
+    End Sub
+
+    ' Hilfsmethode, um die WPF TaskPane Instanz zu bekommen
+    Private Function GetWpfTaskPane() As MailDropWpfTaskPane
+        If taskPane Is Nothing Then Return Nothing
+        Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
+        If wpfPane IsNot Nothing Then
+            Return TryCast(wpfPane.Child, MailDropWpfTaskPane)
+        End If
+        Return Nothing
+    End Function
 
     Protected Overrides Function CreateRibbonExtensibilityObject() As IRibbonExtensibility
         ribbonObj = New MailDropRibbon()
@@ -39,11 +66,7 @@ Public Class ThisAddIn
             End If
         End If
 
-        ' Session Vorbereiten
-        If wpfTaskPane IsNot Nothing Then
-            wpfTaskPane.Session.PrepareSession()
-        End If
-
+        MailSelected()
         taskPane.Visible = True
     End Sub
 
