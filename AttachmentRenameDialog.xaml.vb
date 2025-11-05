@@ -1,12 +1,15 @@
 Imports System.Windows
 Imports System.Windows.Controls
+Imports System.IO
 
 Public Class AttachmentRenameDialog
     Public Property FileName As String
     Private Const MaxPathLength As Integer = 255
+    Private ReadOnly _basePath As String
 
-    Public Sub New(currentName As String)
+    Public Sub New(currentName As String, basePath As String)
         InitializeComponent()
+        _basePath = basePath
         TextBoxFileName.Text = currentName
         TextBoxFileName.SelectAll()
         TextBoxFileName.Focus()
@@ -25,8 +28,8 @@ Public Class AttachmentRenameDialog
     End Sub
 
     Private Sub UpdateOverlength()
-        Dim length As Integer = TextBoxFileName.Text.Length
-        Dim overlength As Integer = length - MaxPathLength
+        Dim fullPath = Path.Combine(_basePath, TextBoxFileName.Text)
+        Dim overlength As Integer = fullPath.Length - MaxPathLength
         If overlength > 0 Then
             TextBlockOverlength.Text = $"Überlänge von {overlength} Zeichen"
             TextBlockOverlength.Visibility = Visibility.Visible

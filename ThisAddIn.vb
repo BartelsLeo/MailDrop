@@ -58,7 +58,7 @@ Public Class ThisAddIn
             End If
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
             taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
-            taskPane.Width = 300
+            taskPane.Width = 1000
         Else
             Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
             If wpfPane IsNot Nothing Then
