@@ -6,11 +6,19 @@ Imports System.IO
 Public Class Session
     Implements INotifyPropertyChanged
 
-    Private _selectedProjekt As String
+    Private _projektPfad As String
     Private _titel As String
     Private _anhaengeAblegen As Boolean
-    Private _selectedOrdner As String
+    Private _projektstrukturPfad As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
+    Private _ablageordnerSchema As String
+    Private _ablageordnerAufgeloest As String
+    Private _msgDateinameSchema As String
+    Private _msgDateinameAufgeloest As String
+    Private _ablageordnerFeld As String
+    Private _msgDateinameFeld As String
+    Private _ausfueDatum As DateTime = DateTime.Now
+    Private _ausfueBenutzer As String = Environment.UserName
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -18,14 +26,14 @@ Public Class Session
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(propertyName))
     End Sub
 
-    Public Property SelectedProjekt As String
+    Public Property ProjektPfad As String
         Get
-            Return _selectedProjekt
+            Return _projektPfad
         End Get
         Set(value As String)
-            If _selectedProjekt <> value Then
-                _selectedProjekt = value
-                OnPropertyChanged(NameOf(SelectedProjekt))
+            If _projektPfad <> value Then
+                _projektPfad = value
+                OnPropertyChanged(NameOf(ProjektPfad))
             End If
         End Set
     End Property
@@ -38,7 +46,6 @@ Public Class Session
             If _titel <> value Then
                 _titel = value
                 OnPropertyChanged(NameOf(Titel))
-                ' Nach Änderung des Titels Resolved- und Feld-Properties aktualisieren
                 UpdateResolvedAfterTitelChange()
             End If
         End Set
@@ -56,14 +63,14 @@ Public Class Session
         End Set
     End Property
 
-    Public Property SelectedOrdner As String
+    Public Property ProjektstrukturPfad As String
         Get
-            Return _selectedOrdner
+            Return _projektstrukturPfad
         End Get
         Set(value As String)
-            If _selectedOrdner <> value Then
-                _selectedOrdner = value
-                OnPropertyChanged(NameOf(SelectedOrdner))
+            If _projektstrukturPfad <> value Then
+                _projektstrukturPfad = value
+                OnPropertyChanged(NameOf(ProjektstrukturPfad))
             End If
         End Set
     End Property
@@ -88,139 +95,95 @@ Public Class Session
         "anderes..."
     }
 
-    ' Ablageordner mit Platzhaltern
-    Private _ablageordnerTemplate As String
-    Public Property AblageordnerTemplate As String
+    Public Property AblageordnerSchema As String
         Get
-            Return _ablageordnerTemplate
+            Return _ablageordnerSchema
         End Get
         Set(value As String)
-            If _ablageordnerTemplate <> value Then
-                _ablageordnerTemplate = value
-                OnPropertyChanged(NameOf(AblageordnerTemplate))
-                UpdateAblageordnerResolved()
+            If _ablageordnerSchema <> value Then
+                _ablageordnerSchema = value
+                OnPropertyChanged(NameOf(AblageordnerSchema))
+                UpdateAblageordnerAufgeloest()
             End If
         End Set
     End Property
 
-    ' Ablageordner mit ausgewerteten Platzhaltern (readonly)
-    Private _ablageordnerResolved As String
-    Public ReadOnly Property AblageordnerResolved As String
+    Public ReadOnly Property AblageordnerAufgeloest As String
         Get
-            Return _ablageordnerResolved
+            Return _ablageordnerAufgeloest
         End Get
     End Property
 
-    ' MsgDateiname mit Platzhaltern
-    Private _msgDateinameTemplate As String
-    Public Property MsgDateinameTemplate As String
+    Public Property MsgDateinameSchema As String
         Get
-            Return _msgDateinameTemplate
+            Return _msgDateinameSchema
         End Get
         Set(value As String)
-            If _msgDateinameTemplate <> value Then
-                _msgDateinameTemplate = value
-                OnPropertyChanged(NameOf(MsgDateinameTemplate))
-                UpdateMsgDateinameResolved()
+            If _msgDateinameSchema <> value Then
+                _msgDateinameSchema = value
+                OnPropertyChanged(NameOf(MsgDateinameSchema))
+                UpdateMsgDateinameAufgeloest()
             End If
         End Set
     End Property
 
-    ' MsgDateiname mit ausgewerteten Platzhaltern (readonly)
-    Private _msgDateinameResolved As String
-    Public ReadOnly Property MsgDateinameResolved As String
+    Public ReadOnly Property MsgDateinameAufgeloest As String
         Get
-            Return _msgDateinameResolved
+            Return _msgDateinameAufgeloest
         End Get
     End Property
 
-    ' Methode zum Ersetzen der Platzhalter im Ablageordner
-    Private Sub UpdateAblageordnerResolved()
-        _ablageordnerResolved = ReplacePlaceholders(_ablageordnerTemplate)
-        OnPropertyChanged(NameOf(AblageordnerResolved))
+    Private Sub UpdateAblageordnerAufgeloest()
+        _ablageordnerAufgeloest = ReplacePlaceholders(_ablageordnerSchema)
+        OnPropertyChanged(NameOf(AblageordnerAufgeloest))
     End Sub
 
-    ' Methode zum Ersetzen der Platzhalter im MsgDateiname
-    Private Sub UpdateMsgDateinameResolved()
-        _msgDateinameResolved = ReplacePlaceholders(_msgDateinameTemplate)
-        OnPropertyChanged(NameOf(MsgDateinameResolved))
+    Private Sub UpdateMsgDateinameAufgeloest()
+        _msgDateinameAufgeloest = ReplacePlaceholders(_msgDateinameSchema)
+        OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
     End Sub
 
-    ' Hilfsmethode zum Ersetzen von Platzhaltern mit Friendly Names
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
         Dim result = template
-        ' Titel als Platzhalter ersetzen
         If Not String.IsNullOrEmpty(Titel) Then
             result = result.Replace("[Titel]", Titel)
-        End If
-        ' AbsenderKurz als Platzhalter ersetzen
-        If Not String.IsNullOrEmpty(AbsenderKurz) Then
-            result = result.Replace("[Absender (kurz)]", AbsenderKurz)
         End If
         Return result
     End Function
 
-    ' Methode zum Aktualisieren der Resolved- und Feld-Properties nach Titeländerung
     Public Sub UpdateResolvedAfterTitelChange()
-        UpdateAblageordnerResolved()
-        AblageordnerFeld = AblageordnerResolved
-        UpdateMsgDateinameResolved()
-        MsgDateinameFeld = MsgDateinameResolved
+        UpdateAblageordnerAufgeloest()
+        AblageordnerFeld = AblageordnerAufgeloest
+        UpdateMsgDateinameAufgeloest()
+        MsgDateinameFeld = MsgDateinameAufgeloest
     End Sub
 
-    ' AbsenderKurz analog zu Titel
-    Private _absenderKurz As String
-    Public Property AbsenderKurz As String
-        Get
-            Return _absenderKurz
-        End Get
-        Set(value As String)
-            If _absenderKurz <> value Then
-                _absenderKurz = value
-                OnPropertyChanged(NameOf(AbsenderKurz))
-                UpdateResolvedAfterAbsenderKurzChange()
-            End If
-        End Set
-    End Property
-
-    ' Methode zum Aktualisieren der Resolved- und Feld-Properties nach AbsenderKurz-Änderung
-    Public Sub UpdateResolvedAfterAbsenderKurzChange()
-        UpdateAblageordnerResolved()
-        AblageordnerFeld = AblageordnerResolved
-        UpdateMsgDateinameResolved()
-        MsgDateinameFeld = MsgDateinameResolved
-    End Sub
-
-    ' Setzt alle Properties auf Standardwerte zurück
     Public Sub Reset()
-        SelectedProjekt = Nothing
+        ProjektPfad = Nothing
         Titel = String.Empty
-        AblageordnerTemplate = String.Empty
-        _ablageordnerResolved = String.Empty
+        AblageordnerSchema = String.Empty
+        _ablageordnerAufgeloest = String.Empty
         AblageordnerFeld = String.Empty
-        MsgDateinameTemplate = String.Empty
-        _msgDateinameResolved = String.Empty
+        MsgDateinameSchema = String.Empty
+        _msgDateinameAufgeloest = String.Empty
         MsgDateinameFeld = String.Empty
         AnhaengeAblegen = False
-        SelectedOrdner = Nothing
+        ProjektstrukturPfad = Nothing
         Debug.WriteLine("[Session] Reset ausgeführt")
     End Sub
 
-    ' Vorbereitung der Session. Mail Daten auslesen und Felder aus- und vorausfüllen
     Public Sub PrepareSession()
         Reset()
-        MailUtils.ReadMailMeta()
+        MailUtils.ReadMailMeta(Me)
         TreeviewEngine()
         Debug.WriteLine("[Session] PrepareSession ausgeführt")
     End Sub
 
-    ' Methode zum Bauen der Directory-Struktur
     Public Sub BuildDirectoryTree()
-        TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(SelectedProjekt)
+        TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(ProjektPfad)
     End Sub
 
-    ' TreeviewEngine ruft BuildDirectoryTree auf
     Public Sub TreeviewEngine()
         BuildDirectoryTree()
     End Sub
@@ -240,26 +203,20 @@ Public Class Session
                 End If
                 selectedValue = dialog.SelectedPath
             Else
-                SelectedProjekt = Nothing
+                ProjektPfad = Nothing
                 BuildDirectoryTree()
                 Return
             End If
         End If
-
-        ' Prüfe, ob der Pfad existiert
         If Not String.IsNullOrEmpty(selectedValue) AndAlso Not Directory.Exists(selectedValue) Then
             System.Windows.MessageBox.Show($"Das Verzeichnis '{selectedValue}' existiert nicht!", "Pfad nicht gefunden", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
-            SelectedProjekt = Nothing
+            ProjektPfad = Nothing
         Else
-            SelectedProjekt = selectedValue
+            ProjektPfad = selectedValue
         End If
-
-        ' Treeview aktualisieren
         BuildDirectoryTree()
     End Sub
 
-    ' Ablageordner Feld für das UI
-    Private _ablageordnerFeld As String
     Public Property AblageordnerFeld As String
         Get
             Return _ablageordnerFeld
@@ -272,8 +229,6 @@ Public Class Session
         End Set
     End Property
 
-    ' MsgDateiname Feld für das UI
-    Private _msgDateinameFeld As String
     Public Property MsgDateinameFeld As String
         Get
             Return _msgDateinameFeld
@@ -286,56 +241,50 @@ Public Class Session
         End Set
     End Property
 
-    ' Methoden für Focus Handling
     Public Sub BeginAblageordnerEdit()
-        AblageordnerFeld = AblageordnerTemplate
+        AblageordnerFeld = AblageordnerSchema
     End Sub
 
     Public Sub EndAblageordnerEdit()
-        AblageordnerTemplate = AblageordnerFeld
-        UpdateAblageordnerResolved()
-        AblageordnerFeld = AblageordnerResolved
+        AblageordnerSchema = AblageordnerFeld
+        UpdateAblageordnerAufgeloest()
+        AblageordnerFeld = AblageordnerAufgeloest
     End Sub
 
     Public Sub BeginMsgDateinameEdit()
-        MsgDateinameFeld = MsgDateinameTemplate
+        MsgDateinameFeld = MsgDateinameSchema
     End Sub
 
     Public Sub EndMsgDateinameEdit()
-        MsgDateinameTemplate = MsgDateinameFeld
-        UpdateMsgDateinameResolved()
-        MsgDateinameFeld = MsgDateinameResolved
+        MsgDateinameSchema = MsgDateinameFeld
+        UpdateMsgDateinameAufgeloest()
+        MsgDateinameFeld = MsgDateinameAufgeloest
     End Sub
 
-    ' Prüft die Session-Eingaben und führt die Ablage durch
     Public Function ProcessSession() As String
         Dim checkedInput = InputChecker.CheckInput(Me)
         If checkedInput.ErrorMessage <> String.Empty Then
             Return checkedInput.ErrorMessage
         End If
-        ' 1. Ablageordner erstellen
         Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
         If ablageResult <> String.Empty Then
             Return ablageResult
         End If
-        ' 2. Mail als msg speichern
         Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
         If mailResult <> String.Empty Then
             Return mailResult
         End If
-        ' 3. Anhänge speichern (nur wenn aktiviert)
         If AnhaengeAblegen Then
             Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
             If anhangResult <> String.Empty Then
                 Return anhangResult
             End If
         End If
-        ' Nach erfolgreichem Abschluss alles zurücksetzen
+        ThisAddIn.CurrentDatabaseManager.SaveSession(Me)
         Me.Reset()
         Return String.Empty
     End Function
 
-    ' Erstellt den Ablageordner, falls nicht vorhanden
     Private Function CreateAblageordner(ablageOrdnerPfad As String) As String
         Try
             If Not Directory.Exists(ablageOrdnerPfad) Then
@@ -346,5 +295,44 @@ Public Class Session
             Return $"Fehler beim Erstellen des Ablageordners: {ex.Message}"
         End Try
     End Function
+
+    Public Property AusfueDatum As DateTime
+        Get
+            Return _ausfueDatum
+        End Get
+        Set(value As DateTime)
+            If _ausfueDatum <> value Then
+                _ausfueDatum = value
+                OnPropertyChanged(NameOf(AusfueDatum))
+            End If
+        End Set
+    End Property
+
+    Public Property AusfueBenutzer As String
+        Get
+            Return _ausfueBenutzer
+        End Get
+        Set(value As String)
+            If _ausfueBenutzer <> value Then
+                _ausfueBenutzer = value
+                OnPropertyChanged(NameOf(AusfueBenutzer))
+            End If
+        End Set
+    End Property
+
+    <DisplayName("Absender")>
+    Public Property Absender As String
+    <DisplayName("Absender-Domain")>
+    Public Property AbsenderDomain As String
+    <DisplayName("AbsenderKurz")>
+    Public Property AbsenderKurz As String
+    <DisplayName("Empfänger")>
+    Public Property Empfaenger As String
+    <DisplayName("Betreff")>
+    Public Property Betreff As String
+    <DisplayName("Datum")>
+    Public Property Datum As DateTime
+    <DisplayName("Datum (formatiert)")>
+    Public Property DatumFormatiert As String
 
 End Class

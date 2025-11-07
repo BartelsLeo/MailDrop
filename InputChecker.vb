@@ -55,32 +55,32 @@ Public Module InputChecker
     Public Function CheckInput(session As Session) As CheckedInputResult
         Dim result As New CheckedInputResult()
         result.CheckedAnhZielpfade = New List(Of String)()
-        Dim projektPfad As String = session.SelectedProjekt
+        Dim projektPfad As String = session.ProjektPfad
         If String.IsNullOrWhiteSpace(projektPfad) OrElse Not Directory.Exists(projektPfad) Then
             result.ErrorMessage = "Bitte wählen Sie einen gültigen Projektpfad aus."
             Return result
         End If
-        If String.IsNullOrWhiteSpace(session.SelectedOrdner) Then
+        If String.IsNullOrWhiteSpace(session.ProjektstrukturPfad) Then
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If
-        Dim projektstrukturPfad As String = Path.Combine(projektPfad, session.SelectedOrdner)
+        Dim projektstrukturPfad As String = Path.Combine(projektPfad, session.ProjektstrukturPfad)
         If Not Directory.Exists(projektstrukturPfad) Then
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If
-        Dim ablageOrdnerPfad As String = Path.Combine(projektstrukturPfad, session.AblageordnerResolved)
+        Dim ablageOrdnerPfad As String = Path.Combine(projektstrukturPfad, session.AblageordnerAufgeloest)
         Dim ablageOrdnerCheck = CheckFolderNameAndPath(ablageOrdnerPfad)
         If ablageOrdnerCheck <> String.Empty Then
             result.ErrorMessage = ablageOrdnerCheck
             Return result
         End If
         result.CheckedAblageOrdner = ablageOrdnerPfad
-        If String.IsNullOrWhiteSpace(session.MsgDateinameResolved) Then
+        If String.IsNullOrWhiteSpace(session.MsgDateinameAufgeloest) Then
             result.ErrorMessage = "Bitte geben Sie einen gültigen Dateinamen für die E-Mail an."
             Return result
         End If
-        Dim msgZielPfad As String = Path.Combine(ablageOrdnerPfad, session.MsgDateinameResolved)
+        Dim msgZielPfad As String = Path.Combine(ablageOrdnerPfad, session.MsgDateinameAufgeloest)
         Dim msgDateinameCheck = CheckFileNameAndPath(msgZielPfad)
         If msgDateinameCheck <> String.Empty Then
             result.ErrorMessage = msgDateinameCheck

@@ -6,7 +6,10 @@ Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
 
+    Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
+
     Private Sub ThisAddIn_Startup() Handles Me.Startup
+        CurrentDatabaseManager = New SessionDatabaseManager()
         explorer = Application.ActiveExplorer()
         AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
     End Sub

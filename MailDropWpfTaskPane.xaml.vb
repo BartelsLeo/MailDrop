@@ -25,7 +25,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub Session_PropertyChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
-        If e.PropertyName = NameOf(Session.SelectedProjekt) Then
+        If e.PropertyName = NameOf(Session.ProjektPfad) Then
             Session.TreeviewEngine()
         End If
     End Sub
@@ -116,8 +116,8 @@ Public Class MailDropWpfTaskPane
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then
-            Session.SelectedOrdner = node.FullPath
-            Debug.WriteLine("SelectedOrdner gesetzt: " & node.FullPath)
+            Session.ProjektstrukturPfad = node.FullPath
+            Debug.WriteLine("ProjektstrukturPfad gesetzt: " & node.FullPath)
         End If
     End Sub
 End Class

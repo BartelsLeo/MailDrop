@@ -3,41 +3,32 @@ Imports System.ComponentModel
 Imports System.IO
 
 Public Module MailUtils
-    ' Liest die Metadaten der ausgewählten Mail und gibt ein MailMetaInfo-Objekt zurück
-    Public Function ReadMailMeta() As MailMetaInfo
+    ' Liest die Metadaten der ausgewählten Mail und befüllt die Properties der übergebenen Session
+    Public Sub ReadMailMeta(session As Session)
         Try
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
             Dim explorer = app.ActiveExplorer()
             If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
                 System.Windows.MessageBox.Show("Eine Mail auswählen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
-                Return Nothing
+                Return
             End If
             Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
             If mail Is Nothing Then
                 System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail auswählen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
-                Return Nothing
+                Return
             End If
-            Dim info As New MailMetaInfo()
-            info.Sender = mail.SenderName
+            session.Absender = mail.SenderName
             If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
-                info.SenderDomain = mail.SenderEmailAddress.Split("@"c).Last()
+                session.AbsenderDomain = mail.SenderEmailAddress.Split("@"c).Last()
             End If
-            info.Empfaenger = mail.To
-            If Not String.IsNullOrEmpty(mail.To) Then
-                Dim firstTo = mail.To.Split({";"}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-                If Not String.IsNullOrEmpty(firstTo) Then
-                    info.EmpfaengerKurz = firstTo.Split("@"c)(0).Trim()
-                End If
-            End If
-            info.Betreff = mail.Subject
-            info.Datum = mail.ReceivedTime
-            info.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
-            Return info
+            session.Empfaenger = mail.To
+            session.Betreff = mail.Subject
+            session.Datum = mail.ReceivedTime
+            session.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
         Catch ex As Exception
             System.Windows.MessageBox.Show($"Fehler beim Auslesen der E-Mail: {ex.Message}", "Fehler", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error)
-            Return Nothing
         End Try
-    End Function
+    End Sub
 
     ' Speichert die markierte Mail als .msg im Ablageordner
     Public Function SaveSelectedMailAsMsg(msgZielPfad As String) As String
@@ -81,20 +72,4 @@ Public Module MailUtils
         End Try
     End Function
 
-    Public Class MailMetaInfo
-        <DisplayName("Absender")>
-        Public Property Sender As String
-        <DisplayName("Absender-Domain")>
-        Public Property SenderDomain As String
-        <DisplayName("Empfänger")>
-        Public Property Empfaenger As String
-        <DisplayName("Empfänger (kurz)")>
-        Public Property EmpfaengerKurz As String
-        <DisplayName("Betreff")>
-        Public Property Betreff As String
-        <DisplayName("Datum")>
-        Public Property Datum As DateTime
-        <DisplayName("Datum (formatiert)")>
-        Public Property DatumFormatiert As String
-    End Class
 End Module
