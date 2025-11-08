@@ -1,11 +1,14 @@
 ﻿Imports Microsoft.Office.Tools.Ribbon
 Imports System.Runtime.InteropServices
 Imports Microsoft.Office.Core
+Imports System.IO
 
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
 
+    Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
+    Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
     Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup

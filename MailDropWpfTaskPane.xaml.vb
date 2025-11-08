@@ -116,8 +116,8 @@ Public Class MailDropWpfTaskPane
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then
-            Session.ProjektstrukturPfad = node.FullPath
-            Debug.WriteLine("ProjektstrukturPfad gesetzt: " & node.FullPath)
+            Session.ProjektstrukturPfad = node.RelativePath
+            Debug.WriteLine("ProjektstrukturPfad (relativ) gesetzt: " & node.RelativePath)
         End If
     End Sub
 End Class

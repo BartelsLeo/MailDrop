@@ -280,7 +280,8 @@ Public Class Session
                 Return anhangResult
             End If
         End If
-        ThisAddIn.CurrentDatabaseManager.SaveSession(Me)
+        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
+        PredictionEngine.EncodeSessions()
         Me.Reset()
         Return String.Empty
     End Function
@@ -335,4 +336,17 @@ Public Class Session
     <DisplayName("Datum (formatiert)")>
     Public Property DatumFormatiert As String
 
+    Public Property ID As Integer
+
+    Public Function ToSessionRecord() As SessionRecord
+        Dim record As New SessionRecord()
+        For Each prop In GetType(SessionRecord).GetProperties()
+            Dim sessionProp = Me.GetType().GetProperty(prop.Name)
+            If sessionProp IsNot Nothing Then
+                Dim value = sessionProp.GetValue(Me)
+                prop.SetValue(record, value)
+            End If
+        Next
+        Return record
+    End Function
 End Class
