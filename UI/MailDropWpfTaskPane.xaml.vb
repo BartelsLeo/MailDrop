@@ -25,9 +25,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub Session_PropertyChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
-        If e.PropertyName = NameOf(Session.ProjektPfad) Then
-            Session.TreeviewEngine()
-        End If
+        ' TreeviewEngine-Aufruf entfernt, da TreeViewData jetzt automatisch aktualisiert wird
     End Sub
 
     Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)

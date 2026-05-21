@@ -23,7 +23,7 @@
             <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="0" HorizontalAlignment="Stretch"/>
             <ListBox x:Name="ListBox1"
                      ItemsSource="{Binding ProjektVerzeichnisse}"
-                     SelectedItem="{Binding SelectedProjekt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Grid.Row="1" HorizontalAlignment="Stretch">
                 <ListBox.ItemTemplate>
                     <DataTemplate>

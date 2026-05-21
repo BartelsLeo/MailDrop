@@ -34,6 +34,7 @@ Public Class Session
             If _projektPfad <> value Then
                 _projektPfad = value
                 OnPropertyChanged(NameOf(ProjektPfad))
+                BuildDirectoryTree()
             End If
         End Set
     End Property
@@ -87,13 +88,18 @@ Public Class Session
         End Set
     End Property
 
-    Public Property ProjektVerzeichnisse As ObservableCollection(Of String) = New ObservableCollection(Of String) From {
-        "P:\Leo\Projekte\MailDrop\TestDirectory\P-23001",
-        "C:/Projekte/P-230111",
-        "C:/Projekte/P-23251",
-        "C:/Projekte/P-23052",
-        "anderes..."
-    }
+    Private _projektVerzeichnisse As ObservableCollection(Of String)
+    Public Property ProjektVerzeichnisse As ObservableCollection(Of String)
+        Get
+            Return _projektVerzeichnisse
+        End Get
+        Set(value As ObservableCollection(Of String))
+            If _projektVerzeichnisse IsNot value Then
+                _projektVerzeichnisse = value
+                OnPropertyChanged(NameOf(ProjektVerzeichnisse))
+            End If
+        End Set
+    End Property
 
     Public Property AblageordnerSchema As String
         Get
@@ -149,6 +155,30 @@ Public Class Session
         If Not String.IsNullOrEmpty(Titel) Then
             result = result.Replace("[Titel]", Titel)
         End If
+        If Not String.IsNullOrEmpty(Absender) Then
+            result = result.Replace("[Absender]", Absender)
+        End If
+        If Not String.IsNullOrEmpty(AbsenderDomain) Then
+            result = result.Replace("[Absender-Domain]", AbsenderDomain)
+        End If
+        If Not String.IsNullOrEmpty(Empfaenger) Then
+            result = result.Replace("[Empfänger]", Empfaenger)
+        End If
+        If Not String.IsNullOrEmpty(Empfaenger) Then
+            result = result.Replace("[Empfänger (kurz)]", Empfaenger)
+        End If
+        If Not String.IsNullOrEmpty(Betreff) Then
+            result = result.Replace("[Betreff]", Betreff)
+        End If
+        If Datum <> Date.MinValue Then
+            result = result.Replace("[Datum]", Datum.ToString("yyyy-MM-dd"))
+        End If
+        If Not String.IsNullOrEmpty(DatumFormatiert) Then
+            result = result.Replace("[Datum (formatiert)]", DatumFormatiert)
+        End If
+        If Not String.IsNullOrEmpty(AbsenderKurz) Then
+            result = result.Replace("[Absender (kurz)]", AbsenderKurz)
+        End If
         Return result
     End Function
 
@@ -176,16 +206,25 @@ Public Class Session
     Public Sub PrepareSession()
         Reset()
         MailUtils.ReadMailMeta(Me)
-        TreeviewEngine()
+        ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
+        GetProjektVerzeichnisse()
+        ' Vorhersage für Output-Parameter durchführen und ins Session-Objekt schreiben
+        ' PredictionEngine.PredictOutput(Me)
         Debug.WriteLine("[Session] PrepareSession ausgeführt")
+    End Sub
+
+    ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
+    Public Sub GetProjektVerzeichnisse()
+        Dim verzeichnisse = ThisAddIn.CurrentDatabaseManager.GetLastProjektVerzeichnisseForUser(Me.AusfueBenutzer)
+        ' Maximal 3 aus der DB, letzter Eintrag immer "anderes..."
+        Dim list As New List(Of String)(verzeichnisse.Take(3))
+        list.Add("anderes...")
+        ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
+        Debug.WriteLine($"[Session] ProjektVerzeichnisse für Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
     End Sub
 
     Public Sub BuildDirectoryTree()
         TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(ProjektPfad)
-    End Sub
-
-    Public Sub TreeviewEngine()
-        BuildDirectoryTree()
     End Sub
 
     Public Sub CancelSession()
@@ -204,7 +243,6 @@ Public Class Session
                 selectedValue = dialog.SelectedPath
             Else
                 ProjektPfad = Nothing
-                BuildDirectoryTree()
                 Return
             End If
         End If
@@ -214,7 +252,6 @@ Public Class Session
         Else
             ProjektPfad = selectedValue
         End If
-        BuildDirectoryTree()
     End Sub
 
     Public Property AblageordnerFeld As String
@@ -281,7 +318,7 @@ Public Class Session
             End If
         End If
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
-        PredictionEngine.EncodeSessions()
+        ' PredictionEngine.TrainDecisionTreeModels()
         Me.Reset()
         Return String.Empty
     End Function
@@ -332,12 +369,16 @@ Public Class Session
     <DisplayName("Betreff")>
     Public Property Betreff As String
     <DisplayName("Datum")>
+    Public Property BetreffEmbedded As Single
+    <DisplayName("Betreff Embedded")>
     Public Property Datum As DateTime
     <DisplayName("Datum (formatiert)")>
     Public Property DatumFormatiert As String
 
     Public Property ID As Integer
 
+    ' Wandelt das aktuelle Session-Objekt in ein SessionRecord-Objekt um,
+    ' sodass es für die Speicherung in der Datenbank oder für maschinelles Lernen verwendet werden kann.
     Public Function ToSessionRecord() As SessionRecord
         Dim record As New SessionRecord()
         For Each prop In GetType(SessionRecord).GetProperties()
