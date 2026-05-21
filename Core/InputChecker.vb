@@ -1,8 +1,8 @@
-Imports System.IO
+ï»¿Imports System.IO
 Imports System.Collections.ObjectModel
 
 Public Module InputChecker
-    ' Hilfsklasse für die geprüften Pfade
+    ' Hilfsklasse fÃ¼r die geprÃ¼ften Pfade
     Public Class CheckedInputResult
         Public Property CheckedAblageOrdner As String
         Public Property CheckedMsgZielpfad As String
@@ -10,35 +10,35 @@ Public Module InputChecker
         Public Property ErrorMessage As String
     End Class
 
-    ' Prüft Ordnernamen und Pfadlänge
+    ' PrÃ¼ft Ordnernamen und PfadlÃ¤nge
     Public Function CheckFolderNameAndPath(folderPath As String) As String
         Dim invalidChars = Path.GetInvalidPathChars().Concat(Path.GetInvalidFileNameChars()).ToArray()
         Dim folderName = Path.GetFileName(folderPath)
         If folderName.IndexOfAny(invalidChars) >= 0 Then
-            Return $"Der Ablageordner enthält ungültige Zeichen: {folderName}"
+            Return $"Der Ablageordner enthÃ¤lt ungÃ¼ltige Zeichen: {folderName}"
         End If
         If folderPath.Length > 255 Then
             Dim diff = folderPath.Length - 255
-            Return $"Der Ablageordner-Pfad ist zu lang (max. 255 Zeichen).{vbCrLf}Pfad: {folderPath}{vbCrLf}Überlänge: {diff} Zeichen."
+            Return $"Der Ablageordner-Pfad ist zu lang (max. 255 Zeichen).{vbCrLf}Pfad: {folderPath}{vbCrLf}ÃœberlÃ¤nge: {diff} Zeichen."
         End If
         Return String.Empty
     End Function
 
-    ' Prüft Dateinamen und Pfadlänge
+    ' PrÃ¼ft Dateinamen und PfadlÃ¤nge
     Public Function CheckFileNameAndPath(filePath As String) As String
         Dim invalidChars = Path.GetInvalidPathChars().Concat(Path.GetInvalidFileNameChars()).ToArray()
         Dim fileName = Path.GetFileName(filePath)
         If fileName.IndexOfAny(invalidChars) >= 0 Then
-            Return $"Der Dateiname enthält ungültige Zeichen: {fileName}"
+            Return $"Der Dateiname enthÃ¤lt ungÃ¼ltige Zeichen: {fileName}"
         End If
         If filePath.Length > 255 Then
             Dim diff = filePath.Length - 255
-            Return $"Der vollständige Dateipfad ist zu lang (max. 255 Zeichen).{vbCrLf}Pfad: {filePath}{vbCrLf}Überlänge: {diff} Zeichen."
+            Return $"Der vollstÃ¤ndige Dateipfad ist zu lang (max. 255 Zeichen).{vbCrLf}Pfad: {filePath}{vbCrLf}ÃœberlÃ¤nge: {diff} Zeichen."
         End If
         Return String.Empty
     End Function
 
-    ' Zeigt einen Dialog zur Umbenennung eines Anhangs, gibt neuen Namen oder String.Empty zurück
+    ' Zeigt einen Dialog zur Umbenennung eines Anhangs, gibt neuen Namen oder String.Empty zurÃ¼ck
     Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
         Dim dlg As New AttachmentRenameDialog(currentName, basePath)
         If System.Windows.Application.Current IsNot Nothing AndAlso System.Windows.Application.Current.MainWindow IsNot Nothing Then
@@ -51,22 +51,22 @@ Public Module InputChecker
         End If
     End Function
 
-    ' Prüft alle Eingaben (Projektpfad, Projektstruktur, Ablageordner, msg-Dateiname)
+    ' PrÃ¼ft alle Eingaben (Projektpfad, Projektstruktur, Ablageordner, msg-Dateiname)
     Public Function CheckInput(session As Session) As CheckedInputResult
         Dim result As New CheckedInputResult()
         result.CheckedAnhZielpfade = New List(Of String)()
         Dim projektPfad As String = session.ProjektPfad
         If String.IsNullOrWhiteSpace(projektPfad) OrElse Not Directory.Exists(projektPfad) Then
-            result.ErrorMessage = "Bitte wählen Sie einen gültigen Projektpfad aus."
+            result.ErrorMessage = "Bitte wÃ¤hlen Sie einen gÃ¼ltigen Projektpfad aus."
             Return result
         End If
         If String.IsNullOrWhiteSpace(session.ProjektstrukturPfad) Then
-            result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
+            result.ErrorMessage = "Bitte wÃ¤hlen Sie eine gÃ¼ltige Projektstruktur aus."
             Return result
         End If
         Dim projektstrukturPfad As String = Path.Combine(projektPfad, session.ProjektstrukturPfad)
         If Not Directory.Exists(projektstrukturPfad) Then
-            result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
+            result.ErrorMessage = "Bitte wÃ¤hlen Sie eine gÃ¼ltige Projektstruktur aus."
             Return result
         End If
         Dim ablageOrdnerPfad As String = Path.Combine(projektPfad, projektstrukturPfad, session.AblageordnerAufgeloest)
@@ -77,7 +77,7 @@ Public Module InputChecker
         End If
         result.CheckedAblageOrdner = ablageOrdnerPfad
         If String.IsNullOrWhiteSpace(session.MsgDateinameAufgeloest) Then
-            result.ErrorMessage = "Bitte geben Sie einen gültigen Dateinamen für die E-Mail an."
+            result.ErrorMessage = "Bitte geben Sie einen gÃ¼ltigen Dateinamen fÃ¼r die E-Mail an."
             Return result
         End If
         Dim msgZielPfad As String = Path.Combine(ablageOrdnerPfad, session.MsgDateinameAufgeloest)

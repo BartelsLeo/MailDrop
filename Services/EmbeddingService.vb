@@ -1,0 +1,70 @@
+Imports System.IO
+Imports System.Reflection
+Imports Microsoft.ML.OnnxRuntime
+Imports Microsoft.ML.OnnxRuntime.Tensors
+Imports Microsoft.ML.Tokenizers
+
+Public Class EmbeddingService
+
+    Private ReadOnly _session As InferenceSession
+    Private ReadOnly _tokenizer As BertTokenizer
+
+    Public Sub New()
+        Dim codeBase As String = System.Reflection.Assembly.GetExecutingAssembly().CodeBase
+        Dim uri As New Uri(codeBase)
+        Dim baseDir As String = System.IO.Path.GetDirectoryName(uri.LocalPath)
+        Dim modelPath As String = System.IO.Path.Combine(baseDir, "Models", "model.onnx")
+        Dim vocabPath As String = System.IO.Path.Combine(baseDir, "Models", "vocab.txt")
+        _session = New InferenceSession(modelPath)
+        _tokenizer = BertTokenizer.Create(vocabPath)
+    End Sub
+
+    Public Function GenerateEmbedding(text As String) As Single()
+
+        ' 1. Tokenisieren
+        Dim encoding = _tokenizer.EncodeToIds(text)
+        Dim tokenIds = encoding.Select(Function(id) CLng(id)).ToArray()
+        Dim attentionMask = Enumerable.Repeat(1L, tokenIds.Length).ToArray()
+        Dim tokenTypeIds = Enumerable.Repeat(0L, tokenIds.Length).ToArray()
+
+        Dim seqLen As Integer = tokenIds.Length
+
+        ' 2. Tensoren erstellen
+        Dim inputIdsTensor = New DenseTensor(Of Long)(tokenIds, New Integer() {1, seqLen})
+        Dim attentionTensor = New DenseTensor(Of Long)(attentionMask, New Integer() {1, seqLen})
+        Dim tokenTypeTensor = New DenseTensor(Of Long)(tokenTypeIds, New Integer() {1, seqLen})
+
+        ' 3. ONNX Input
+        Dim inputs As New List(Of NamedOnnxValue) From {
+            NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
+            NamedOnnxValue.CreateFromTensor("attention_mask", attentionTensor),
+            NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeTensor)
+        }
+
+        ' 4. Inferenz
+        Using results = _session.Run(inputs)
+            Dim output = results.First().AsTensor(Of Single)()
+
+            ' 5. Mean Pooling über alle Token
+            Dim embedding(383) As Single
+            For tokenIdx As Integer = 0 To seqLen - 1
+                For d As Integer = 0 To 383
+                    embedding(d) += output(0, tokenIdx, d)
+                Next
+            Next
+            For d As Integer = 0 To 383
+                embedding(d) /= seqLen
+            Next
+
+            Return Normalize(embedding)
+        End Using
+
+    End Function
+
+    ' L2-Normalisierung
+    Private Function Normalize(vector As Single()) As Single()
+        Dim norm As Double = Math.Sqrt(vector.Sum(Function(x) CDbl(x) * x))
+        Return vector.Select(Function(x) CSng(x / norm)).ToArray()
+    End Function
+
+End Class

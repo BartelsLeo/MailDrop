@@ -203,13 +203,20 @@ Public Class Session
         Debug.WriteLine("[Session] Reset ausgeführt")
     End Sub
 
+    Public Property SuggestionEngineInstance As SuggestionEngine
+
     Public Sub PrepareSession()
         Reset()
         MailUtils.ReadMailMeta(Me)
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
-        ' Vorhersage für Output-Parameter durchführen und ins Session-Objekt schreiben
-        ' PredictionEngine.PredictOutput(Me)
+
+        ' SuggestionEngine Instanz erstellen
+        SuggestionEngineInstance = New SuggestionEngine()
+
+        ' Vorhersage für Output-Parameter durchführen
+        SuggestionEngineInstance.SuggestProjektPfad(Me)
+
         Debug.WriteLine("[Session] PrepareSession ausgeführt")
     End Sub
 
