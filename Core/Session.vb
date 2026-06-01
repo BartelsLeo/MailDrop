@@ -376,7 +376,7 @@ Public Class Session
     <DisplayName("Betreff")>
     Public Property Betreff As String
     <DisplayName("Datum")>
-    Public Property BetreffEmbedded As Single
+    Public Property BetreffEmbedded As Single()
     <DisplayName("Betreff Embedded")>
     Public Property Datum As DateTime
     <DisplayName("Datum (formatiert)")>

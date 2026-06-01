@@ -172,7 +172,11 @@ Public Class SessionDatabaseManager
             Using cmd As New SQLiteCommand(sql, conn)
                 For Each prop In props
                     If prop.Name = "ID" Then Continue For ' ID ist AUTOINCREMENT
-                    cmd.Parameters.AddWithValue("@" & prop.Name, prop.GetValue(sessionRecord))
+                    Dim value = prop.GetValue(sessionRecord)
+                    If prop.Name = "BetreffEmbedded" Then
+                        value = If(value IsNot Nothing, DatabaseUtils.FloatsToBytes(CType(value, Single())), DBNull.Value)
+                    End If
+                    cmd.Parameters.AddWithValue("@" & prop.Name, If(value Is Nothing, DBNull.Value, value))
                 Next
                 cmd.ExecuteNonQuery()
             End Using
@@ -215,6 +219,7 @@ Public Class SessionDatabaseManager
                             .AusfueDatum = DateTime.Parse(reader("AusfueDatum").ToString()),
                             .AusfueBenutzer = reader("AusfueBenutzer").ToString(),
                             .Betreff = reader("Betreff").ToString(),
+                            .BetreffEmbedded = If(reader("BetreffEmbedded") IsNot DBNull.Value, DatabaseUtils.BytesToFloats(CType(reader("BetreffEmbedded"), Byte())), Nothing),
                             .Absender = reader("Absender").ToString(),
                             .AbsenderDomain = reader("AbsenderDomain").ToString(),
                             .AbsenderKurz = reader("AbsenderKurz").ToString(),
@@ -245,6 +250,7 @@ Public Class EncodedSessionRecord
     Public Property SessionID As Integer
     Public Property AusfueBenutzer As Integer
     Public Property Betreff As Integer
+    Public Property BetreffEmbedded As Single()
     Public Property Absender As Integer
     Public Property AbsenderDomain As Integer
     Public Property AbsenderKurz As Integer
@@ -266,6 +272,7 @@ Public Class SessionRecord
     Public Property AusfueDatum As DateTime
     Public Property AusfueBenutzer As String
     Public Property Betreff As String
+    Public Property BetreffEmbedded As Single()
     Public Property Absender As String
     Public Property AbsenderDomain As String
     Public Property AbsenderKurz As String
@@ -280,4 +287,18 @@ Public Class SessionRecord
     Public Property MsgDateinameSchema As String
     Public Property MsgDateinameAufgeloest As String
     Public Property AnhaengeAblegen As Boolean
+End Class
+
+Public Class DatabaseUtils
+    Public Shared Function FloatsToBytes(floats As Single()) As Byte()
+        Dim bytes(floats.Length * 4 - 1) As Byte
+        System.Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length)
+        Return bytes
+    End Function
+
+    Public Shared Function BytesToFloats(bytes As Byte()) As Single()
+        Dim floats(bytes.Length \ 4 - 1) As Single
+        System.Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length)
+        Return floats
+    End Function
 End Class
