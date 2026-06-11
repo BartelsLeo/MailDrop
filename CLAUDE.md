@@ -99,11 +99,11 @@ Loads `model.onnx` (384-dimensional BERT) and `vocab.txt` at construction. `Gene
 
 ### Database (`Helpers/DatabaseUtils.vb`)
 
-`SessionDatabaseManager` manages `%APPDATA%\MailDrop\sessions.db`. Key points:
+`SessionDatabaseManager` manages `%APPDATA%\MailDrop\sessions.db`. The `dbPath` field is assigned both as a field initializer and again in the constructor — redundant but harmless. Key points:
 
 - `SaveSessionRecord()` builds its `INSERT` dynamically via reflection over `SessionRecord` properties, skipping `ID` (AUTOINCREMENT). The `BetreffEmbedded` `Single()` array is serialized with `DatabaseUtils.FloatsToBytes()` (`Buffer.BlockCopy`).
 - `GetAllSessionRecords()` deserializes `BetreffEmbedded` back with `DatabaseUtils.BytesToFloats()`.
-- `GetLastProjektVerzeichnisseForUser()` returns up to 4 distinct `ProjektPfad` values ordered by `AusfueDatum DESC`.
+- `GetLastProjektVerzeichnisseForUser()` queries `SELECT DISTINCT ProjektPfad ... ORDER BY AusfueDatum DESC LIMIT 10`, then the VB loop exits early once 4 results are collected. Caution: ordering by `AusfueDatum` while selecting only `ProjektPfad` (DISTINCT) means SQLite picks an arbitrary row per distinct path before ordering, so the "most recent" ordering is not strictly guaranteed.
 - `SessionRecord` is the plain DTO. `EncodedSessionRecord` and the commented-out `EncodedSessions` table are an abandoned earlier ML approach — do not resurrect.
 
 ### UI (`UI/`)
