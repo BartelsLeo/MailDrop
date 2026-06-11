@@ -27,7 +27,7 @@ There is no automated test suite. Manual integration testing is done by pressing
 
 ### End-to-end flow
 
-1. User selects an email → `Explorer_SelectionChange` fires in `ThisAddIn.vb`
+1. User selects an email → `Explorer_SelectionChange` fires in `ThisAddIn.vb` and calls `MailSelected()`. If the task pane has never been opened, `GetWpfTaskPane()` returns `Nothing` and `MailSelected()` is a silent no-op — the add-in is lazy until the ribbon button is first clicked.
 2. `MailDropWpfTaskPane.SingleMailSelected()` checks that exactly one `MailItem` is selected
 3. `Session.PrepareSession()` runs: resets state, calls `MailUtils.ReadMailMeta()` to populate mail fields, calls `GetProjektVerzeichnisse()` to load the list-box, creates a `SuggestionEngine` and calls `SuggestProjektPfad()` to set a default project folder
 4. User selects a project from the list-box (or picks "anderes..." for a folder browser), picks a sub-folder in the tree-view, edits the `Ablageordner` and `MsgDateiname` fields, and clicks OK
@@ -119,9 +119,11 @@ Loads `model.onnx` (384-dimensional BERT) and `vocab.txt` at construction. `Gene
 - `TextBoxMsgDateiname` ↔ `MsgDateinameFeld` (with GotFocus/LostFocus schema-swap)
 - `CheckBoxAnhaenge` ↔ `AnhaengeAblegen`
 
-**Ribbon**: `MailDropRibbon.vb` implements `IRibbonExtensibility`. The XML (`MailDropRibbon.xml`) is embedded as a manifest resource (`MailDrop.MailDropRibbon.xml`). The button appears in `TabMail` (the Outlook "Start" tab). Clicking delegates to `Globals.ThisAddIn.MailAblegen_Click()`, which creates the task pane on first use (width 1000 px) and calls `MailSelected()`.
+**Ribbon**: `MailDropRibbon.vb` implements `IRibbonExtensibility`. The XML (`MailDropRibbon.xml`) is embedded as a manifest resource (`MailDrop.MailDropRibbon.xml`). The button appears in `TabMail` (the Outlook "Start" tab). Clicking delegates to `Globals.ThisAddIn.MailAblegen_Click()`, which creates the task pane on first use (docked right, width 1000 px) and then calls `MailSelected()`. The task pane is a **singleton** — once created it is only ever shown or hidden via `taskPane.Visible`; it is never recreated. `HideTaskPane()` (called by the Cancel button) sets `taskPane.Visible = False` without destroying it.
 
 **`GetWpfTaskPane()` in `ThisAddIn.vb`** navigates: `taskPane.Control` (WinForms `UserControl`) → `.Controls(0)` (`ElementHost`) → `.Child` (`MailDropWpfTaskPane`).
+
+**Shared properties on `ThisAddIn`**: `DbDirectory` (`%APPDATA%\MailDrop`) is used by `SessionDatabaseManager` to locate the database. `DbPath` (the full `.db` path) is also declared as a shared property but is not read externally — `SessionDatabaseManager` recomputes the path itself. `CurrentDatabaseManager` is the global singleton database manager, accessible anywhere via `ThisAddIn.CurrentDatabaseManager`.
 
 ### InputChecker (`Core/InputChecker.vb`)
 
