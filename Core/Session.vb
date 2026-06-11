@@ -19,6 +19,13 @@ Public Class Session
     Private _msgDateinameFeld As String
     Private _ausfueDatum As DateTime = DateTime.Now
     Private _ausfueBenutzer As String = Environment.UserName
+    Private _absender As String
+    Private _absenderDomain As String
+    Private _empfaenger As String
+    Private _betreff As String
+    Private _betreffEmbedded As Single()
+    Private _datum As DateTime
+    Private _datumFormatiert As String
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -162,10 +169,10 @@ Public Class Session
             result = result.Replace("[Absender-Domain]", AbsenderDomain)
         End If
         If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empfänger]", Empfaenger)
+            result = result.Replace("[Empfï¿½nger]", Empfaenger)
         End If
         If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empfänger (kurz)]", Empfaenger)
+            result = result.Replace("[Empfï¿½nger (kurz)]", Empfaenger)
         End If
         If Not String.IsNullOrEmpty(Betreff) Then
             result = result.Replace("[Betreff]", Betreff)
@@ -200,7 +207,7 @@ Public Class Session
         MsgDateinameFeld = String.Empty
         AnhaengeAblegen = False
         ProjektstrukturPfad = Nothing
-        Debug.WriteLine("[Session] Reset ausgeführt")
+        Debug.WriteLine("[Session] Reset ausgefï¿½hrt")
     End Sub
 
     Public Property SuggestionEngineInstance As SuggestionEngine
@@ -211,13 +218,26 @@ Public Class Session
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
 
-        ' SuggestionEngine Instanz erstellen
+        ' SuggestionEngine Instanz erstellen (lÃ¤dt Historie und Embedding-Service einmalig)
         SuggestionEngineInstance = New SuggestionEngine()
 
-        ' Vorhersage für Output-Parameter durchführen
-        SuggestionEngineInstance.SuggestProjektPfad(Me)
+        ' Distanzlisten zwischen aktueller Session und historischen DatensÃ¤tzen vorberechnen.
+        SuggestionEngineInstance.RecalculateFeatureDistances(Me)
 
-        Debug.WriteLine("[Session] PrepareSession ausgeführt")
+        ' Vorhersage fÃ¼r Projektpfad aus den vorberechneten Distanzlisten berechnen.
+        Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
+
+        ' Nur gÃ¼ltige VorschlÃ¤ge Ã¼bernehmen, damit BuildDirectoryTree automatisch aktualisiert wird.
+        If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
+            ProjektPfad = suggestedProjektPfad
+
+            ' Optional in die Auswahlliste aufnehmen, damit die UI den Pfad direkt anbietet.
+            If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
+                ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
+            End If
+        End If
+
+        Debug.WriteLine("[Session] PrepareSession ausgefï¿½hrt")
     End Sub
 
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
@@ -227,7 +247,7 @@ Public Class Session
         Dim list As New List(Of String)(verzeichnisse.Take(3))
         list.Add("anderes...")
         ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
-        Debug.WriteLine($"[Session] ProjektVerzeichnisse für Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
+        Debug.WriteLine($"[Session] ProjektVerzeichnisse fï¿½r Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
     End Sub
 
     Public Sub BuildDirectoryTree()
@@ -235,14 +255,14 @@ Public Class Session
     End Sub
 
     Public Sub CancelSession()
-        Debug.WriteLine("[Session] CancelSession ausgeführt")
-        ' TODO: Implementiere die Logik für das Abbrechen der Session
+        Debug.WriteLine("[Session] CancelSession ausgefï¿½hrt")
+        ' TODO: Implementiere die Logik fï¿½r das Abbrechen der Session
     End Sub
 
     Public Sub HandleProjektSelection(selectedValue As String, uiContext As System.Windows.Window)
         If selectedValue = "anderes..." Then
             Dim dialog As New System.Windows.Forms.FolderBrowserDialog()
-            dialog.Description = "Bitte Projektordner auswählen"
+            dialog.Description = "Bitte Projektordner auswï¿½hlen"
             If dialog.ShowDialog() = System.Windows.Forms.DialogResult.OK Then
                 If Not ProjektVerzeichnisse.Contains(dialog.SelectedPath) Then
                     ProjektVerzeichnisse.Insert(0, dialog.SelectedPath)
@@ -367,25 +387,100 @@ Public Class Session
 
     <DisplayName("Absender")>
     Public Property Absender As String
+        Get
+            Return _absender
+        End Get
+        Set(value As String)
+            If _absender <> value Then
+                _absender = value
+                OnPropertyChanged(NameOf(Absender))
+            End If
+        End Set
+    End Property
+
     <DisplayName("Absender-Domain")>
     Public Property AbsenderDomain As String
+        Get
+            Return _absenderDomain
+        End Get
+        Set(value As String)
+            If _absenderDomain <> value Then
+                _absenderDomain = value
+                OnPropertyChanged(NameOf(AbsenderDomain))
+            End If
+        End Set
+    End Property
+
     <DisplayName("AbsenderKurz")>
     Public Property AbsenderKurz As String
-    <DisplayName("Empfänger")>
+
+    <DisplayName("Empfï¿½nger")>
     Public Property Empfaenger As String
+        Get
+            Return _empfaenger
+        End Get
+        Set(value As String)
+            If _empfaenger <> value Then
+                _empfaenger = value
+                OnPropertyChanged(NameOf(Empfaenger))
+            End If
+        End Set
+    End Property
+
     <DisplayName("Betreff")>
     Public Property Betreff As String
+        Get
+            Return _betreff
+        End Get
+        Set(value As String)
+            If _betreff <> value Then
+                _betreff = value
+                OnPropertyChanged(NameOf(Betreff))
+            End If
+        End Set
+    End Property
+
     <DisplayName("Datum")>
     Public Property BetreffEmbedded As Single()
+        Get
+            Return _betreffEmbedded
+        End Get
+        Set(value As Single())
+            _betreffEmbedded = value
+            OnPropertyChanged(NameOf(BetreffEmbedded))
+        End Set
+    End Property
+
     <DisplayName("Betreff Embedded")>
     Public Property Datum As DateTime
+        Get
+            Return _datum
+        End Get
+        Set(value As DateTime)
+            If _datum <> value Then
+                _datum = value
+                OnPropertyChanged(NameOf(Datum))
+            End If
+        End Set
+    End Property
+
     <DisplayName("Datum (formatiert)")>
     Public Property DatumFormatiert As String
+        Get
+            Return _datumFormatiert
+        End Get
+        Set(value As String)
+            If _datumFormatiert <> value Then
+                _datumFormatiert = value
+                OnPropertyChanged(NameOf(DatumFormatiert))
+            End If
+        End Set
+    End Property
 
     Public Property ID As Integer
 
     ' Wandelt das aktuelle Session-Objekt in ein SessionRecord-Objekt um,
-    ' sodass es für die Speicherung in der Datenbank oder für maschinelles Lernen verwendet werden kann.
+    ' sodass es fï¿½r die Speicherung in der Datenbank oder fï¿½r maschinelles Lernen verwendet werden kann.
     Public Function ToSessionRecord() As SessionRecord
         Dim record As New SessionRecord()
         For Each prop In GetType(SessionRecord).GetProperties()
@@ -397,4 +492,5 @@ Public Class Session
         Next
         Return record
     End Function
+
 End Class

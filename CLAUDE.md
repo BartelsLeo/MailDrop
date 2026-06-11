@@ -4,128 +4,169 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written in Visual Basic .NET that files emails and attachments into project folder structures. It uses a BERT model (via ONNX) to suggest the best matching project folder based on the email subject.
+MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written in Visual Basic .NET that files emails and attachments into project folder structures. It uses a BERT model (via ONNX) to suggest mail drop configuration.
 
 - **Language**: Visual Basic .NET, .NET Framework 4.7.2, VSTO 4.0
 - **Host**: Microsoft Outlook
 - **Build tool**: MSBuild / Visual Studio 2022
 
-## Architecture
+## Features
 
-### End-to-end flow
+- Outlook ribbon button MailDrop opens a right-side task pane.
+- The add-in reacts to selection changes and enables editing only when exactly one mail is selected.
+- Session data is prepared from the selected mail metadata (Betreff, Absender, AbsenderDomain, Empfaenger, Datum).
+- ProjektPfad offers recent project folders for the current user (from SQLite history) plus anderes... via folder picker.
+- ProjektstrukturPfad is selected from a TreeView that is built dynamically from the selected ProjektPfad.
+- Titel and Absender (kurz) are editable text fields used by placeholder resolution.
+- Ablageordner and msg Dateiname use a Schema/Aufgeloest/Feld workflow:
+	- On focus: show schema text for editing.
+	- On focus loss: resolve placeholders and show the resolved result.
+- Input validation checks required values, invalid path/file characters, and path length limits.
+- Optional attachment filing saves all attachments; long attachment names can be adjusted via rename dialog.
+- On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
+- A SuggestionEngine with ONNX embeddings is initialized for project path suggestion.
+- During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
+- Suggestion-relevant features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are treated as fixed for the currently selected mail and are recalculated during PrepareSession().
 
-`Explorer_SelectionChange` → `MailSelected()` — silent no-op until the ribbon button is clicked for the first time (`GetWpfTaskPane()` returns `Nothing` while the task pane hasn't been created yet).
+## Current workspace layout:
 
-Once the pane exists: `PrepareSession()` reads mail metadata, loads recent project directories, and runs `SuggestionEngine` to pre-select a project. The user picks a project and sub-folder, edits the `Ablageordner`/`MsgDateiname` fields, and clicks OK. `ProcessSession()` then validates paths (`InputChecker.CheckInput()`), creates the folder, saves the `.msg`, optionally saves attachments, persists a `SessionRecord` to SQLite, and resets.
+MailDrop/
+|- app.config
+|- CLAUDE.md
+|- MailDrop.sln
+|- MailDrop.vbproj
+|- model.onnx
+|- packages.config
+|- packages.config.old.20251107221305
+|- packages.config.old.20251111163110
+|- ThisAddIn.Designer.vb
+|- ThisAddIn.Designer.xml
+|- ThisAddIn.vb
+|- vocab.txt
+|- Core/
+|  |- InputChecker.vb
+|  |- Session.vb
+|  |- SuggestionEngine.vb
+|- Helpers/
+|  |- DatabaseUtils.vb
+|  |- DirectoryTreeHelper.vb
+|  |- MailUtils.vb
+|  |- PathShortenerConverter.vb
+|- Models/
+|  |- model.onnx
+|  |- vocab.txt
+|- My Project/
+|  |- AssemblyInfo.vb
+|  |- Resources.Designer.vb
+|  |- Resources.resx
+|  |- Settings.Designer.vb
+|  |- Settings.settings
+|- Services/
+|  |- EmbeddingService.vb
+|- TestDirectory/
+|  |- P-23002/
+|  |- P-23003_Kita/
+|  |- P-23004_Modehaus/
+|- UI/
+	|- AttachmentRenameDialog.xaml
+	|- AttachmentRenameDialog.xaml.vb
+	|- InfoPopup.xaml
+	|- InfoPopup.xaml.vb
+	|- MailDropRibbon.vb
+	|- MailDropRibbon.xml
+	|- MailDropWpfHostControl.vb
+	|- MailDropWpfTaskPane.xaml
+	|- MailDropWpfTaskPane.xaml.vb
 
-### Session — the central state object (`Core/Session.vb`)
+## Build and run (local)
 
-Implements `INotifyPropertyChanged`, set as `DataContext` of the task pane — all WPF bindings read/write it directly.
+- Open MailDrop.sln in Visual Studio 2022.
+- Ensure NuGet packages are restored (packages.config based project).
+- Build Debug|AnyCPU for normal local development.
+- Start debugging from Visual Studio; Outlook is the host process for the VSTO add-in.
+- Requirement: Outlook desktop with VSTO runtime available.
 
-**Schema/Aufgeloest/Feld triad** — `Ablageordner` and `MsgDateiname` each have three related properties: `*Schema` (raw template, e.g. `[Datum] [Titel]`), `*Aufgeloest` (read-only resolved value), and `*Feld` (what the TextBox shows). GotFocus swaps `Feld ← Schema`; LostFocus writes `Schema ← Feld`, recomputes `Aufgeloest`, then swaps `Feld ← Aufgeloest`. Orchestrated by `BeginAblageordnerEdit()` / `EndAblageordnerEdit()`.
+## Runtime data and paths
 
-**`ToSessionRecord()`** copies properties from `Session` to `SessionRecord` by name-matching via reflection — both types must stay in sync.
+- Session history database: %APPDATA%/MailDrop/sessions.db
+- Database manager startup: ThisAddIn_Startup creates SessionDatabaseManager.
+- ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
+- The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
 
-**Path construction** (`InputChecker.CheckInput()`):
-```
-projektstrukturPfad (absolute) = Path.Combine(ProjektPfad, Session.ProjektstrukturPfad)
-ablageOrdnerPfad               = Path.Combine(projektstrukturPfad, AblageordnerAufgeloest)
-msgZielPfad                    = Path.Combine(ablageOrdnerPfad, MsgDateinameAufgeloest)
-```
-`Session.ProjektstrukturPfad` holds a **relative** path (relative to `ProjektPfad`); it is set from `DirectoryNode.RelativePath` when the user clicks a tree node.
+## Architecture and control flow
 
-### Placeholder system (`Core/Session.vb` — `ReplacePlaceholders`)
+- Entry point: ThisAddIn_Startup in ThisAddIn.vb.
+- Ribbon action: MailDropRibbon -> Globals.ThisAddIn.MailAblegen_Click.
+- Task pane creation: MailDropWpfHostControl hosts MailDropWpfTaskPane.
+- Selection updates: Explorer.SelectionChange -> MailSelected().
+- Session preparation: Session.PrepareSession() -> Reset, mail metadata read, recent project paths load, SuggestionEngine init, feature distance precompute, suggested ProjektPfad apply (if valid).
+- Save flow on OK: Session.ProcessSession() -> InputChecker -> create folder -> save .msg -> optional attachments -> persist SessionRecord -> reset session.
 
-Templates in `AblageordnerSchema` and `MsgDateinameSchema` may contain:
+## Key files for first orientation
 
-| Placeholder | Source property |
-|---|---|
-| `[Titel]` | `Titel` (user-editable) |
-| `[Betreff]` | `Betreff` (email subject) |
-| `[Absender]` | `Absender` (full sender name) |
-| `[Absender (kurz)]` | `AbsenderKurz` (user-editable in UI) |
-| `[Absender-Domain]` | `AbsenderDomain` (derived from SMTP address) |
-| `[Empfänger]` / `[Empfänger (kurz)]` | `Empfaenger` |
-| `[Datum]` | `Datum` formatted as `yyyy-MM-dd` |
-| `[Datum (formatiert)]` | `DatumFormatiert` (formatted as `yyyyMMdd`) |
+- ThisAddIn.vb: add-in lifecycle, Outlook selection event wiring, task pane lifecycle.
+- UI/MailDropRibbon.vb and UI/MailDropRibbon.xml: ribbon integration and button callback.
+- UI/MailDropWpfTaskPane.xaml and UI/MailDropWpfTaskPane.xaml.vb: primary UI and event handling.
+- Core/Session.vb: central state object and business flow.
+- Core/InputChecker.vb: input validation and attachment rename dialog path handling.
+- Helpers/MailUtils.vb: Outlook MailItem metadata read/save operations.
+- Helpers/DatabaseUtils.vb: SQLite persistence (SessionRecord) and retrieval of recent project paths.
+- Services/EmbeddingService.vb and Core/SuggestionEngine.vb: ONNX embedding and suggestion logic.
 
-Note: `AbsenderKurz` is not auto-filled by `ReadMailMeta` — the user types it directly. `AbsenderDomain` is parsed from the SMTP address only when `SenderEmailType = "SMTP"` and the address contains `@`.
+## Placeholder reference
 
-### SuggestionEngine (`Core/SuggestionEngine.vb`)
+Supported placeholders for Ablageordner and msg Dateiname:
 
-Scores every historical `SessionRecord` and returns the `ProjektPfad` of the best match. Current weight vector:
+- [Titel]
+- [Absender]
+- [Absender-Domain]
+- [Empfaenger]
+- [Empfaenger (kurz)]
+- [Betreff]
+- [Datum]
+- [Datum (formatiert)]
+- [Absender (kurz)]
 
-```
-0.4 × SemanticFeature   (cosine similarity of BERT-embedded subjects)
-0.2 × NumericalFeature  (date distance — stub, returns 0)
-0.1 × CategorialFeature (sender domain — stub, returns 0)
-0.1 × CategorialFeature (sender — stub, returns 0)
-0.2 × CategorialFeature (user — stub, returns 0)
-```
+Note:
+- [Empfaenger (kurz)] currently resolves to the same value as Empfaenger.
 
-The comment `'HIER GEHTS WEITER` at line 130 marks where the unimplemented features should be filled in next.
+## Validation and constraints
 
-`EmbedBetreff(session)` is called during `PrepareSession()` to store the current email's embedding on the `Session` object for later persistence. `SuggestProjektPfad(session)` recomputes embedding and distances immediately from `EnginesHistoricalSessionRecords`.
+- ProjektPfad must exist.
+- ProjektstrukturPfad must be selected and must exist under ProjektPfad.
+- Invalid file/path characters are rejected.
+- Path length limit checks currently use 255 characters.
+- Attachment save can prompt for rename when resulting path is too long.
 
-### EmbeddingService (`Services/EmbeddingService.vb`)
+## Current caveats and implementation notes
 
-Loads `model.onnx` (384-dimensional BERT) and `vocab.txt` at construction. `GenerateEmbedding(text)`:
-1. Tokenizes with `BertTokenizer`
-2. Builds `input_ids`, `attention_mask`, `token_type_ids` tensors (shape `[1, seqLen]`)
-3. Runs ONNX inference
-4. Mean-pools the token dimension over the `[1, seqLen, 384]` output
-5. Applies L2 normalization
+- SuggestionEngine currently uses weighted scoring across Betreff (semantic cosine similarity), Datum (normalized date similarity), AbsenderDomain (categorical match), Absender (categorical match), AusfueBenutzer (categorical match), Titel (text similarity), Ablageordner (text similarity), ProjektPfad (categorical match), and ProjektstrukturPfad (categorical match).
+- Feature weights are defined per feature directly in SuggestProjektPfad in Core/SuggestionEngine.vb and are applied independently during score aggregation.
+- Historical Betreff embeddings are created on demand in memory if missing in persisted records.
+- Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
+- In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
+- Text encoding/comments show mixed umlaut encoding artifacts in several files; prefer preserving existing file encoding unless intentionally normalizing.
 
-### Database (`Helpers/DatabaseUtils.vb`)
+## Conventions for Claude Code contributions
 
-`SessionDatabaseManager` manages `%APPDATA%\MailDrop\sessions.db`. The `dbPath` field is assigned both as a field initializer and again in the constructor — redundant but harmless. Key points:
+- Keep domain terms and UI labels in German to match existing code and user-facing text.
+- Favor minimal, targeted edits; do not refactor broad areas unless needed for the requested change.
+- Preserve the Session-based flow (PrepareSession/ProcessSession) and avoid introducing parallel state objects.
+- For UI behavior changes, keep data-binding centered on Session properties and existing control names.
+- For persistence changes, keep SessionRecord schema and SQLite migration impact explicit.
+- When touching SuggestionEngine, keep behavior behind existing calls to avoid breaking current filing flow.
+- Whenever code is changed, also review and update this CLAUDE.md so implementation notes, behavior descriptions, and caveats stay in sync.
 
-- `SaveSessionRecord()` builds its `INSERT` dynamically via reflection over `SessionRecord` properties, skipping `ID` (AUTOINCREMENT). The `BetreffEmbedded` `Single()` array is serialized with `DatabaseUtils.FloatsToBytes()` (`Buffer.BlockCopy`).
-- `GetAllSessionRecords()` deserializes `BetreffEmbedded` back with `DatabaseUtils.BytesToFloats()`.
-- `GetLastProjektVerzeichnisseForUser()` queries `SELECT DISTINCT ProjektPfad ... ORDER BY AusfueDatum DESC LIMIT 10`, then the VB loop exits early once 4 results are collected. Caution: ordering by `AusfueDatum` while selecting only `ProjektPfad` (DISTINCT) means SQLite picks an arbitrary row per distinct path before ordering, so the "most recent" ordering is not strictly guaranteed.
-- `SessionRecord` is the plain DTO. `EncodedSessionRecord` and the commented-out `EncodedSessions` table are an abandoned earlier ML approach — do not resurrect.
+## Quick verification checklist after changes
 
-### UI (`UI/`)
+- Build succeeds in Visual Studio.
+- Ribbon button opens the task pane.
+- Exactly one selected mail enables editing; other selections disable editing.
+- Selecting ProjektPfad refreshes Projektstruktur TreeView.
+- Placeholder fields resolve correctly on focus loss.
+- OK saves .msg to expected folder.
+- Optional attachment save works and handles long names.
+- Session row is written to SQLite database.
 
-**WinForms/WPF bridge**: `MailDropWpfHostControl` (WinForms `UserControl`) wraps an `ElementHost` whose `Child` is `MailDropWpfTaskPane` (WPF `UserControl`). This double wrapping is required because VSTO custom task panes only accept WinForms controls.
 
-**`MailDropWpfTaskPane.xaml`** bindings summary:
-- `ListBox1` ← `ProjektVerzeichnisse`; items display via `PathShortenerConverter` (`C:\Drive\...\Folder`) with full path as tooltip
-- `TreeView1` ← `TreeViewData`; `HierarchicalDataTemplate` over `DirectoryNode.Children`; first two levels auto-expand (`IsExpanded` bound via `DataTrigger`)
-- `TextBoxTitel` ↔ `Titel`
-- `TextBoxAbsenderKurz` ↔ `AbsenderKurz`
-- `TextBoxAblageordner` ↔ `AblageordnerFeld` (with GotFocus/LostFocus schema-swap)
-- `TextBoxMsgDateiname` ↔ `MsgDateinameFeld` (with GotFocus/LostFocus schema-swap)
-- `CheckBoxAnhaenge` ↔ `AnhaengeAblegen`
 
-**Ribbon**: `MailDropRibbon.vb` implements `IRibbonExtensibility`. The XML (`MailDropRibbon.xml`) is embedded as a manifest resource (`MailDrop.MailDropRibbon.xml`). The button appears in `TabMail` (the Outlook "Start" tab). Clicking delegates to `Globals.ThisAddIn.MailAblegen_Click()`, which creates the task pane on first use (docked right, width 1000 px) and then calls `MailSelected()`. The task pane is a **singleton** — once created it is only ever shown or hidden via `taskPane.Visible`; it is never recreated. `HideTaskPane()` (called by the Cancel button) sets `taskPane.Visible = False` without destroying it.
-
-**`GetWpfTaskPane()` in `ThisAddIn.vb`** navigates: `taskPane.Control` (WinForms `UserControl`) → `.Controls(0)` (`ElementHost`) → `.Child` (`MailDropWpfTaskPane`).
-
-**Shared properties on `ThisAddIn`**: `DbDirectory` (`%APPDATA%\MailDrop`) is used by `SessionDatabaseManager` to locate the database. `DbPath` (the full `.db` path) is also declared as a shared property but is not read externally — `SessionDatabaseManager` recomputes the path itself. `CurrentDatabaseManager` is the global singleton database manager, accessible anywhere via `ThisAddIn.CurrentDatabaseManager`.
-
-### InputChecker (`Core/InputChecker.vb`)
-
-A `Module` (not a class). `CheckInput(session)` validates in order: ProjektPfad exists → ProjektstrukturPfad non-empty and exists → AblageordnerAufgeloest valid chars and ≤255 chars → MsgDateinameAufgeloest valid chars and ≤255 chars → each attachment path valid (triggers `AttachmentRenameDialog` when an attachment path exceeds 255 chars, and skips the attachment if the user cancels). Returns a `CheckedInputResult` with all resolved paths or a non-empty `ErrorMessage`.
-
-### DirectoryTreeHelper (`Helpers/DirectoryTreeHelper.vb`)
-
-`BuildDirectoryTree(projektPfad)` returns an `ObservableCollection(Of DirectoryNode)` containing the direct children of `projektPfad`, each recursively populated. `DirectoryNode.RelativePath` is the path **relative to `projektPfad`** and is what gets assigned to `Session.ProjektstrukturPfad` on tree selection. Nodes at depth ≤ 2 have `IsExpanded = True`.
-
-## German naming conventions
-
-All domain identifiers, comments, and UI labels are in German.
-
-| German | Meaning |
-|---|---|
-| Betreff | Email subject |
-| Absender | Sender |
-| Empfaenger | Recipient |
-| Ablageordner | Filing/storage folder |
-| ProjektPfad | Project root path (absolute) |
-| ProjektstrukturPfad | Sub-folder path within project (relative) |
-| Anhang / Anhaenge | Attachment(s) |
-| Ausfue* | Execution context (AusfueDatum = when filed, AusfueBenutzer = who filed) |
-| Schema | Template string with placeholders |
-| Aufgeloest | Resolved string (placeholders substituted) |
-| Feld | Current value shown in the UI text box |
