@@ -10,42 +10,21 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - **Host**: Microsoft Outlook
 - **Build tool**: MSBuild / Visual Studio 2022
 
-## Build
-
-```
-msbuild MailDrop.sln /p:Configuration=Debug
-msbuild MailDrop.sln /p:Configuration=Release
-```
-
-Restore NuGet packages before the first build (`nuget restore MailDrop.sln`; Visual Studio does this automatically). Output lands in `bin\Debug\` or `bin\Release\`. The ONNX model files (`Models\model.onnx`, `Models\vocab.txt`) are copied into `bin\<Config>\Models\` at build time — `EmbeddingService` resolves them relative to the executing assembly.
-
-## Testing
-
-There is no automated test suite. Manual integration testing is done by pressing F5 in Visual Studio, which launches Outlook with the add-in loaded. The `TestDirectory/` folder contains a sample project tree for exercising folder navigation and suggestion features.
-
 ## Architecture
 
 ### End-to-end flow
 
-1. User selects an email → `Explorer_SelectionChange` fires in `ThisAddIn.vb` and calls `MailSelected()`. If the task pane has never been opened, `GetWpfTaskPane()` returns `Nothing` and `MailSelected()` is a silent no-op — the add-in is lazy until the ribbon button is first clicked.
-2. `MailDropWpfTaskPane.SingleMailSelected()` checks that exactly one `MailItem` is selected
-3. `Session.PrepareSession()` runs: resets state, calls `MailUtils.ReadMailMeta()` to populate mail fields, calls `GetProjektVerzeichnisse()` to load the list-box, creates a `SuggestionEngine` and calls `SuggestProjektPfad()` to set a default project folder
-4. User selects a project from the list-box (or picks "anderes..." for a folder browser), picks a sub-folder in the tree-view, edits the `Ablageordner` and `MsgDateiname` fields, and clicks OK
-5. `Session.ProcessSession()`: validates with `InputChecker.CheckInput()`, creates the target folder, saves the `.msg` file via `MailUtils.SaveSelectedMailAsMsg()`, optionally saves attachments via `MailUtils.SaveMailAttachments()`, persists a `SessionRecord` to SQLite, then resets
+`Explorer_SelectionChange` → `MailSelected()` — silent no-op until the ribbon button is clicked for the first time (`GetWpfTaskPane()` returns `Nothing` while the task pane hasn't been created yet).
+
+Once the pane exists: `PrepareSession()` reads mail metadata, loads recent project directories, and runs `SuggestionEngine` to pre-select a project. The user picks a project and sub-folder, edits the `Ablageordner`/`MsgDateiname` fields, and clicks OK. `ProcessSession()` then validates paths (`InputChecker.CheckInput()`), creates the folder, saves the `.msg`, optionally saves attachments, persists a `SessionRecord` to SQLite, and resets.
 
 ### Session — the central state object (`Core/Session.vb`)
 
-`Session` is both the data model and the effective ViewModel. It implements `INotifyPropertyChanged` and is set as `DataContext` of the task pane, so all WPF bindings read and write directly to it.
+Implements `INotifyPropertyChanged`, set as `DataContext` of the task pane — all WPF bindings read/write it directly.
 
-**The Schema/Aufgeloest/Feld triad** — for `Ablageordner` and `MsgDateiname` there are three related properties each:
+**Schema/Aufgeloest/Feld triad** — `Ablageordner` and `MsgDateiname` each have three related properties: `*Schema` (raw template, e.g. `[Datum] [Titel]`), `*Aufgeloest` (read-only resolved value), and `*Feld` (what the TextBox shows). GotFocus swaps `Feld ← Schema`; LostFocus writes `Schema ← Feld`, recomputes `Aufgeloest`, then swaps `Feld ← Aufgeloest`. Orchestrated by `BeginAblageordnerEdit()` / `EndAblageordnerEdit()`.
 
-- `*Schema` — the raw template string, e.g. `[Datum] [Titel]`
-- `*Aufgeloest` — read-only; auto-recomputed by `ReplacePlaceholders()` whenever schema or any mail field changes
-- `*Feld` — the string currently shown in the TextBox
-
-On **GotFocus** the TextBox switches to `*Schema` (so the user edits the template). On **LostFocus** it writes back to `*Schema`, recomputes `*Aufgeloest`, and shows the resolved value again. This swap is orchestrated by `BeginAblageordnerEdit()` / `EndAblageordnerEdit()` and the equivalents for `MsgDateiname`.
-
-**`ToSessionRecord()`** uses reflection to copy properties from `Session` to `SessionRecord` by matching property names — both types must stay in sync.
+**`ToSessionRecord()`** copies properties from `Session` to `SessionRecord` by name-matching via reflection — both types must stay in sync.
 
 **Path construction** (`InputChecker.CheckInput()`):
 ```
