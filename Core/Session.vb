@@ -26,9 +26,12 @@ Public Class Session
     Private _betreffEmbedded As Single()
     Private _datum As DateTime
     Private _datumFormatiert As String
+    Private _isSuggestedProjektPfad As Boolean
+    Private _isSuggestedProjektstrukturPfad As Boolean
+    Private _isSuggestedTitel As Boolean
+    Private _isSuggestedAblageordnerSchema As Boolean
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
-    Public Event SuggestionApplied As EventHandler(Of String)
 
     Protected Sub OnPropertyChanged(propertyName As String)
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(propertyName))
@@ -226,29 +229,81 @@ Public Class Session
         MsgDateinameFeld = String.Empty
         AnhaengeAblegen = False
         ProjektstrukturPfad = Nothing
+        IsSuggestedProjektPfad = False
+        IsSuggestedProjektstrukturPfad = False
+        IsSuggestedTitel = False
+        IsSuggestedAblageordnerSchema = False
         Debug.WriteLine("[Session] Reset ausgef�hrt")
     End Sub
 
     Public Property SuggestionEngineInstance As SuggestionEngine
 
+    Public Property IsSuggestedProjektPfad As Boolean
+        Get
+            Return _isSuggestedProjektPfad
+        End Get
+        Set(value As Boolean)
+            If _isSuggestedProjektPfad <> value Then
+                _isSuggestedProjektPfad = value
+                OnPropertyChanged(NameOf(IsSuggestedProjektPfad))
+            End If
+        End Set
+    End Property
+
+    Public Property IsSuggestedProjektstrukturPfad As Boolean
+        Get
+            Return _isSuggestedProjektstrukturPfad
+        End Get
+        Set(value As Boolean)
+            If _isSuggestedProjektstrukturPfad <> value Then
+                _isSuggestedProjektstrukturPfad = value
+                OnPropertyChanged(NameOf(IsSuggestedProjektstrukturPfad))
+            End If
+        End Set
+    End Property
+
+    Public Property IsSuggestedTitel As Boolean
+        Get
+            Return _isSuggestedTitel
+        End Get
+        Set(value As Boolean)
+            If _isSuggestedTitel <> value Then
+                _isSuggestedTitel = value
+                OnPropertyChanged(NameOf(IsSuggestedTitel))
+            End If
+        End Set
+    End Property
+
+    Public Property IsSuggestedAblageordnerSchema As Boolean
+        Get
+            Return _isSuggestedAblageordnerSchema
+        End Get
+        Set(value As Boolean)
+            If _isSuggestedAblageordnerSchema <> value Then
+                _isSuggestedAblageordnerSchema = value
+                OnPropertyChanged(NameOf(IsSuggestedAblageordnerSchema))
+            End If
+        End Set
+    End Property
+
     Public Sub SuggestProjektPfad(value As String)
         ProjektPfad = value
-        RaiseEvent SuggestionApplied(Me, NameOf(ProjektPfad))
+        IsSuggestedProjektPfad = True
     End Sub
 
     Public Sub SuggestProjektstrukturPfad(value As String)
         ProjektstrukturPfad = value
-        RaiseEvent SuggestionApplied(Me, NameOf(ProjektstrukturPfad))
+        IsSuggestedProjektstrukturPfad = True
     End Sub
 
     Public Sub SuggestTitel(value As String)
         Titel = value
-        RaiseEvent SuggestionApplied(Me, NameOf(Titel))
+        IsSuggestedTitel = True
     End Sub
 
     Public Sub SuggestAblageordnerSchema(value As String)
         AblageordnerSchema = value
-        RaiseEvent SuggestionApplied(Me, NameOf(AblageordnerSchema))
+        IsSuggestedAblageordnerSchema = True
     End Sub
 
     Public Sub PrepareSession()

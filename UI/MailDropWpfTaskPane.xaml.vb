@@ -17,27 +17,7 @@ Public Class MailDropWpfTaskPane
         Me.DataContext = Session
         AddHandler ListBox1.SelectionChanged, AddressOf ListBox1_SelectionChanged
         AddHandler Session.PropertyChanged, AddressOf Session_PropertyChanged
-        AddHandler Session.SuggestionApplied, AddressOf Session_SuggestionApplied
         AddHandler TreeView1.SelectedItemChanged, AddressOf TreeView1_SelectedItemChanged
-    End Sub
-
-    Private Sub Session_SuggestionApplied(sender As Object, fieldName As String)
-        Dim sparkle As TextBlock = Nothing
-        Select Case fieldName
-            Case NameOf(Session.ProjektPfad) : sparkle = SparkleProjektPfad
-            Case NameOf(Session.ProjektstrukturPfad)
-                sparkle = SparkleProjektstrukturPfad
-                Dim targetPath = Session.ProjektstrukturPfad
-                Dispatcher.BeginInvoke(New Action(Sub()
-                    _applyingTreeViewSuggestion = True
-                    Dim tvi = FindTreeViewItem(TreeView1, targetPath)
-                    If tvi IsNot Nothing Then tvi.IsSelected = True
-                    _applyingTreeViewSuggestion = False
-                End Sub))
-            Case NameOf(Session.Titel) : sparkle = SparkleTitel
-            Case NameOf(Session.AblageordnerSchema) : sparkle = SparkleAblageordner
-        End Select
-        If sparkle IsNot Nothing Then ShowSparkle(sparkle)
     End Sub
 
     Private Function FindTreeViewItem(container As ItemsControl, relativePath As String) As TreeViewItem
@@ -66,6 +46,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ListBox1_SelectionChanged(sender As Object, e As SelectionChangedEventArgs)
+        Session.IsSuggestedProjektPfad = False
         HideSparkle(SparkleProjektPfad)
         If ListBox1.SelectedItem IsNot Nothing Then
             Session.HandleProjektSelection(ListBox1.SelectedItem.ToString(), Window.GetWindow(Me))
@@ -73,14 +54,34 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub Session_PropertyChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
-        ' TreeviewEngine-Aufruf entfernt, da TreeViewData jetzt automatisch aktualisiert wird
+        Select Case e.PropertyName
+            Case NameOf(Session.IsSuggestedProjektPfad)
+                If Session.IsSuggestedProjektPfad Then ShowSparkle(SparkleProjektPfad)
+            Case NameOf(Session.IsSuggestedProjektstrukturPfad)
+                If Session.IsSuggestedProjektstrukturPfad Then
+                    ShowSparkle(SparkleProjektstrukturPfad)
+                    Dim targetPath = Session.ProjektstrukturPfad
+                    Dispatcher.BeginInvoke(New Action(Sub()
+                        _applyingTreeViewSuggestion = True
+                        Dim tvi = FindTreeViewItem(TreeView1, targetPath)
+                        If tvi IsNot Nothing Then tvi.IsSelected = True
+                        _applyingTreeViewSuggestion = False
+                    End Sub))
+                End If
+            Case NameOf(Session.IsSuggestedTitel)
+                If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel)
+            Case NameOf(Session.IsSuggestedAblageordnerSchema)
+                If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner)
+        End Select
     End Sub
 
     Private Sub TextBoxTitel_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedTitel = False
         HideSparkle(SparkleTitel)
     End Sub
 
     Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedAblageordnerSchema = False
         HideSparkle(SparkleAblageordner)
         Session.BeginAblageordnerEdit()
     End Sub
@@ -165,7 +166,10 @@ Public Class MailDropWpfTaskPane
     End Function
 
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
-        If Not _applyingTreeViewSuggestion Then HideSparkle(SparkleProjektstrukturPfad)
+        If Not _applyingTreeViewSuggestion Then
+            Session.IsSuggestedProjektstrukturPfad = False
+            HideSparkle(SparkleProjektstrukturPfad)
+        End If
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then
             Session.ProjektstrukturPfad = node.RelativePath
