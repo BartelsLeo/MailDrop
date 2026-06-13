@@ -18,68 +18,104 @@ Public Class SuggestionEngine
     Private Property ProjektstrukturPfadDistances As List(Of Double)
 
     Public Sub New()
-        ' Lädt historische Sitzungen einmalig beim Erstellen der Engine.
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
-
-        ' Startet den Embedding-Service einmalig.
         EnginesEmbeddingService = New EmbeddingService()
 
-        ' Initialisiert leere Distanzlisten.
-        BetreffDistances = New List(Of Double)()
-        DatumsDistances = New List(Of Double)()
-        AbsenderDomainDistances = New List(Of Double)()
-        AbsenderDistances = New List(Of Double)()
-        AusfueBenutzerDistances = New List(Of Double)()
-        TitelDistances = New List(Of Double)()
-        AblageordnerDistances = New List(Of Double)()
-        ProjektPfadDistances = New List(Of Double)()
-        ProjektstrukturPfadDistances = New List(Of Double)()
+        ' Alle Distanzlisten mit der korrekten Länge und Nullwerten initialisieren.
+        ' Fixe Features werden in PrepareSession befüllt; mutable Features bleiben 0 bis zur ersten Änderung.
+        Dim recordCount = EnginesHistoricalSessionRecords.Count
+        BetreffDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        DatumsDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        AbsenderDomainDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        AbsenderDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        AusfueBenutzerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        TitelDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        AblageordnerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        ProjektPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        ProjektstrukturPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
 
-        ' Stellt sicher, dass historische Datensätze ein Betreff-Embedding besitzen.
         EnsureHistoricalBetreffEmbeddings()
     End Sub
 
-    ' Berechnet alle Distanzlisten zwischen aktueller Session und historischen Datensätzen.
-    ' Diese Methode soll vor der eigentlichen Projektempfehlung aufgerufen werden.
-    Public Sub RecalculateFeatureDistances(currentSession As Session)
-        If currentSession Is Nothing Then
-            Throw New ArgumentNullException(NameOf(currentSession))
-        End If
+    ' === Fixe Features – einmalig pro Mail-Selektion, aufgerufen aus PrepareSession ===
 
-        Dim recordCount = EnginesHistoricalSessionRecords.Count
-        BetreffDistances = New List(Of Double)(recordCount)
-        DatumsDistances = New List(Of Double)(recordCount)
-        AbsenderDomainDistances = New List(Of Double)(recordCount)
-        AbsenderDistances = New List(Of Double)(recordCount)
-        AusfueBenutzerDistances = New List(Of Double)(recordCount)
-        TitelDistances = New List(Of Double)(recordCount)
-        AblageordnerDistances = New List(Of Double)(recordCount)
-        ProjektPfadDistances = New List(Of Double)(recordCount)
-        ProjektstrukturPfadDistances = New List(Of Double)(recordCount)
-
-        If recordCount = 0 Then
-            Return
-        End If
-
-        Dim currentBetreffEmbedding = GetOrCreateCurrentBetreffEmbedding(currentSession)
-        Dim maxDateDistanceInDays = GetMaxDateDistanceInDays(currentSession.Datum)
-
+    Public Sub RecalculateBetreffDistances(session As Session)
+        If session Is Nothing Then Return
+        BetreffDistances.Clear()
+        Dim currentEmbedding = GetOrCreateCurrentBetreffEmbedding(session)
         For Each record In EnginesHistoricalSessionRecords
-            BetreffDistances.Add(CalculateCosineSimilarity(currentBetreffEmbedding, record.BetreffEmbedded))
-            DatumsDistances.Add(CalculateDateSimilarity(currentSession.Datum, record.Datum, maxDateDistanceInDays))
-            AbsenderDomainDistances.Add(CalculateCategoricalSimilarity(currentSession.AbsenderDomain, record.AbsenderDomain))
-            AbsenderDistances.Add(CalculateCategoricalSimilarity(currentSession.Absender, record.Absender))
-            AusfueBenutzerDistances.Add(CalculateCategoricalSimilarity(currentSession.AusfueBenutzer, record.AusfueBenutzer))
-            TitelDistances.Add(CalculateTextSimilarity(currentSession.Titel, record.Titel))
-            AblageordnerDistances.Add(CalculateTextSimilarity(currentSession.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
-            ProjektPfadDistances.Add(CalculateCategoricalSimilarity(currentSession.ProjektPfad, record.ProjektPfad))
-            ProjektstrukturPfadDistances.Add(CalculateCategoricalSimilarity(currentSession.ProjektstrukturPfad, record.ProjektstrukturPfad))
+            BetreffDistances.Add(CalculateCosineSimilarity(currentEmbedding, record.BetreffEmbedded))
+        Next
+    End Sub
+
+    Public Sub RecalculateDatumsDistances(session As Session)
+        If session Is Nothing Then Return
+        DatumsDistances.Clear()
+        Dim maxDistance = GetMaxDateDistanceInDays(session.Datum)
+        For Each record In EnginesHistoricalSessionRecords
+            DatumsDistances.Add(CalculateDateSimilarity(session.Datum, record.Datum, maxDistance))
+        Next
+    End Sub
+
+    Public Sub RecalculateAbsenderDomainDistances(session As Session)
+        If session Is Nothing Then Return
+        AbsenderDomainDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            AbsenderDomainDistances.Add(CalculateCategoricalSimilarity(session.AbsenderDomain, record.AbsenderDomain))
+        Next
+    End Sub
+
+    Public Sub RecalculateAbsenderDistances(session As Session)
+        If session Is Nothing Then Return
+        AbsenderDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            AbsenderDistances.Add(CalculateCategoricalSimilarity(session.Absender, record.Absender))
+        Next
+    End Sub
+
+    Public Sub RecalculateAusfueBenutzerDistances(session As Session)
+        If session Is Nothing Then Return
+        AusfueBenutzerDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            AusfueBenutzerDistances.Add(CalculateCategoricalSimilarity(session.AusfueBenutzer, record.AusfueBenutzer))
+        Next
+    End Sub
+
+    ' === Mutable Features – ausgelöst bei Feldänderung über Session-Property-Setter ===
+
+    Public Sub RecalculateTitelDistances(session As Session)
+        If session Is Nothing Then Return
+        TitelDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            TitelDistances.Add(CalculateTextSimilarity(session.Titel, record.Titel))
+        Next
+    End Sub
+
+    Public Sub RecalculateAblageordnerDistances(session As Session)
+        If session Is Nothing Then Return
+        AblageordnerDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            AblageordnerDistances.Add(CalculateTextSimilarity(session.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
+        Next
+    End Sub
+
+    Public Sub RecalculateProjektPfadDistances(session As Session)
+        If session Is Nothing Then Return
+        ProjektPfadDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            ProjektPfadDistances.Add(CalculateCategoricalSimilarity(session.ProjektPfad, record.ProjektPfad))
+        Next
+    End Sub
+
+    Public Sub RecalculateProjektstrukturPfadDistances(session As Session)
+        If session Is Nothing Then Return
+        ProjektstrukturPfadDistances.Clear()
+        For Each record In EnginesHistoricalSessionRecords
+            ProjektstrukturPfadDistances.Add(CalculateCategoricalSimilarity(session.ProjektstrukturPfad, record.ProjektstrukturPfad))
         Next
     End Sub
 
     Public Function SuggestProjektPfad(session As Session) As String
-        ' Nutzt die bereits vorberechneten Distanzlisten.
-        ' Falls noch nicht vorbereitet oder Session geändert, wird hier defensiv neu berechnet.
         If session Is Nothing Then
             Return String.Empty
         End If
@@ -97,10 +133,6 @@ Public Class SuggestionEngine
             {"ProjektPfad", 0.04},
             {"ProjektstrukturPfad", 0.03}
         }
-
-        If Not AreDistanceCachesComplete() Then
-            RecalculateFeatureDistances(session)
-        End If
 
         If EnginesHistoricalSessionRecords.Count = 0 Then
             Return String.Empty
@@ -233,21 +265,6 @@ Public Class SuggestionEngine
         End If
 
         Return maxDistance
-    End Function
-
-    ' Prüft, ob alle Cache-Listen zur Anzahl historischer Datensätze passen.
-    Private Function AreDistanceCachesComplete() As Boolean
-        Dim expectedCount = EnginesHistoricalSessionRecords.Count
-        Return
-            BetreffDistances.Count = expectedCount AndAlso
-            DatumsDistances.Count = expectedCount AndAlso
-            AbsenderDomainDistances.Count = expectedCount AndAlso
-            AbsenderDistances.Count = expectedCount AndAlso
-            AusfueBenutzerDistances.Count = expectedCount AndAlso
-            TitelDistances.Count = expectedCount AndAlso
-            AblageordnerDistances.Count = expectedCount AndAlso
-            ProjektPfadDistances.Count = expectedCount AndAlso
-            ProjektstrukturPfadDistances.Count = expectedCount
     End Function
 
     ' Textähnlichkeit auf Basis normalisierter Token-Überlappung (Jaccard), Bereich [0,1].

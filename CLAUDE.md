@@ -26,7 +26,7 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
 - A SuggestionEngine with ONNX embeddings is initialized for project path suggestion.
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
-- Suggestion-relevant features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are treated as fixed for the currently selected mail and are recalculated during PrepareSession().
+- Suggestion-relevant features are split into two groups: fixed features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are computed once per mail selection via dedicated per-feature subs called from PrepareSession(); mutable features (Titel, AblageordnerAufgeloest, ProjektPfad, ProjektstrukturPfad) are recomputed via dedicated per-feature subs triggered from the corresponding Session property setters and are zero-initialized at engine construction.
 
 ## Current workspace layout:
 
@@ -140,8 +140,9 @@ Note:
 
 ## Current caveats and implementation notes
 
-- SuggestionEngine currently uses weighted scoring across Betreff (semantic cosine similarity), Datum (normalized date similarity), AbsenderDomain (categorical match), Absender (categorical match), AusfueBenutzer (categorical match), Titel (text similarity), Ablageordner (text similarity), ProjektPfad (categorical match), and ProjektstrukturPfad (categorical match).
+- SuggestionEngine uses weighted scoring across Betreff (semantic cosine similarity), Datum (normalized date similarity), AbsenderDomain (categorical match), Absender (categorical match), AusfueBenutzer (categorical match), Titel (text similarity), Ablageordner (text similarity), ProjektPfad (categorical match), and ProjektstrukturPfad (categorical match).
 - Feature weights are defined per feature directly in SuggestProjektPfad in Core/SuggestionEngine.vb and are applied independently during score aggregation.
+- Distance lists are initialized with zeros at construction (length = historical record count). Fixed-feature subs overwrite them in PrepareSession(); mutable-feature subs overwrite them incrementally as the user edits fields.
 - Historical Betreff embeddings are created on demand in memory if missing in persisted records.
 - Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
 - In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
