@@ -188,7 +188,6 @@ Public Class SuggestionEngine
         End If
     End Function
 
-    ' Erzeugt fehlende historische Betreff-Embeddings einmalig beim Engine-Start.
     Private Sub EnsureHistoricalBetreffEmbeddings()
         For Each record In EnginesHistoricalSessionRecords
             If record.BetreffEmbedded Is Nothing OrElse record.BetreffEmbedded.Length = 0 Then
