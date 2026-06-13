@@ -232,23 +232,23 @@ Public Class Session
     Public Property SuggestionEngineInstance As SuggestionEngine
 
     Public Sub SuggestProjektPfad(value As String)
-        RaiseEvent SuggestionApplied(Me, NameOf(ProjektPfad))
         ProjektPfad = value
+        RaiseEvent SuggestionApplied(Me, NameOf(ProjektPfad))
     End Sub
 
     Public Sub SuggestProjektstrukturPfad(value As String)
-        RaiseEvent SuggestionApplied(Me, NameOf(ProjektstrukturPfad))
         ProjektstrukturPfad = value
+        RaiseEvent SuggestionApplied(Me, NameOf(ProjektstrukturPfad))
     End Sub
 
     Public Sub SuggestTitel(value As String)
-        RaiseEvent SuggestionApplied(Me, NameOf(Titel))
         Titel = value
+        RaiseEvent SuggestionApplied(Me, NameOf(Titel))
     End Sub
 
     Public Sub SuggestAblageordnerSchema(value As String)
-        RaiseEvent SuggestionApplied(Me, NameOf(AblageordnerSchema))
         AblageordnerSchema = value
+        RaiseEvent SuggestionApplied(Me, NameOf(AblageordnerSchema))
     End Sub
 
     Public Sub PrepareSession()

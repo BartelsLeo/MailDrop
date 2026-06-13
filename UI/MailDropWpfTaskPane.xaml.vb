@@ -10,6 +10,7 @@ Public Class MailDropWpfTaskPane
 
     Public Property Session As New Session()
     Private infoPopup As InfoPopup = Nothing
+    Private _applyingTreeViewSuggestion As Boolean = False
 
     Public Sub New()
         InitializeComponent()
@@ -24,12 +25,35 @@ Public Class MailDropWpfTaskPane
         Dim sparkle As TextBlock = Nothing
         Select Case fieldName
             Case NameOf(Session.ProjektPfad) : sparkle = SparkleProjektPfad
-            Case NameOf(Session.ProjektstrukturPfad) : sparkle = SparkleProjektstrukturPfad
+            Case NameOf(Session.ProjektstrukturPfad)
+                sparkle = SparkleProjektstrukturPfad
+                Dim targetPath = Session.ProjektstrukturPfad
+                Dispatcher.BeginInvoke(New Action(Sub()
+                    _applyingTreeViewSuggestion = True
+                    Dim tvi = FindTreeViewItem(TreeView1, targetPath)
+                    If tvi IsNot Nothing Then tvi.IsSelected = True
+                    _applyingTreeViewSuggestion = False
+                End Sub))
             Case NameOf(Session.Titel) : sparkle = SparkleTitel
             Case NameOf(Session.AblageordnerSchema) : sparkle = SparkleAblageordner
         End Select
         If sparkle IsNot Nothing Then ShowSparkle(sparkle)
     End Sub
+
+    Private Function FindTreeViewItem(container As ItemsControl, relativePath As String) As TreeViewItem
+        For Each item In container.Items
+            Dim node = TryCast(item, DirectoryNode)
+            Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+            If node IsNot Nothing AndAlso tvi IsNot Nothing Then
+                If node.RelativePath = relativePath Then Return tvi
+                If tvi.IsExpanded Then
+                    Dim found = FindTreeViewItem(tvi, relativePath)
+                    If found IsNot Nothing Then Return found
+                End If
+            End If
+        Next
+        Return Nothing
+    End Function
 
     Private Sub ShowSparkle(sparkle As TextBlock)
         sparkle.BeginAnimation(UIElement.OpacityProperty,
@@ -141,7 +165,7 @@ Public Class MailDropWpfTaskPane
     End Function
 
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
-        HideSparkle(SparkleProjektstrukturPfad)
+        If Not _applyingTreeViewSuggestion Then HideSparkle(SparkleProjektstrukturPfad)
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then
             Session.ProjektstrukturPfad = node.RelativePath
