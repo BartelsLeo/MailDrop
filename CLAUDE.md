@@ -162,6 +162,12 @@ Note:
 - When touching SuggestionEngine, keep behavior behind existing calls to avoid breaking current filing flow.
 - Whenever code is changed, also review and update this CLAUDE.md so implementation notes, behavior descriptions, and caveats stay in sync.
 
+## Response style and process transparency
+
+- Answer critically, not just confirmatively. If a request is ambiguous, incomplete, or conflicts with existing architecture, say so explicitly before implementing.
+- Every response that involves a task must state clearly whether: (a) a concept described in this CLAUDE.md or in the conversation was **translated into code** (no conceptual change), or (b) the concept itself was **updated** (the design changed during implementation). If (b), update the relevant section of CLAUDE.md to reflect the actual implemented design before closing the task.
+- At the end of every response, include a short **"Next steps"** suggestion — one to three concrete items the project should address next, whether that means writing more code, refining a concept, or updating documentation. Base it on the current state of the codebase and known open issues.
+
 ## Quick verification checklist after changes
 
 - Build succeeds in Visual Studio.
