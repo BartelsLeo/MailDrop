@@ -144,7 +144,6 @@ Note:
 - SuggestionEngine uses weighted scoring across Betreff (semantic cosine similarity), Datum (normalized date similarity), AbsenderDomain (categorical match), Absender (categorical match), AusfueBenutzer (categorical match), Titel (text similarity), Ablageordner (text similarity), ProjektPfad (categorical match), and ProjektstrukturPfad (categorical match).
 - Feature weights are defined per feature directly in SuggestProjektPfad in Core/SuggestionEngine.vb and are applied independently during score aggregation.
 - Distance lists are initialized with zeros at construction (length = historical record count). Fixed-feature subs overwrite them in PrepareSession(); mutable-feature subs overwrite them incrementally as the user edits fields.
-- Historical Betreff embeddings are created on demand in memory if missing in persisted records.
 - Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
 - In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
 - Text encoding/comments show mixed umlaut encoding artifacts in several files; prefer preserving existing file encoding unless intentionally normalizing.

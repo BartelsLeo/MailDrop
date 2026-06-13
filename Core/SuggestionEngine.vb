@@ -20,7 +20,6 @@ Public Class SuggestionEngine
     Public Sub New()
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
         EnginesEmbeddingService = New EmbeddingService()
-        EnsureHistoricalBetreffEmbeddings()
     End Sub
 
     ' Berechnet fixe Feature-Distanzen einmalig und initialisiert mutable Features mit 0.
@@ -188,23 +187,7 @@ Public Class SuggestionEngine
         End If
     End Function
 
-    ' Erzeugt fehlende historische Betreff-Embeddings einmalig beim Engine-Start.
-    Private Sub EnsureHistoricalBetreffEmbeddings()
-        For Each record In EnginesHistoricalSessionRecords
-            If record.BetreffEmbedded Is Nothing OrElse record.BetreffEmbedded.Length = 0 Then
-                If String.IsNullOrWhiteSpace(record.Betreff) Then
-                    Continue For
-                End If
-                Try
-                    record.BetreffEmbedded = EnginesEmbeddingService.GenerateEmbedding(record.Betreff.ToLower())
-                Catch ex As Exception
-                    Debug.WriteLine($"[SuggestionEngine] Konnte historisches Betreff-Embedding nicht erstellen: {ex.Message}")
-                End Try
-            End If
-        Next
-    End Sub
-
-    ' Erzeugt (falls nötig) das Embedding der aktuellen Session und gibt es zurück.
+    ' Erzeugt das Embedding für den aktuellen Betreff und speichert es in der Session.
     Private Function GetOrCreateCurrentBetreffEmbedding(currentSession As Session) As Single()
         If currentSession.BetreffEmbedded IsNot Nothing AndAlso currentSession.BetreffEmbedded.Length > 0 Then
             Return currentSession.BetreffEmbedded
