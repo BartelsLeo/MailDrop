@@ -225,12 +225,8 @@ Public Class Session
         ' SuggestionEngine Instanz erstellen (lädt Historie und Embedding-Service einmalig)
         SuggestionEngineInstance = New SuggestionEngine()
 
-        ' Distanzlisten für fixe Features (Mail-Metadaten) einmalig vorberechnen.
-        SuggestionEngineInstance.RecalculateBetreffDistances(Me)
-        SuggestionEngineInstance.RecalculateDatumsDistances(Me)
-        SuggestionEngineInstance.RecalculateAbsenderDomainDistances(Me)
-        SuggestionEngineInstance.RecalculateAbsenderDistances(Me)
-        SuggestionEngineInstance.RecalculateAusfueBenutzerDistances(Me)
+        ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
+        SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
 
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)

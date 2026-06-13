@@ -20,99 +20,113 @@ Public Class SuggestionEngine
     Public Sub New()
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
         EnginesEmbeddingService = New EmbeddingService()
+        EnsureHistoricalBetreffEmbeddings()
+    End Sub
 
-        ' Alle Distanzlisten mit der korrekten Länge und Nullwerten initialisieren.
-        ' Fixe Features werden in PrepareSession befüllt; mutable Features bleiben 0 bis zur ersten Änderung.
+    ' Berechnet fixe Feature-Distanzen einmalig und initialisiert mutable Features mit 0.
+    ' Wird direkt nach New() in PrepareSession aufgerufen.
+    Public Sub CalculateInitialFeatureDistances(session As Session)
+        If session Is Nothing Then Throw New ArgumentNullException(NameOf(session))
+
+        RecalculateBetreffDistances(session)
+        RecalculateDatumsDistances(session)
+        RecalculateAbsenderDomainDistances(session)
+        RecalculateAbsenderDistances(session)
+        RecalculateAusfueBenutzerDistances(session)
+
+        ' Mutable Features sind zur Initialisierungszeit leer – 0 als Startwert.
         Dim recordCount = EnginesHistoricalSessionRecords.Count
-        BetreffDistances = Enumerable.Repeat(0.0, recordCount).ToList()
-        DatumsDistances = Enumerable.Repeat(0.0, recordCount).ToList()
-        AbsenderDomainDistances = Enumerable.Repeat(0.0, recordCount).ToList()
-        AbsenderDistances = Enumerable.Repeat(0.0, recordCount).ToList()
-        AusfueBenutzerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         TitelDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         AblageordnerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektstrukturPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
-
-        EnsureHistoricalBetreffEmbeddings()
     End Sub
 
-    ' === Fixe Features – einmalig pro Mail-Selektion, aufgerufen aus PrepareSession ===
+    ' === Fixe Features – einmalig pro Mail-Selektion, aufgerufen aus CalculateInitialFeatureDistances ===
 
     Public Sub RecalculateBetreffDistances(session As Session)
         If session Is Nothing Then Return
-        BetreffDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         Dim currentEmbedding = GetOrCreateCurrentBetreffEmbedding(session)
         For Each record In EnginesHistoricalSessionRecords
-            BetreffDistances.Add(CalculateCosineSimilarity(currentEmbedding, record.BetreffEmbedded))
+            newDistances.Add(CalculateCosineSimilarity(currentEmbedding, record.BetreffEmbedded))
         Next
+        BetreffDistances = newDistances
     End Sub
 
     Public Sub RecalculateDatumsDistances(session As Session)
         If session Is Nothing Then Return
-        DatumsDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         Dim maxDistance = GetMaxDateDistanceInDays(session.Datum)
         For Each record In EnginesHistoricalSessionRecords
-            DatumsDistances.Add(CalculateDateSimilarity(session.Datum, record.Datum, maxDistance))
+            newDistances.Add(CalculateDateSimilarity(session.Datum, record.Datum, maxDistance))
         Next
+        DatumsDistances = newDistances
     End Sub
 
     Public Sub RecalculateAbsenderDomainDistances(session As Session)
         If session Is Nothing Then Return
-        AbsenderDomainDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            AbsenderDomainDistances.Add(CalculateCategoricalSimilarity(session.AbsenderDomain, record.AbsenderDomain))
+            newDistances.Add(CalculateCategoricalSimilarity(session.AbsenderDomain, record.AbsenderDomain))
         Next
+        AbsenderDomainDistances = newDistances
     End Sub
 
     Public Sub RecalculateAbsenderDistances(session As Session)
         If session Is Nothing Then Return
-        AbsenderDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            AbsenderDistances.Add(CalculateCategoricalSimilarity(session.Absender, record.Absender))
+            newDistances.Add(CalculateCategoricalSimilarity(session.Absender, record.Absender))
         Next
+        AbsenderDistances = newDistances
     End Sub
 
     Public Sub RecalculateAusfueBenutzerDistances(session As Session)
         If session Is Nothing Then Return
-        AusfueBenutzerDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            AusfueBenutzerDistances.Add(CalculateCategoricalSimilarity(session.AusfueBenutzer, record.AusfueBenutzer))
+            newDistances.Add(CalculateCategoricalSimilarity(session.AusfueBenutzer, record.AusfueBenutzer))
         Next
+        AusfueBenutzerDistances = newDistances
     End Sub
 
     ' === Mutable Features – ausgelöst bei Feldänderung über Session-Property-Setter ===
 
     Public Sub RecalculateTitelDistances(session As Session)
         If session Is Nothing Then Return
-        TitelDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            TitelDistances.Add(CalculateTextSimilarity(session.Titel, record.Titel))
+            newDistances.Add(CalculateTextSimilarity(session.Titel, record.Titel))
         Next
+        TitelDistances = newDistances
     End Sub
 
     Public Sub RecalculateAblageordnerDistances(session As Session)
         If session Is Nothing Then Return
-        AblageordnerDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            AblageordnerDistances.Add(CalculateTextSimilarity(session.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
+            newDistances.Add(CalculateTextSimilarity(session.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
         Next
+        AblageordnerDistances = newDistances
     End Sub
 
     Public Sub RecalculateProjektPfadDistances(session As Session)
         If session Is Nothing Then Return
-        ProjektPfadDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            ProjektPfadDistances.Add(CalculateCategoricalSimilarity(session.ProjektPfad, record.ProjektPfad))
+            newDistances.Add(CalculateCategoricalSimilarity(session.ProjektPfad, record.ProjektPfad))
         Next
+        ProjektPfadDistances = newDistances
     End Sub
 
     Public Sub RecalculateProjektstrukturPfadDistances(session As Session)
         If session Is Nothing Then Return
-        ProjektstrukturPfadDistances.Clear()
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
         For Each record In EnginesHistoricalSessionRecords
-            ProjektstrukturPfadDistances.Add(CalculateCategoricalSimilarity(session.ProjektstrukturPfad, record.ProjektstrukturPfad))
+            newDistances.Add(CalculateCategoricalSimilarity(session.ProjektstrukturPfad, record.ProjektstrukturPfad))
         Next
+        ProjektstrukturPfadDistances = newDistances
     End Sub
 
     Public Function SuggestProjektPfad(session As Session) As String
