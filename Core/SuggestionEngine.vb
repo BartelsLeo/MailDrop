@@ -20,19 +20,6 @@ Public Class SuggestionEngine
     Public Sub New()
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
         EnginesEmbeddingService = New EmbeddingService()
-
-        ' Leere Listen sicherstellen, damit der Engine-Zustand zwischen New() und
-        ' CalculateInitialFeatureDistances immer gültig ist.
-        BetreffDistances = New List(Of Double)()
-        DatumsDistances = New List(Of Double)()
-        AbsenderDomainDistances = New List(Of Double)()
-        AbsenderDistances = New List(Of Double)()
-        AusfueBenutzerDistances = New List(Of Double)()
-        TitelDistances = New List(Of Double)()
-        AblageordnerDistances = New List(Of Double)()
-        ProjektPfadDistances = New List(Of Double)()
-        ProjektstrukturPfadDistances = New List(Of Double)()
-
         EnsureHistoricalBetreffEmbeddings()
     End Sub
 
@@ -161,19 +148,13 @@ Public Class SuggestionEngine
             {"ProjektstrukturPfad", 0.03}
         }
 
-        Dim recordCount = EnginesHistoricalSessionRecords.Count
-        If recordCount = 0 Then
-            Return String.Empty
-        End If
-
-        ' Verhindert Index-Fehler, falls CalculateInitialFeatureDistances noch nicht aufgerufen wurde.
-        If BetreffDistances.Count <> recordCount Then
+        If EnginesHistoricalSessionRecords.Count = 0 Then
             Return String.Empty
         End If
 
         Dim bestScore As Double = Double.MinValue
         Dim bestScoreIndex As Integer = -1
-        For i As Integer = 0 To recordCount - 1
+        For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
             If String.IsNullOrWhiteSpace(record.ProjektPfad) Then
                 Continue For
