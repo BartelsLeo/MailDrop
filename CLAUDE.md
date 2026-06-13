@@ -28,6 +28,9 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
 - Suggestion-relevant features are split into two groups: fixed features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are computed once per mail selection via dedicated per-feature subs called from PrepareSession(); mutable features (Titel, AblageordnerAufgeloest, ProjektPfad, ProjektstrukturPfad) are recomputed via dedicated per-feature subs triggered from the corresponding Session property setters and are zero-initialized at engine construction.
 - Distance list allocation and initial computation are owned by CalculateInitialFeatureDistances(session) on SuggestionEngine, called once from PrepareSession() immediately after New(). New() handles only engine infrastructure (historical records, EmbeddingService, historical embeddings).
+- SuggestionEngine exposes SuggestProjektPfad, SuggestProjektstrukturPfad, SuggestTitel, and SuggestAblageordnerSchema, all backed by a shared FindBestRecord helper that scores all historical records and returns the best match for the requested field.
+- Session exposes SuggestXxx(value) methods that raise the SuggestionApplied event (carrying the field name) before applying the value, enabling the UI to animate the corresponding sparkle indicator. Cascade is driven by property setters: ProjektPfad → ProjektstrukturPfad → Titel → AblageordnerSchema.
+- MailDropWpfTaskPane subscribes to Session.SuggestionApplied and animates a ✦ sparkle icon next to the affected field. The sparkle fades in on suggestion and fades out when the user focuses/interacts with the field.
 
 ## Current workspace layout:
 

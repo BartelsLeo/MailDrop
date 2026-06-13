@@ -21,47 +21,70 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="0" HorizontalAlignment="Stretch"/>
-            <ListBox x:Name="ListBox1"
-                     ItemsSource="{Binding ProjektVerzeichnisse}"
-                     SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Grid.Row="1" HorizontalAlignment="Stretch">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">
-                            <TextBlock.ToolTip>
-                                <TextBlock Text="{Binding}" TextWrapping="Wrap" HorizontalAlignment="Stretch"/>
-                            </TextBlock.ToolTip>
-                        </TextBlock>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <ListBox x:Name="ListBox1"
+                         ItemsSource="{Binding ProjektVerzeichnisse}"
+                         SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Column="0" HorizontalAlignment="Stretch">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">
+                                <TextBlock.ToolTip>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" HorizontalAlignment="Stretch"/>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="SparkleProjektPfad" Text="&#x2726;" Grid.Column="1"
+                           Opacity="0" Foreground="#FFB300" FontSize="14"
+                           VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </Grid>
             <Label x:Name="LabelAblageordner" Content="Projektstruktur" Grid.Row="2"/>
-            <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300" Grid.Row="3" HorizontalAlignment="Stretch">
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Name}"/>
-                        </StackPanel>
-                        <HierarchicalDataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                <Setter Property="TreeViewItem.IsExpanded" Value="True"/>
-                            </DataTrigger>
-                        </HierarchicalDataTemplate.Triggers>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300" Grid.Column="0" HorizontalAlignment="Stretch">
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}"/>
+                            </StackPanel>
+                            <HierarchicalDataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                    <Setter Property="TreeViewItem.IsExpanded" Value="True"/>
+                                </DataTrigger>
+                            </HierarchicalDataTemplate.Triggers>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+                <TextBlock x:Name="SparkleProjektstrukturPfad" Text="&#x2726;" Grid.Column="1"
+                           Opacity="0" Foreground="#FFB300" FontSize="14"
+                           VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </Grid>
             <Grid Margin="0,5,0,0" Grid.Row="4" HorizontalAlignment="Stretch">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="130"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
                 </Grid.ColumnDefinitions>
                 <Label x:Name="LabelTitel" Content="Titel" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox x:Name="TextBoxTitel"
                          Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         GotFocus="TextBoxTitel_GotFocus"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Stretch"
                          VerticalContentAlignment="Center"
                          Grid.Column="1" Margin="0"/>
+                <TextBlock x:Name="SparkleTitel" Text="&#x2726;" Grid.Column="2"
+                           Opacity="0" Foreground="#FFB300" FontSize="14"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
             </Grid>
             <Grid Margin="0,5,0,0" Grid.Row="5" HorizontalAlignment="Stretch">
                 <Grid.ColumnDefinitions>
@@ -80,6 +103,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="130"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
                 </Grid.ColumnDefinitions>
                 <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox x:Name="TextBoxAblageordner"
@@ -90,6 +114,9 @@
                          HorizontalAlignment="Stretch"
                          VerticalContentAlignment="Center"
                          Grid.Column="1" Margin="0"/>
+                <TextBlock x:Name="SparkleAblageordner" Text="&#x2726;" Grid.Column="2"
+                           Opacity="0" Foreground="#FFB300" FontSize="14"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
             </Grid>
             <Grid Margin="0,5,0,0" Grid.Row="7" HorizontalAlignment="Stretch">
                 <Grid.ColumnDefinitions>

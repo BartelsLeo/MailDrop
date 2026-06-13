@@ -129,12 +129,28 @@ Public Class SuggestionEngine
     End Sub
 
     Public Function SuggestProjektPfad(session As Session) As String
-        If session Is Nothing Then
-            Return String.Empty
-        End If
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
+        Return If(FindBestRecord(Function(r) r.ProjektPfad)?.ProjektPfad, String.Empty)
+    End Function
 
-        ' Die Feature-Gewichte werden direkt im Suggest-Aufruf definiert,
-        ' damit Scoring-Logik und Tuning-Werte gemeinsam gepflegt werden.
+    Public Function SuggestProjektstrukturPfad(session As Session) As String
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
+        Return If(FindBestRecord(Function(r) r.ProjektstrukturPfad)?.ProjektstrukturPfad, String.Empty)
+    End Function
+
+    Public Function SuggestTitel(session As Session) As String
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
+        Return If(FindBestRecord(Function(r) r.Titel)?.Titel, String.Empty)
+    End Function
+
+    Public Function SuggestAblageordnerSchema(session As Session) As String
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
+        Return If(FindBestRecord(Function(r) r.AblageordnerSchema)?.AblageordnerSchema, String.Empty)
+    End Function
+
+    ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
+    Private Function FindBestRecord(fieldSelector As Func(Of SessionRecord, String)) As SessionRecord
+        ' Die Feature-Gewichte werden hier definiert, damit Scoring-Logik und Tuning-Werte gemeinsam gepflegt werden.
         Dim featureWeights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.3},
             {"Datum", 0.15},
@@ -147,19 +163,12 @@ Public Class SuggestionEngine
             {"ProjektstrukturPfad", 0.03}
         }
 
-        If EnginesHistoricalSessionRecords.Count = 0 Then
-            Return String.Empty
-        End If
-
         Dim bestScore As Double = Double.MinValue
-        Dim bestScoreIndex As Integer = -1
+        Dim bestRecord As SessionRecord = Nothing
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
-            If String.IsNullOrWhiteSpace(record.ProjektPfad) Then
-                Continue For
-            End If
+            If String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
 
-            ' Bildet einen Gesamtscore aus den relevanten Features.
             Dim score =
                 WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Datum", DatumsDistances(i)) +
@@ -173,18 +182,14 @@ Public Class SuggestionEngine
 
             If score > bestScore Then
                 bestScore = score
-                bestScoreIndex = i
+                bestRecord = record
             End If
         Next
 
-        ' Nimmt den Projektpfad des besten historischen Treffers.
-        If bestScoreIndex >= 0 Then
-            Dim bestProjektPfad = EnginesHistoricalSessionRecords(bestScoreIndex).ProjektPfad
-            Debug.WriteLine($"[SuggestionEngine] Best score: {bestScore}, index: {bestScoreIndex}, ProjektPfad: {bestProjektPfad}")
-            Return bestProjektPfad
-        Else
-            Return String.Empty
+        If bestRecord IsNot Nothing Then
+            Debug.WriteLine($"[SuggestionEngine] Best score: {bestScore}, ProjektPfad: {bestRecord.ProjektPfad}")
         End If
+        Return bestRecord
     End Function
 
     ' Erzeugt das Embedding für den aktuellen Betreff und speichert es in der Session.

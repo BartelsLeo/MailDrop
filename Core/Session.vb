@@ -28,6 +28,7 @@ Public Class Session
     Private _datumFormatiert As String
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
+    Public Event SuggestionApplied As EventHandler(Of String)
 
     Protected Sub OnPropertyChanged(propertyName As String)
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(propertyName))
@@ -43,6 +44,12 @@ Public Class Session
                 OnPropertyChanged(NameOf(ProjektPfad))
                 BuildDirectoryTree()
                 SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
+                Dim suggestedProjstr = SuggestionEngineInstance?.SuggestProjektstrukturPfad(Me)
+                If Not String.IsNullOrWhiteSpace(suggestedProjstr) AndAlso
+                   Not String.IsNullOrWhiteSpace(_projektPfad) AndAlso
+                   IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
+                    SuggestProjektstrukturPfad(suggestedProjstr)
+                End If
             End If
         End Set
     End Property
@@ -57,6 +64,10 @@ Public Class Session
                 OnPropertyChanged(NameOf(Titel))
                 UpdateResolvedAfterTitelChange()
                 SuggestionEngineInstance?.RecalculateTitelDistances(Me)
+                Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
+                If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
+                    SuggestAblageordnerSchema(suggestedAbl)
+                End If
             End If
         End Set
     End Property
@@ -82,6 +93,10 @@ Public Class Session
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
+                Dim suggestedTitel = SuggestionEngineInstance?.SuggestTitel(Me)
+                If Not String.IsNullOrWhiteSpace(suggestedTitel) Then
+                    SuggestTitel(suggestedTitel)
+                End If
             End If
         End Set
     End Property
@@ -216,6 +231,26 @@ Public Class Session
 
     Public Property SuggestionEngineInstance As SuggestionEngine
 
+    Public Sub SuggestProjektPfad(value As String)
+        RaiseEvent SuggestionApplied(Me, NameOf(ProjektPfad))
+        ProjektPfad = value
+    End Sub
+
+    Public Sub SuggestProjektstrukturPfad(value As String)
+        RaiseEvent SuggestionApplied(Me, NameOf(ProjektstrukturPfad))
+        ProjektstrukturPfad = value
+    End Sub
+
+    Public Sub SuggestTitel(value As String)
+        RaiseEvent SuggestionApplied(Me, NameOf(Titel))
+        Titel = value
+    End Sub
+
+    Public Sub SuggestAblageordnerSchema(value As String)
+        RaiseEvent SuggestionApplied(Me, NameOf(AblageordnerSchema))
+        AblageordnerSchema = value
+    End Sub
+
     Public Sub PrepareSession()
         Reset()
         MailUtils.ReadMailMeta(Me)
@@ -231,14 +266,12 @@ Public Class Session
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
 
-        ' Nur gültige Vorschläge übernehmen, damit BuildDirectoryTree automatisch aktualisiert wird.
+        ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
         If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
-            ProjektPfad = suggestedProjektPfad
-
-            ' Optional in die Auswahlliste aufnehmen, damit die UI den Pfad direkt anbietet.
             If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
                 ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
             End If
+            SuggestProjektPfad(suggestedProjektPfad)
         End If
 
         Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
