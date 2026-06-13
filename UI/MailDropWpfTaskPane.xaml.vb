@@ -2,6 +2,7 @@ Imports System.Windows.Controls
 Imports System.IO
 Imports System.Windows
 Imports System.Windows.Media
+Imports System.Windows.Media.Animation
 Imports System.Diagnostics
 
 Public Class MailDropWpfTaskPane
@@ -9,6 +10,7 @@ Public Class MailDropWpfTaskPane
 
     Public Property Session As New Session()
     Private infoPopup As InfoPopup = Nothing
+    Private _applyingTreeViewSuggestion As Boolean = False
 
     Public Sub New()
         InitializeComponent()
@@ -18,17 +20,69 @@ Public Class MailDropWpfTaskPane
         AddHandler TreeView1.SelectedItemChanged, AddressOf TreeView1_SelectedItemChanged
     End Sub
 
+    Private Function FindTreeViewItem(container As ItemsControl, relativePath As String) As TreeViewItem
+        For Each item In container.Items
+            Dim node = TryCast(item, DirectoryNode)
+            Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+            If node IsNot Nothing AndAlso tvi IsNot Nothing Then
+                If node.RelativePath = relativePath Then Return tvi
+                If tvi.IsExpanded Then
+                    Dim found = FindTreeViewItem(tvi, relativePath)
+                    If found IsNot Nothing Then Return found
+                End If
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    Private Sub ShowSparkle(sparkle As TextBlock)
+        sparkle.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(300))))
+    End Sub
+
+    Private Sub HideSparkle(sparkle As TextBlock)
+        sparkle.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(sparkle.Opacity, 0, New Duration(TimeSpan.FromMilliseconds(200))))
+    End Sub
+
     Private Sub ListBox1_SelectionChanged(sender As Object, e As SelectionChangedEventArgs)
+        Session.IsSuggestedProjektPfad = False
+        HideSparkle(SparkleProjektPfad)
         If ListBox1.SelectedItem IsNot Nothing Then
             Session.HandleProjektSelection(ListBox1.SelectedItem.ToString(), Window.GetWindow(Me))
         End If
     End Sub
 
     Private Sub Session_PropertyChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
-        ' TreeviewEngine-Aufruf entfernt, da TreeViewData jetzt automatisch aktualisiert wird
+        Select Case e.PropertyName
+            Case NameOf(Session.IsSuggestedProjektPfad)
+                If Session.IsSuggestedProjektPfad Then ShowSparkle(SparkleProjektPfad)
+            Case NameOf(Session.IsSuggestedProjektstrukturPfad)
+                If Session.IsSuggestedProjektstrukturPfad Then
+                    ShowSparkle(SparkleProjektstrukturPfad)
+                    Dim targetPath = Session.ProjektstrukturPfad
+                    Dispatcher.BeginInvoke(New Action(Sub()
+                        _applyingTreeViewSuggestion = True
+                        Dim tvi = FindTreeViewItem(TreeView1, targetPath)
+                        If tvi IsNot Nothing Then tvi.IsSelected = True
+                        _applyingTreeViewSuggestion = False
+                    End Sub))
+                End If
+            Case NameOf(Session.IsSuggestedTitel)
+                If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel)
+            Case NameOf(Session.IsSuggestedAblageordnerSchema)
+                If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner)
+        End Select
+    End Sub
+
+    Private Sub TextBoxTitel_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedTitel = False
+        HideSparkle(SparkleTitel)
     End Sub
 
     Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedAblageordnerSchema = False
+        HideSparkle(SparkleAblageordner)
         Session.BeginAblageordnerEdit()
     End Sub
 
@@ -65,7 +119,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
-        ' Schließe InfoPopup, falls offen
+        ' Schlieï¿½e InfoPopup, falls offen
         If infoPopup IsNot Nothing AndAlso infoPopup.IsLoaded Then
             infoPopup.Close()
             infoPopup = Nothing
@@ -73,7 +127,7 @@ Public Class MailDropWpfTaskPane
         Try
             Globals.ThisAddIn.HideTaskPane()
         Catch
-            ' Fallback: Fenster schließen
+            ' Fallback: Fenster schlieï¿½en
             Dim wnd = Window.GetWindow(Me)
             If wnd IsNot Nothing Then wnd.Close()
         End Try
@@ -81,7 +135,7 @@ Public Class MailDropWpfTaskPane
 
     ' Setzt die Editierbarkeit der TaskPane
     Public Sub SetEditMode(isEditable As Boolean)
-        ' Beispiel: Alle Controls außer Info-Button deaktivieren/aktivieren
+        ' Beispiel: Alle Controls auï¿½er Info-Button deaktivieren/aktivieren
         For Each ctrl In Me.FindVisualChildren(Of Control)(Me)
             If ctrl.Name <> "ButtonInfo" Then
                 ctrl.IsEnabled = isEditable
@@ -89,7 +143,7 @@ Public Class MailDropWpfTaskPane
         Next
     End Sub
 
-    ' Gibt True zurück, wenn genau eine Mail selektiert ist, sonst False
+    ' Gibt True zurï¿½ck, wenn genau eine Mail selektiert ist, sonst False
     Public Function SingleMailSelected() As Boolean
         Dim explorer = Globals.ThisAddIn.Application.ActiveExplorer()
         Dim selection = explorer.Selection
@@ -112,6 +166,10 @@ Public Class MailDropWpfTaskPane
     End Function
 
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
+        If Not _applyingTreeViewSuggestion Then
+            Session.IsSuggestedProjektstrukturPfad = False
+            HideSparkle(SparkleProjektstrukturPfad)
+        End If
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then
             Session.ProjektstrukturPfad = node.RelativePath
