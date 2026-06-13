@@ -42,6 +42,7 @@ Public Class Session
                 _projektPfad = value
                 OnPropertyChanged(NameOf(ProjektPfad))
                 BuildDirectoryTree()
+                SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
             End If
         End Set
     End Property
@@ -55,6 +56,7 @@ Public Class Session
                 _titel = value
                 OnPropertyChanged(NameOf(Titel))
                 UpdateResolvedAfterTitelChange()
+                SuggestionEngineInstance?.RecalculateTitelDistances(Me)
             End If
         End Set
     End Property
@@ -79,6 +81,7 @@ Public Class Session
             If _projektstrukturPfad <> value Then
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
+                SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
             End If
         End Set
     End Property
@@ -149,6 +152,7 @@ Public Class Session
     Private Sub UpdateAblageordnerAufgeloest()
         _ablageordnerAufgeloest = ReplacePlaceholders(_ablageordnerSchema)
         OnPropertyChanged(NameOf(AblageordnerAufgeloest))
+        SuggestionEngineInstance?.RecalculateAblageordnerDistances(Me)
     End Sub
 
     Private Sub UpdateMsgDateinameAufgeloest()
@@ -221,8 +225,8 @@ Public Class Session
         ' SuggestionEngine Instanz erstellen (lädt Historie und Embedding-Service einmalig)
         SuggestionEngineInstance = New SuggestionEngine()
 
-        ' Distanzlisten zwischen aktueller Session und historischen Datensätzen vorberechnen.
-        SuggestionEngineInstance.RecalculateFeatureDistances(Me)
+        ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
+        SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
 
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
