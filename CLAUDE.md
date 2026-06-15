@@ -21,16 +21,19 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - Ablageordner and msg Dateiname use a Schema/Aufgeloest/Feld workflow:
 	- On focus: show schema text for editing.
 	- On focus loss: resolve placeholders and show the resolved result.
+	- When suggestions set schema values during cascade, Feld values are updated immediately to the resolved result so users can see suggestions without focusing the field.
 - Input validation checks required values, invalid path/file characters, and path length limits.
 - Optional attachment filing saves all attachments; long attachment names can be adjusted via rename dialog.
 - On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
 - A SuggestionEngine with ONNX embeddings is initialized for project path suggestion.
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
 - Suggestion-relevant features are split into two groups: fixed features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are computed once per mail selection via dedicated per-feature subs called from PrepareSession(); mutable features (Titel, AblageordnerAufgeloest, ProjektPfad, ProjektstrukturPfad) are recomputed via dedicated per-feature subs triggered from the corresponding Session property setters and are zero-initialized at engine construction.
-- Distance list allocation and initial computation are owned by CalculateInitialFeatureDistances(session) on SuggestionEngine, called once from PrepareSession() immediately after New(). New() handles only engine infrastructure (historical records, EmbeddingService, historical embeddings).
+- Distance list allocation and initial computation are owned by CalculateInitialFeatureDistances(session) on SuggestionEngine, called once from PrepareSession() immediately after New(). New() handles only engine infrastructure (historical records); EmbeddingService is created lazily on first embedding generation.
 - SuggestionEngine exposes SuggestProjektPfad, SuggestProjektstrukturPfad, SuggestTitel, and SuggestAblageordnerSchema, all backed by a shared FindBestRecord helper that scores all historical records and returns the best match for the requested field.
-- Session exposes SuggestXxx(value) methods that set the field value and then set the corresponding IsSuggestedXxx boolean flag to True. Cascade is driven by property setters: ProjektPfad → ProjektstrukturPfad → Titel → AblageordnerSchema. Session also exposes IsSuggestedProjektPfad, IsSuggestedProjektstrukturPfad, IsSuggestedTitel, IsSuggestedAblageordnerSchema as full properties with PropertyChanged notification.
-- MailDropWpfTaskPane.Session_PropertyChanged reacts to IsSuggestedXxx becoming True by showing the ✦ sparkle next to the field and (for ProjektstrukturPfad) dispatching a programmatic TreeView node selection via Dispatcher.BeginInvoke. The sparkle fades out when the user focuses/interacts with the field, which also sets the corresponding IsSuggestedXxx flag back to False.
+- Internally, SuggestionEngine keeps the scoring loop inside FindBestRecordByField (with an optional non-empty-field filter switch) and avoids Func-signature overloading to prevent ambiguous lambda resolution in VB.
+- For tracing/logging, SuggestionEngine passes explicit suggestion labels (e.g., ProjektPfad, MsgDateinameSchema) into the shared FindBestRecord helper instead of relying on lambda Method.Name.
+- Session exposes SuggestXxx(value) methods that set the field value and then set the corresponding IsSuggestedXxx boolean flag to True. Cascade is driven by property setters: ProjektPfad → ProjektstrukturPfad → Titel → AbsenderKurz → AblageordnerSchema → MsgDateinameSchema → AnhaengeAblegen. Session also exposes IsSuggestedProjektPfad, IsSuggestedProjektstrukturPfad, IsSuggestedTitel, IsSuggestedAbsenderKurz, IsSuggestedAblageordnerSchema, IsSuggestedMsgDateinameSchema, IsSuggestedAnhaengeAblegen as full properties with PropertyChanged notification.
+- MailDropWpfTaskPane.Session_PropertyChanged reacts to IsSuggestedXxx becoming True by showing the ✦ sparkle next to the field and (for ProjektstrukturPfad) dispatching a programmatic TreeView node selection via Dispatcher.BeginInvoke. The sparkle fades out when the user focuses/interacts with the field, which also sets the corresponding IsSuggestedXxx flag back to False (including AbsenderKurz, msg Dateiname and Anhänge ablegen).
 - A private _applyingTreeViewSuggestion flag guards TreeView1_SelectedItemChanged against treating the engine's programmatic node selection as a user interaction (which would reset IsSuggestedProjektstrukturPfad and hide the sparkle immediately).
 
 ## Current workspace layout:
@@ -94,7 +97,7 @@ MailDrop/
 ## Runtime data and paths
 
 - Session history database: %APPDATA%/MailDrop/sessions.db
-- Database manager startup: ThisAddIn_Startup creates SessionDatabaseManager.
+- Database manager initialization is lazy: ThisAddIn.CurrentDatabaseManager creates SessionDatabaseManager on first access (not in ThisAddIn_Startup).
 - ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
 - The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
 
@@ -146,9 +149,10 @@ Note:
 ## Current caveats and implementation notes
 
 - SuggestionEngine uses weighted scoring across Betreff (semantic cosine similarity), Datum (normalized date similarity), AbsenderDomain (categorical match), Absender (categorical match), AusfueBenutzer (categorical match), Titel (text similarity), Ablageordner (text similarity), ProjektPfad (categorical match), and ProjektstrukturPfad (categorical match).
-- Feature weights are defined per feature directly in SuggestProjektPfad in Core/SuggestionEngine.vb and are applied independently during score aggregation.
+- Feature weights are defined per suggestion target in Core/SuggestionEngine.vb (separate weight profiles for ProjektPfad, ProjektstrukturPfad, Titel, AblageordnerSchema, MsgDateinameSchema, AnhaengeAblegen) and are applied independently during score aggregation.
 - Distance lists are initialized with zeros at construction (length = historical record count). Fixed-feature subs overwrite them in PrepareSession(); mutable-feature subs overwrite them incrementally as the user edits fields.
 - Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
+- Core/SuggestionEngine.vb relies on explicit framework imports (System, System.Collections.Generic, System.Linq) and uses a VB Char literal "\"c as one of the token separators in TokenizeForSimilarity.
 - In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
 - Text encoding/comments show mixed umlaut encoding artifacts in several files; prefer preserving existing file encoding unless intentionally normalizing.
 

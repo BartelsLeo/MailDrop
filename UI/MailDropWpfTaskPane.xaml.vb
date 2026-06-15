@@ -70,14 +70,25 @@ Public Class MailDropWpfTaskPane
                 End If
             Case NameOf(Session.IsSuggestedTitel)
                 If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel)
+            Case NameOf(Session.IsSuggestedAbsenderKurz)
+                If Session.IsSuggestedAbsenderKurz Then ShowSparkle(SparkleAbsenderKurz)
             Case NameOf(Session.IsSuggestedAblageordnerSchema)
                 If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner)
+            Case NameOf(Session.IsSuggestedMsgDateinameSchema)
+                If Session.IsSuggestedMsgDateinameSchema Then ShowSparkle(SparkleMsgDateiname)
+            Case NameOf(Session.IsSuggestedAnhaengeAblegen)
+                If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen)
         End Select
     End Sub
 
     Private Sub TextBoxTitel_GotFocus(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedTitel = False
         HideSparkle(SparkleTitel)
+    End Sub
+
+    Private Sub TextBoxAbsenderKurz_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedAbsenderKurz = False
+        HideSparkle(SparkleAbsenderKurz)
     End Sub
 
     Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)
@@ -91,11 +102,18 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub TextBoxMsgDateiname_GotFocus(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedMsgDateinameSchema = False
+        HideSparkle(SparkleMsgDateiname)
         Session.BeginMsgDateinameEdit()
     End Sub
 
     Private Sub TextBoxMsgDateiname_LostFocus(sender As Object, e As RoutedEventArgs)
         Session.EndMsgDateinameEdit()
+    End Sub
+
+    Private Sub CheckBoxAnhaenge_Click(sender As Object, e As RoutedEventArgs)
+        Session.IsSuggestedAnhaengeAblegen = False
+        HideSparkle(SparkleAnhaengeAblegen)
     End Sub
 
     Private Sub ButtonInfo_Click(sender As Object, e As RoutedEventArgs)

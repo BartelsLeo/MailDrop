@@ -6,13 +6,20 @@ Imports System.IO
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private Shared _currentDatabaseManager As SessionDatabaseManager
 
     Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
     Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
-    Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
+    Public Shared ReadOnly Property CurrentDatabaseManager As SessionDatabaseManager
+        Get
+            If _currentDatabaseManager Is Nothing Then
+                _currentDatabaseManager = New SessionDatabaseManager()
+            End If
+            Return _currentDatabaseManager
+        End Get
+    End Property
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
-        CurrentDatabaseManager = New SessionDatabaseManager()
         explorer = Application.ActiveExplorer()
         AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
     End Sub
