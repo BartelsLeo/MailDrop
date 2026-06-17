@@ -2,8 +2,17 @@ Imports System
 Imports System.Collections.Generic
 Imports System.Diagnostics
 Imports System.Linq
+Imports System.Threading
+Imports System.Threading.Tasks
 
 Public Class SuggestionEngine
+
+    Private Shared ReadOnly SharedEngineLazy As New Lazy(Of SuggestionEngine)(
+        Function()
+            Debug.WriteLine("[SuggestionEngine] Shared instance is being created.")
+            Return New SuggestionEngine()
+        End Function,
+        LazyThreadSafetyMode.ExecutionAndPublication)
 
     Public Property EnginesHistoricalSessionRecords As List(Of SessionRecord)
     Private EnginesEmbeddingService As EmbeddingService
@@ -21,6 +30,24 @@ Public Class SuggestionEngine
 
     Public Sub New()
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+    End Sub
+
+    Public Shared Function GetSharedInstance() As SuggestionEngine
+        Return SharedEngineLazy.Value
+    End Function
+
+    Public Shared Sub PreloadSharedInstanceInBackground(Optional delayMs As Integer = 1500)
+        Task.Run(Sub()
+                     Try
+                         If delayMs > 0 Then
+                             Thread.Sleep(delayMs)
+                         End If
+                         Dim ignored = SharedEngineLazy.Value
+                         Debug.WriteLine("[SuggestionEngine] Shared instance preloaded in background.")
+                     Catch ex As Exception
+                         Debug.WriteLine("[SuggestionEngine] Background preload failed: " & ex.Message)
+                     End Try
+                 End Sub)
     End Sub
 
     Private Function GetEmbeddingService() As EmbeddingService
@@ -265,12 +292,12 @@ Public Class SuggestionEngine
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0},
             {"Datum", 0.05},
-            {"AbsenderDomain", 0.30},
-            {"Absender", 0.20},
+            {"AbsenderDomain", 0.3},
+            {"Absender", 0.2},
             {"AusfueBenutzer", 0.05},
             {"Titel", 0},
             {"Ablageordner", 0},
-            {"ProjektPfad", 0.40},
+            {"ProjektPfad", 0.4},
             {"ProjektstrukturPfad", 0}
         }
     End Function

@@ -17,6 +17,7 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - Session data is prepared from the selected mail metadata (Betreff, Absender, AbsenderDomain, Empfaenger, Datum).
 - ProjektPfad offers recent project folders for the current user (from SQLite history) plus anderes... via folder picker.
 - ProjektstrukturPfad is selected from a TreeView that is built dynamically from the selected ProjektPfad.
+- ProjektstrukturPfad TreeView supports creating, deleting, and renaming folders via context menu actions (`Neuer Ordner`, `Loeschen`, `Umbenennen`), and also supports creating folders via a `Neuen Ordner` button; if a node is selected, operations target that node, otherwise creation defaults to ProjektPfad.
 - Titel and Absender (kurz) are editable text fields used by placeholder resolution.
 - Ablageordner and msg Dateiname use a Schema/Aufgeloest/Feld workflow:
 	- On focus: show schema text for editing.
@@ -25,7 +26,8 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - Input validation checks required values, invalid path/file characters, and path length limits.
 - Optional attachment filing saves all attachments; long attachment names can be adjusted via rename dialog.
 - On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
-- A SuggestionEngine with ONNX embeddings is initialized for project path suggestion.
+- A shared SuggestionEngine with ONNX embeddings is used for project path suggestion.
+- The shared SuggestionEngine is lazy-loaded and preloaded in the background shortly after Outlook startup to reduce first task pane open latency.
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
 - Suggestion-relevant features are split into two groups: fixed features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are computed once per mail selection via dedicated per-feature subs called from PrepareSession(); mutable features (Titel, AblageordnerAufgeloest, ProjektPfad, ProjektstrukturPfad) are recomputed via dedicated per-feature subs triggered from the corresponding Session property setters and are zero-initialized at engine construction.
 - Distance list allocation and initial computation are owned by CalculateInitialFeatureDistances(session) on SuggestionEngine, called once from PrepareSession() immediately after New(). New() handles only engine infrastructure (historical records); EmbeddingService is created lazily on first embedding generation.
@@ -106,8 +108,9 @@ MailDrop/
 - Entry point: ThisAddIn_Startup in ThisAddIn.vb.
 - Ribbon action: MailDropRibbon -> Globals.ThisAddIn.MailAblegen_Click.
 - Task pane creation: MailDropWpfHostControl hosts MailDropWpfTaskPane.
+- Task pane default width is set during first creation in ThisAddIn.MailAblegen_Click (currently 500 px) and docked right.
 - Selection updates: Explorer.SelectionChange -> MailSelected().
-- Session preparation: Session.PrepareSession() -> Reset, mail metadata read, recent project paths load, SuggestionEngine init, feature distance precompute, suggested ProjektPfad apply (if valid).
+- Session preparation: Session.PrepareSession() -> Reset, mail metadata read, recent project paths load, shared SuggestionEngine access, feature distance precompute, suggested ProjektPfad apply (if valid).
 - Save flow on OK: Session.ProcessSession() -> InputChecker -> create folder -> save .msg -> optional attachments -> persist SessionRecord -> reset session.
 
 ## Key files for first orientation
@@ -178,6 +181,8 @@ Note:
 - Ribbon button opens the task pane.
 - Exactly one selected mail enables editing; other selections disable editing.
 - Selecting ProjektPfad refreshes Projektstruktur TreeView.
+- Context menu actions (`Neuer Ordner`, `Loeschen`, `Umbenennen`) work on the expected TreeView node and keep selection in sync.
+- `Neuen Ordner` button creates a folder in the expected TreeView location and auto-selects it.
 - Placeholder fields resolve correctly on focus loss.
 - OK saves .msg to expected folder.
 - Optional attachment save works and handles long names.

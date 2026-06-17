@@ -385,8 +385,8 @@ Public Class Session
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
 
-        ' SuggestionEngine Instanz erstellen (lädt Historie und Embedding-Service einmalig)
-        SuggestionEngineInstance = New SuggestionEngine()
+        ' Shared SuggestionEngine nutzen (Historie wird pro Outlook-Start lazy geladen und gecacht).
+        SuggestionEngineInstance = SuggestionEngine.GetSharedInstance()
 
         ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)

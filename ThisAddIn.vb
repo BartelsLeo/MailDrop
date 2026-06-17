@@ -7,21 +7,27 @@ Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
     Private Shared _currentDatabaseManager As SessionDatabaseManager
+    Private Shared ReadOnly _databaseManagerLock As New Object()
 
     Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
     Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
     Public Shared ReadOnly Property CurrentDatabaseManager As SessionDatabaseManager
         Get
-            If _currentDatabaseManager Is Nothing Then
-                _currentDatabaseManager = New SessionDatabaseManager()
-            End If
-            Return _currentDatabaseManager
+            SyncLock _databaseManagerLock
+                If _currentDatabaseManager Is Nothing Then
+                    _currentDatabaseManager = New SessionDatabaseManager()
+                End If
+                Return _currentDatabaseManager
+            End SyncLock
         End Get
     End Property
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
         explorer = Application.ActiveExplorer()
         AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
+
+        ' Engine im Hintergrund vorladen, damit "Mail ablegen" beim ersten Klick schneller oeffnet.
+        SuggestionEngine.PreloadSharedInstanceInBackground(1500)
     End Sub
 
     Private WithEvents explorer As Outlook.Explorer
@@ -71,7 +77,7 @@ Public Class ThisAddIn
             End If
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
             taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
-            taskPane.Width = 1000
+            taskPane.Width = 500
         Else
             Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
             If wpfPane IsNot Nothing Then
