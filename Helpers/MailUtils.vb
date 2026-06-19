@@ -1,5 +1,6 @@
 Imports System.IO
 Imports System.Runtime.InteropServices
+Imports System.Diagnostics
 
 Public Module MailUtils
     Private Sub ReleaseComObjectSafe(comObject As Object)
@@ -11,33 +12,38 @@ Public Module MailUtils
 
     ' Liest die Metadaten der ausgew�hlten Mail und bef�llt die Properties der �bergebenen Session
     Public Sub ReadMailMeta(session As Session)
-        Dim explorer As Object = Nothing
         Dim mail As Object = Nothing
+        Debug.WriteLine("[MailUtils] ReadMailMeta called.")
         Try
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            explorer = app.ActiveExplorer()
+            Dim explorer As Object = app.ActiveExplorer()
             If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
-                System.Windows.MessageBox.Show("Eine Mail ausw�hlen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                Debug.WriteLine($"[MailUtils] ReadMailMeta: selection count={If(explorer Is Nothing, "no explorer", explorer.Selection.Count.ToString())} - skipping.")
                 Return
             End If
             mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
             If mail Is Nothing Then
-                System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail ausw�hlen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                Debug.WriteLine("[MailUtils] ReadMailMeta: selected item is not a MailItem - skipping.")
                 Return
             End If
             session.Absender = mail.SenderName
             If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
-                session.AbsenderDomain = mail.SenderEmailAddress.Split("@"c).Last()
+                Dim emailParts = mail.SenderEmailAddress.Split("@"c)
+                session.AbsenderDomain = emailParts(emailParts.Length - 1)
             End If
             session.Empfaenger = mail.To
             session.Betreff = mail.Subject
-            session.Datum = mail.ReceivedTime
-            session.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
+            Dim receivedTime As DateTime = CType(mail.ReceivedTime, DateTime)
+            session.Datum = receivedTime
+            session.DatumFormatiert = receivedTime.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)
+            Debug.WriteLine($"[MailUtils] ReadMailMeta written: Betreff='{session.Betreff}', Absender='{session.Absender}', AbsenderDomain='{session.AbsenderDomain}', Empfaenger='{session.Empfaenger}', Datum='{session.Datum:yyyy-MM-dd HH:mm:ss}', DatumFormatiert='{session.DatumFormatiert}', AusfueBenutzer='{session.AusfueBenutzer}', AusfueDatum='{session.AusfueDatum:yyyy-MM-dd HH:mm:ss}'")
         Catch ex As Exception
-            System.Windows.MessageBox.Show($"Fehler beim Auslesen der E-Mail: {ex.Message}", "Fehler", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error)
+            Debug.WriteLine($"[MailUtils] ReadMailMeta exception: {ex.Message}")
         Finally
             ReleaseComObjectSafe(mail)
-            ReleaseComObjectSafe(explorer)
+            ' Explorer is intentionally NOT released: app.ActiveExplorer() returns the same RCW
+            ' as _currentExplorer in ThisAddIn. FinalReleaseComObject on it would destroy the
+            ' SelectionChange event connection permanently.
         End Try
     End Sub
 

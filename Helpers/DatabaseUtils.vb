@@ -251,7 +251,7 @@ Public Class SessionDatabaseManager
         Dim result As New List(Of SessionRecord)()
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
-            Dim sql As String = "SELECT * FROM Sessions"
+            Dim sql As String = "SELECT * FROM Sessions ORDER BY ID ASC"
             Using cmd As New SQLiteCommand(sql, conn)
                 Using reader As SQLiteDataReader = cmd.ExecuteReader()
                     While reader.Read()

@@ -24,6 +24,7 @@ Public Class SuggestionEngine
     Private Property AbsenderDomainDistances As List(Of Double)
     Private Property AbsenderDistances As List(Of Double)
     Private Property AusfueBenutzerDistances As List(Of Double)
+    Private Property AusfueDatumsDistances As List(Of Double)
     Private Property TitelDistances As List(Of Double)
     Private Property AblageordnerDistances As List(Of Double)
     Private Property ProjektPfadDistances As List(Of Double)
@@ -92,6 +93,7 @@ Public Class SuggestionEngine
         RecalculateAbsenderDomainDistances(session)
         RecalculateAbsenderDistances(session)
         RecalculateAusfueBenutzerDistances(session)
+        RecalculateAusfueDatumsDistances(session)
 
         ' Mutable Features sind zur Initialisierungszeit leer – 0 als Startwert.
         Dim recordCount = EnginesHistoricalSessionRecords.Count
@@ -148,6 +150,16 @@ Public Class SuggestionEngine
             newDistances.Add(CalculateCategoricalSimilarity(session.AusfueBenutzer, record.AusfueBenutzer))
         Next
         AusfueBenutzerDistances = newDistances
+    End Sub
+
+    Public Sub RecalculateAusfueDatumsDistances(session As Session)
+        If session Is Nothing Then Return
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        Dim maxDistance = GetMaxDateDistanceInDays(session.AusfueDatum)
+        For Each record In EnginesHistoricalSessionRecords
+            newDistances.Add(CalculateDateSimilarity(session.AusfueDatum, record.AusfueDatum, maxDistance))
+        Next
+        AusfueDatumsDistances = newDistances
     End Sub
 
     ' === Mutable Features – ausgelöst bei Feldänderung über Session-Property-Setter ===
@@ -230,6 +242,7 @@ Public Class SuggestionEngine
 
         Dim bestScore As Double = Double.MinValue
         Dim bestRecord As SessionRecord = Nothing
+        Dim bestIndex As Integer = -1
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
             If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
@@ -240,6 +253,7 @@ Public Class SuggestionEngine
                 WeightedFeatureScore(featureWeights, "AbsenderDomain", AbsenderDomainDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
                 WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
+                WeightedFeatureScore(featureWeights, "AusfueDatum", AusfueDatumsDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
                 WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
@@ -248,11 +262,22 @@ Public Class SuggestionEngine
             If score > bestScore Then
                 bestScore = score
                 bestRecord = record
+                bestIndex = i
             End If
         Next
 
         If bestRecord IsNot Nothing Then
-            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore}, BestRecordId={bestRecord.ID}")
+            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore:F3}, BestRecordId={bestRecord.ID} | " &
+                $"Betreff={BetreffDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Betreff"), featureWeights("Betreff"), 0)} " &
+                $"Datum={DatumsDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Datum"), featureWeights("Datum"), 0)} " &
+                $"Domain={AbsenderDomainDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AbsenderDomain"), featureWeights("AbsenderDomain"), 0)} " &
+                $"Absender={AbsenderDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Absender"), featureWeights("Absender"), 0)} " &
+                $"Benutzer={AusfueBenutzerDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AusfueBenutzer"), featureWeights("AusfueBenutzer"), 0)} " &
+                $"AusfueDatum={AusfueDatumsDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AusfueDatum"), featureWeights("AusfueDatum"), 0)} " &
+                $"Titel={TitelDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Titel"), featureWeights("Titel"), 0)} " &
+                $"Ablageordner={AblageordnerDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Ablageordner"), featureWeights("Ablageordner"), 0)} " &
+                $"ProjektPfad={ProjektPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektPfad"), featureWeights("ProjektPfad"), 0)} " &
+                $"ProjektstrukturPfad={ProjektstrukturPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektstrukturPfad"), featureWeights("ProjektstrukturPfad"), 0)}")
         End If
         Return bestRecord
     End Function
@@ -263,7 +288,8 @@ Public Class SuggestionEngine
             {"Datum", 0.1},
             {"AbsenderDomain", 0.2},
             {"Absender", 0.2},
-            {"AusfueBenutzer", 0.1},
+            {"AusfueBenutzer", 0.05},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0},
@@ -277,7 +303,8 @@ Public Class SuggestionEngine
             {"Datum", 0.1},
             {"AbsenderDomain", 0.1},
             {"Absender", 0.1},
-            {"AusfueBenutzer", 0.1},
+            {"AusfueBenutzer", 0.05},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0.2},
@@ -291,7 +318,8 @@ Public Class SuggestionEngine
             {"Datum", 0.05},
             {"AbsenderDomain", 0.05},
             {"Absender", 0.05},
-            {"AusfueBenutzer", 0.05},
+            {"AusfueBenutzer", 0.025},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0.2},
             {"ProjektPfad", 0.1},
@@ -302,14 +330,15 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0},
-            {"Datum", 0.1},
+            {"Datum", 0.05},
             {"AbsenderDomain", 0},
             {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
+            {"AusfueBenutzer", 0.05},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
+            {"ProjektstrukturPfad", 0.45}
         }
     End Function
 
@@ -319,7 +348,8 @@ Public Class SuggestionEngine
             {"Datum", 0.05},
             {"AbsenderDomain", 0.3},
             {"Absender", 0.2},
-            {"AusfueBenutzer", 0.05},
+            {"AusfueBenutzer", 0.025},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0.4},
@@ -330,28 +360,30 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0},
-            {"Datum", 0.1},
+            {"Datum", 0.05},
             {"AbsenderDomain", 0},
             {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
+            {"AusfueBenutzer", 0.05},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
+            {"ProjektstrukturPfad", 0.45}
         }
     End Function
 
     Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0},
-            {"Datum", 0.1},
+            {"Datum", 0.05},
             {"AbsenderDomain", 0},
             {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
+            {"AusfueBenutzer", 0.05},
+            {"AusfueDatum", 0.2},
             {"Titel", 0},
             {"Ablageordner", 0},
             {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
+            {"ProjektstrukturPfad", 0.45}
         }
     End Function
 
@@ -364,7 +396,12 @@ Public Class SuggestionEngine
             Return Nothing
         End If
 
-        currentSession.BetreffEmbedded = GetEmbeddingService().GenerateEmbedding(currentSession.Betreff.ToLower())
+        Try
+            currentSession.BetreffEmbedded = GetEmbeddingService()?.GenerateEmbedding(currentSession.Betreff.ToLower())
+        Catch ex As Exception
+            Debug.WriteLine("[SuggestionEngine] BetreffEmbedding generation failed: " & ex.Message)
+            currentSession.BetreffEmbedded = Nothing
+        End Try
         Return currentSession.BetreffEmbedded
     End Function
 
