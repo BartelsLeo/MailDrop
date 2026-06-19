@@ -56,6 +56,12 @@
                 <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Grid.Row="0" Grid.Column="0" HorizontalAlignment="Stretch"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           PreviewMouseRightButtonDown="TreeView1_PreviewMouseRightButtonDown">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
                     <TreeView.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Neuer Ordner" Click="MenuItemNeuerOrdner_Click"/>
