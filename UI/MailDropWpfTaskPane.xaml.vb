@@ -55,14 +55,16 @@ Public Class MailDropWpfTaskPane
             Return
         End If
 
-        Dispatcher.BeginInvoke(New Action(Sub()
-            TreeView1.UpdateLayout()
-            Dim tvi = FindTreeViewItem(TreeView1, relativePath)
-            If tvi IsNot Nothing Then
-                tvi.IsSelected = True
-                tvi.BringIntoView()
-            End If
-        End Sub))
+        If Not Dispatcher.HasShutdownStarted Then
+            Dispatcher.BeginInvoke(New Action(Sub()
+                TreeView1.UpdateLayout()
+                Dim tvi = FindTreeViewItem(TreeView1, relativePath)
+                If tvi IsNot Nothing Then
+                    tvi.IsSelected = True
+                    tvi.BringIntoView()
+                End If
+            End Sub))
+        End If
     End Sub
 
     Private Sub ShowSparkle(sparkle As TextBlock)
@@ -79,7 +81,7 @@ Public Class MailDropWpfTaskPane
         Session.IsSuggestedProjektPfad = False
         HideSparkle(SparkleProjektPfad)
         If ListBox1.SelectedItem IsNot Nothing Then
-            Session.HandleProjektSelection(ListBox1.SelectedItem.ToString(), Window.GetWindow(Me))
+            Session.HandleProjektSelection(ListBox1.SelectedItem.ToString())
         End If
     End Sub
 
@@ -91,12 +93,14 @@ Public Class MailDropWpfTaskPane
                 If Session.IsSuggestedProjektstrukturPfad Then
                     ShowSparkle(SparkleProjektstrukturPfad)
                     Dim targetPath = Session.ProjektstrukturPfad
-                    Dispatcher.BeginInvoke(New Action(Sub()
-                        _applyingTreeViewSuggestion = True
-                        Dim tvi = FindTreeViewItem(TreeView1, targetPath)
-                        If tvi IsNot Nothing Then tvi.IsSelected = True
-                        _applyingTreeViewSuggestion = False
-                    End Sub))
+                    If Not Dispatcher.HasShutdownStarted Then
+                        Dispatcher.BeginInvoke(New Action(Sub()
+                            _applyingTreeViewSuggestion = True
+                            Dim tvi = FindTreeViewItem(TreeView1, targetPath)
+                            If tvi IsNot Nothing Then tvi.IsSelected = True
+                            _applyingTreeViewSuggestion = False
+                        End Sub))
+                    End If
                 End If
             Case NameOf(Session.IsSuggestedTitel)
                 If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel)
@@ -194,6 +198,7 @@ Public Class MailDropWpfTaskPane
     ' Gibt True zur�ck, wenn genau eine Mail selektiert ist, sonst False
     Public Function SingleMailSelected() As Boolean
         Dim explorer = Globals.ThisAddIn.Application.ActiveExplorer()
+        If explorer Is Nothing Then Return False
         Dim selection = explorer.Selection
         Return selection.Count = 1 AndAlso TypeOf selection.Item(1) Is Outlook.MailItem
     End Function

@@ -37,18 +37,20 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - Session exposes SuggestXxx(value) methods that set the field value and then set the corresponding IsSuggestedXxx boolean flag to True. Cascade is driven by property setters: ProjektPfad → ProjektstrukturPfad → Titel → AbsenderKurz → AblageordnerSchema → MsgDateinameSchema → AnhaengeAblegen. Session also exposes IsSuggestedProjektPfad, IsSuggestedProjektstrukturPfad, IsSuggestedTitel, IsSuggestedAbsenderKurz, IsSuggestedAblageordnerSchema, IsSuggestedMsgDateinameSchema, IsSuggestedAnhaengeAblegen as full properties with PropertyChanged notification.
 - MailDropWpfTaskPane.Session_PropertyChanged reacts to IsSuggestedXxx becoming True by showing the ✦ sparkle next to the field and (for ProjektstrukturPfad) dispatching a programmatic TreeView node selection via Dispatcher.BeginInvoke. The sparkle fades out when the user focuses/interacts with the field, which also sets the corresponding IsSuggestedXxx flag back to False (including AbsenderKurz, msg Dateiname and Anhänge ablegen).
 - A private _applyingTreeViewSuggestion flag guards TreeView1_SelectedItemChanged against treating the engine's programmatic node selection as a user interaction (which would reset IsSuggestedProjektstrukturPfad and hide the sparkle immediately).
+- The info popup (help button `i`) documents both placeholder usage and how users can transfer SuggestionRecords by copying `%APPDATA%/MailDrop/sessions.db` to another machine and placing it at the same path.
 
 ## Current workspace layout:
 
 MailDrop/
 |- app.config
 |- CLAUDE.md
+|- CONTRIBUTING.md
+|- README.md
+|- README.en.md
 |- MailDrop.sln
 |- MailDrop.vbproj
 |- model.onnx
 |- packages.config
-|- packages.config.old.20251107221305
-|- packages.config.old.20251111163110
 |- ThisAddIn.Designer.vb
 |- ThisAddIn.Designer.xml
 |- ThisAddIn.vb
@@ -99,9 +101,18 @@ MailDrop/
 ## Runtime data and paths
 
 - Session history database: %APPDATA%/MailDrop/sessions.db
+- SQLite schema versioning uses `PRAGMA user_version`; `SessionDatabaseManager.CurrentSchemaVersion` defines the expected schema and `ApplyMigrations(...)` upgrades older databases.
 - Database manager initialization is lazy: ThisAddIn.CurrentDatabaseManager creates SessionDatabaseManager on first access (not in ThisAddIn_Startup).
 - ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
 - The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
+
+## Branching model
+
+- `productive`: stable branch intended for production-ready releases.
+- `development`: integration branch for ongoing development changes.
+- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `productive`.
+- Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
+- GitHub default branch should be `productive` (if still `master`, switch it in repository settings).
 
 ## Architecture and control flow
 
@@ -156,8 +167,19 @@ Note:
 - Distance lists are initialized with zeros at construction (length = historical record count). Fixed-feature subs overwrite them in PrepareSession(); mutable-feature subs overwrite them incrementally as the user edits fields.
 - Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
 - Core/SuggestionEngine.vb relies on explicit framework imports (System, System.Collections.Generic, System.Linq) and uses a VB Char literal "\"c as one of the token separators in TokenizeForSimilarity.
-- In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
+- In Core/InputChecker.vb, ablageOrdnerPfad is Path.Combine(projektstrukturPfad, session.AblageordnerAufgeloest) where projektstrukturPfad is already the fully-combined absolute path. (A previous version incorrectly prepended projektPfad a second time, duplicating path segments — fixed.)
 - Text encoding/comments show mixed umlaut encoding artifacts in several files; prefer preserving existing file encoding unless intentionally normalizing.
+- SuggestionEngine.New() wraps GetAllSessionRecords() in try-catch and defaults to an empty list on failure so the Lazy never becomes permanently broken.
+- EmbeddingService implements IDisposable; the InferenceSession is released via Dispose().
+- SuggestionEngine implements IDisposable and exposes DisposeSharedInstance(); ThisAddIn_Shutdown calls it so ONNX resources are deterministically released when Outlook exits.
+- GetEmbeddingService() returns Nothing if EmbeddingService construction fails (model files missing); all callers use null-conditional access so embedding gracefully degrades to zero similarity.
+- MailUtils and InputChecker now release Outlook COM objects (Explorer, MailItem, Attachment) via Marshal.FinalReleaseComObject in Finally blocks to reduce long-running COM reference buildup.
+- Dispatcher.BeginInvoke calls in MailDropWpfTaskPane guard against Dispatcher.HasShutdownStarted before posting.
+- DirectoryTreeHelper.CreateDirectoryNodeWithExpand accepts an optional maxDepth parameter (default 20) to prevent StackOverflow from deep or cyclic directory structures.
+- Session.HandleProjektSelection no longer takes a uiContext parameter (was unused).
+- Session.CancelSession is implemented as Reset().
+- AttachmentRenameDialog validates the filename for empty/invalid characters before accepting the dialog.
+- ListBox1 in MailDropWpfTaskPane.xaml binds SelectedItem to ProjektPfad (was incorrectly bound to ProjektstrukturPfad, which caused a spurious cascade on every project selection).
 
 ## Conventions for Claude Code contributions
 

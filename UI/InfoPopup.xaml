@@ -24,6 +24,14 @@
             </ItemsControl>
             <TextBlock TextWrapping="Wrap" Margin="0,10,0,0"
                        Text="Somit werden die Felder dynamisch ausgefüllt."/>
+            <Separator Margin="0,10,0,10"/>
+            <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">SuggestionRecords übertragen</TextBlock>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
+                       Text="Die Vorschlagsdaten (SuggestionRecords) liegen in der SQLite-Datei unter %APPDATA%\MailDrop\sessions.db."/>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
+                       Text="Export: Diese Datei an einen sicheren Ort kopieren (z. B. Netzlaufwerk oder USB-Stick)."/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="Import: Auf dem anderen PC die Datei wieder unter exakt demselben Pfad %APPDATA%\MailDrop\sessions.db ablegen und vorhandene Datei ersetzen."/>
         </StackPanel>
     </Grid>
 </Window>

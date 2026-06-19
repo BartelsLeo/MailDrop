@@ -1,20 +1,28 @@
-Imports System.Collections.ObjectModel
-Imports System.ComponentModel
 Imports System.IO
+Imports System.Runtime.InteropServices
 
 Public Module MailUtils
-    ' Liest die Metadaten der ausgewählten Mail und befüllt die Properties der übergebenen Session
+    Private Sub ReleaseComObjectSafe(comObject As Object)
+        If comObject Is Nothing Then Return
+        If Marshal.IsComObject(comObject) Then
+            Marshal.FinalReleaseComObject(comObject)
+        End If
+    End Sub
+
+    ' Liest die Metadaten der ausgewï¿½hlten Mail und befï¿½llt die Properties der ï¿½bergebenen Session
     Public Sub ReadMailMeta(session As Session)
+        Dim explorer As Object = Nothing
+        Dim mail As Object = Nothing
         Try
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer = app.ActiveExplorer()
+            explorer = app.ActiveExplorer()
             If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
-                System.Windows.MessageBox.Show("Eine Mail auswählen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                System.Windows.MessageBox.Show("Eine Mail auswï¿½hlen", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
                 Return
             End If
-            Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
             If mail Is Nothing Then
-                System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail auswählen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
+                System.Windows.MessageBox.Show("Bitte eine einzelne E-Mail auswï¿½hlen.", "Warnung", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning)
                 Return
             End If
             session.Absender = mail.SenderName
@@ -27,17 +35,25 @@ Public Module MailUtils
             session.DatumFormatiert = mail.ReceivedTime.ToString("yyyyMMdd")
         Catch ex As Exception
             System.Windows.MessageBox.Show($"Fehler beim Auslesen der E-Mail: {ex.Message}", "Fehler", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error)
+        Finally
+            ReleaseComObjectSafe(mail)
+            ReleaseComObjectSafe(explorer)
         End Try
     End Sub
 
     ' Speichert die markierte Mail als .msg im Ablageordner
     Public Function SaveSelectedMailAsMsg(msgZielPfad As String) As String
+        Dim explorer As Object = Nothing
+        Dim mail As Object = Nothing
         Try
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer = app.ActiveExplorer()
-            Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            explorer = app.ActiveExplorer()
+            If explorer Is Nothing OrElse explorer.Selection.Count < 1 Then
+                Return "Bitte wÃ¤hlen Sie eine einzelne E-Mail aus."
+            End If
+            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
             If mail Is Nothing Then
-                Return "Bitte wählen Sie eine einzelne E-Mail aus."
+                Return "Bitte wï¿½hlen Sie eine einzelne E-Mail aus."
             End If
             Dim vollPfad = msgZielPfad
             If Not vollPfad.ToLower().EndsWith(".msg") Then
@@ -47,28 +63,44 @@ Public Module MailUtils
             Return String.Empty
         Catch ex As Exception
             Return $"Fehler beim Speichern der E-Mail: {ex.Message}"
+        Finally
+            ReleaseComObjectSafe(mail)
+            ReleaseComObjectSafe(explorer)
         End Try
     End Function
 
-    ' Speichert alle Anhänge der Mail im Ablageordner
+    ' Speichert alle Anhï¿½nge der Mail im Ablageordner
     Public Function SaveMailAttachments(anhangZielpfade As List(Of String)) As String
+        Dim explorer As Object = Nothing
+        Dim mail As Object = Nothing
         Try
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer = app.ActiveExplorer()
-            Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            explorer = app.ActiveExplorer()
+            If explorer Is Nothing OrElse explorer.Selection.Count < 1 Then
+                Return "Bitte wï¿½hlen Sie eine einzelne E-Mail aus."
+            End If
+            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
             If mail Is Nothing Then
-                Return "Bitte wählen Sie eine einzelne E-Mail aus."
+                Return "Bitte wï¿½hlen Sie eine einzelne E-Mail aus."
             End If
             For i As Integer = 1 To mail.Attachments.Count
                 If i <= anhangZielpfade.Count Then
-                    Dim att = mail.Attachments(i)
-                    Dim anhangPfad = anhangZielpfade(i - 1)
-                    att.SaveAsFile(anhangPfad)
+                    Dim att As Object = Nothing
+                    Try
+                        att = mail.Attachments(i)
+                        Dim anhangPfad = anhangZielpfade(i - 1)
+                        att.SaveAsFile(anhangPfad)
+                    Finally
+                        ReleaseComObjectSafe(att)
+                    End Try
                 End If
             Next
             Return String.Empty
         Catch ex As Exception
-            Return $"Fehler beim Speichern der Anhänge: {ex.Message}"
+            Return $"Fehler beim Speichern der Anhï¿½nge: {ex.Message}"
+        Finally
+            ReleaseComObjectSafe(mail)
+            ReleaseComObjectSafe(explorer)
         End Try
     End Function
 

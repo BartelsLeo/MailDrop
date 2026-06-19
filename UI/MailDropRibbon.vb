@@ -10,6 +10,9 @@ Public Class MailDropRibbon
     Public Function GetCustomUI(ribbonID As String) As String Implements IRibbonExtensibility.GetCustomUI
         Dim asm = System.Reflection.Assembly.GetExecutingAssembly()
         Using stream = asm.GetManifestResourceStream("MailDrop.MailDropRibbon.xml")
+            If stream Is Nothing Then
+                Throw New InvalidOperationException("Embedded ribbon resource 'MailDrop.MailDropRibbon.xml' not found in assembly.")
+            End If
             Using reader As New System.IO.StreamReader(stream)
                 Return reader.ReadToEnd()
             End Using

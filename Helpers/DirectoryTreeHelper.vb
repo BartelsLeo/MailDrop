@@ -2,7 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.IO
 
 Public Module DirectoryTreeHelper
-    ' Erstellt die Directory-Struktur für das TreeView
+    ' Erstellt die Directory-Struktur fï¿½r das TreeView
     Public Function BuildDirectoryTree(projektPfad As String) As ObservableCollection(Of DirectoryNode)
         If String.IsNullOrEmpty(projektPfad) OrElse Not Directory.Exists(projektPfad) Then
             Return New ObservableCollection(Of DirectoryNode)()
@@ -16,7 +16,7 @@ Public Module DirectoryTreeHelper
     End Function
 
     ' level: 1 = erste Ebene unter ProjektPfad
-    Public Function CreateDirectoryNodeWithExpand(dirPath As String, level As Integer, basePath As String) As DirectoryNode
+    Public Function CreateDirectoryNodeWithExpand(dirPath As String, level As Integer, basePath As String, Optional maxDepth As Integer = 20) As DirectoryNode
         Dim relPath = If(dirPath.StartsWith(basePath), dirPath.Substring(basePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), dirPath)
         Dim node As New DirectoryNode With {
             .Name = Path.GetFileName(dirPath),
@@ -25,12 +25,13 @@ Public Module DirectoryTreeHelper
             .Children = New ObservableCollection(Of DirectoryNode)(),
             .IsExpanded = (level <= 2)
         }
+        If level > maxDepth Then Return node
         Try
             For Each dir As String In Directory.GetDirectories(dirPath)
-                node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1, basePath))
+                node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1, basePath, maxDepth))
             Next
         Catch ex As Exception
-            ' Fehlerausgabe entfernt, da Debug nicht verfügbar ist
+            ' Fehlerausgabe entfernt, da Debug nicht verfï¿½gbar ist
         End Try
         Return node
     End Function
@@ -41,5 +42,5 @@ Public Class DirectoryNode
     Public Property FullPath As String
     Public Property RelativePath As String
     Public Property Children As ObservableCollection(Of DirectoryNode)
-    Public Property IsExpanded As Boolean ' Für automatische Expansion im TreeView
+    Public Property IsExpanded As Boolean ' Fï¿½r automatische Expansion im TreeView
 End Class

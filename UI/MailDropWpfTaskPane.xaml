@@ -27,7 +27,7 @@
                 </Grid.ColumnDefinitions>
                 <ListBox x:Name="ListBox1"
                          ItemsSource="{Binding ProjektVerzeichnisse}"
-                         SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         SelectedItem="{Binding ProjektPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Grid.Column="0" HorizontalAlignment="Stretch">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -170,7 +170,7 @@
                            VerticalAlignment="Center" HorizontalAlignment="Center"/>
             </Grid>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0" Grid.Row="9">
-                <Button x:Name="ButtonInfo" Content="i" Width="24" Height="24" Margin="2,0,2,0" ToolTip="Hinweise zu Platzhaltern" Click="ButtonInfo_Click"/>
+                    <Button x:Name="ButtonInfo" Content="i" Width="24" Height="24" Margin="2,0,2,0" ToolTip="Hinweise zu Platzhaltern sowie Export/Import der SuggestionRecords" Click="ButtonInfo_Click"/>
                 <Button x:Name="ButtonOk" Content="OK" Width="50" Height="24" Margin="2,0,2,0" Click="ButtonOk_Click"/>
                 <Button x:Name="ButtonAbbrechen" Content="Abbrechen" Width="80" Height="24" Margin="2,0,2,0" Click="ButtonAbbrechen_Click"/>
             </StackPanel>

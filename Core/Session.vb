@@ -420,11 +420,11 @@ Public Class Session
     End Sub
 
     Public Sub CancelSession()
+        Reset()
         Debug.WriteLine("[Session] CancelSession ausgef�hrt")
-        ' TODO: Implementiere die Logik f�r das Abbrechen der Session
     End Sub
 
-    Public Sub HandleProjektSelection(selectedValue As String, uiContext As System.Windows.Window)
+    Public Sub HandleProjektSelection(selectedValue As String)
         If selectedValue = "anderes..." Then
             Dim dialog As New System.Windows.Forms.FolderBrowserDialog()
             dialog.Description = "Bitte Projektordner ausw�hlen"

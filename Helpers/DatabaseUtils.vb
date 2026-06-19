@@ -2,6 +2,7 @@ Imports System.Data.SQLite
 Imports System.IO
 
 Public Class SessionDatabaseManager
+    Private Const CurrentSchemaVersion As Integer = 1
     Private ReadOnly dbPath As String = Path.Combine(ThisAddIn.DbDirectory, "sessions.db")
     Private ReadOnly connectionString As String
 
@@ -19,40 +20,80 @@ Public Class SessionDatabaseManager
         If Not File.Exists(dbPath) Then
             SQLiteConnection.CreateFile(dbPath)
         End If
-        ' Tabelle immer anlegen, falls sie fehlt!
-        CreateSessionTable()
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+
+            ' Tabellen immer anlegen, falls sie fehlen.
+            CreateSessionTable(conn)
+
+            Dim dbVersion = GetDatabaseVersion(conn)
+
+            ' Bestehende Datenbank ohne Version auf initiales Schema heben.
+            If dbVersion = 0 Then
+                SetDatabaseVersion(conn, CurrentSchemaVersion)
+                dbVersion = CurrentSchemaVersion
+            End If
+
+            If dbVersion < CurrentSchemaVersion Then
+                ApplyMigrations(conn, dbVersion, CurrentSchemaVersion)
+            ElseIf dbVersion > CurrentSchemaVersion Then
+                Throw New InvalidOperationException($"Datenbankversion {dbVersion} ist neuer als die unterstuetzte Version {CurrentSchemaVersion}.")
+            End If
+        End Using
         'CreateEncodedSessionsTable()
     End Sub
 
-    Private Sub CreateSessionTable()
-        Using conn As New SQLiteConnection(connectionString)
-            conn.Open()
-            Dim sql As String =
-                "CREATE TABLE IF NOT EXISTS Sessions (" &
-                "ID INTEGER PRIMARY KEY AUTOINCREMENT, " &
-                "AusfueDatum TEXT, " &
-                "AusfueBenutzer TEXT, " &
-                "Betreff TEXT, " &
-                "BetreffEmbedded BLOB, " & ' Enthält den embeddet Betreff als Vektor
-                "Absender TEXT, " &
-                "AbsenderDomain TEXT, " &
-                "AbsenderKurz TEXT, " &
-                "Empfaenger TEXT, " &
-                "Datum TEXT, " &
-                "DatumFormatiert TEXT, " &
-                "ProjektPfad TEXT, " &
-                "ProjektstrukturPfad TEXT, " &
-                "Titel TEXT, " &
-                "AblageordnerSchema TEXT, " &
-                "AblageordnerAufgeloest TEXT, " &
-                "MsgDateinameSchema TEXT, " &
-                "MsgDateinameAufgeloest TEXT, " &
-                "AnhaengeAblegen BOOLEAN" &
-                ")"
-            Using cmd As New SQLiteCommand(sql, conn)
-                cmd.ExecuteNonQuery()
-            End Using
+    Private Sub CreateSessionTable(conn As SQLiteConnection)
+        Dim sql As String =
+            "CREATE TABLE IF NOT EXISTS Sessions (" &
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT, " &
+            "AusfueDatum TEXT, " &
+            "AusfueBenutzer TEXT, " &
+            "Betreff TEXT, " &
+            "BetreffEmbedded BLOB, " & ' Enthï¿½lt den embeddet Betreff als Vektor
+            "Absender TEXT, " &
+            "AbsenderDomain TEXT, " &
+            "AbsenderKurz TEXT, " &
+            "Empfaenger TEXT, " &
+            "Datum TEXT, " &
+            "DatumFormatiert TEXT, " &
+            "ProjektPfad TEXT, " &
+            "ProjektstrukturPfad TEXT, " &
+            "Titel TEXT, " &
+            "AblageordnerSchema TEXT, " &
+            "AblageordnerAufgeloest TEXT, " &
+            "MsgDateinameSchema TEXT, " &
+            "MsgDateinameAufgeloest TEXT, " &
+            "AnhaengeAblegen BOOLEAN" &
+            ")"
+        Using cmd As New SQLiteCommand(sql, conn)
+            cmd.ExecuteNonQuery()
         End Using
+    End Sub
+
+    Private Function GetDatabaseVersion(conn As SQLiteConnection) As Integer
+        Using cmd As New SQLiteCommand("PRAGMA user_version;", conn)
+            Return Convert.ToInt32(cmd.ExecuteScalar())
+        End Using
+    End Function
+
+    Private Sub SetDatabaseVersion(conn As SQLiteConnection, version As Integer)
+        Using cmd As New SQLiteCommand($"PRAGMA user_version = {version};", conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Sub ApplyMigrations(conn As SQLiteConnection, fromVersion As Integer, toVersion As Integer)
+        For targetVersion As Integer = fromVersion + 1 To toVersion
+            Select Case targetVersion
+                Case 1
+                    ' Initiales Baseline-Schema. Fuer bestehende DBs ohne Version ist nichts weiter noetig.
+                Case Else
+                    Throw New NotSupportedException($"Keine Migration fuer Datenbankversion {targetVersion} definiert.")
+            End Select
+
+            SetDatabaseVersion(conn, targetVersion)
+        Next
     End Sub
 
     ' Neue Methode: EncodedSessions Table anlegen
@@ -72,7 +113,7 @@ Public Class SessionDatabaseManager
     '    End Using
     'End Sub
 
-    ' Gibt alle Sessions zurück, die noch nicht encodiert wurden
+    ' Gibt alle Sessions zurï¿½ck, die noch nicht encodiert wurden
     'Public Function GetNotEncodedSessions() As List(Of SessionRecord)
     '    Dim result As New List(Of SessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -109,7 +150,7 @@ Public Class SessionDatabaseManager
     '    Return result
     'End Function
 
-    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zurück
+    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zurï¿½ck
     'Public Function GetAllEncodedSessions() As List(Of EncodedSessionRecord)
     '    Dim result As New List(Of EncodedSessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -183,7 +224,7 @@ Public Class SessionDatabaseManager
         End Using
     End Sub
 
-    ' Gibt die letzten vier eindeutigen ProjektPfad-Einträge für einen Benutzer zurück (absteigend nach AusfueDatum)
+    ' Gibt die letzten vier eindeutigen ProjektPfad-Eintrï¿½ge fï¿½r einen Benutzer zurï¿½ck (absteigend nach AusfueDatum)
     Public Function GetLastProjektVerzeichnisseForUser(benutzer As String) As List(Of String)
         Dim result As New List(Of String)()
         Using conn As New SQLiteConnection(connectionString)
@@ -205,7 +246,7 @@ Public Class SessionDatabaseManager
         Return result
     End Function
 
-    ' Gibt alle Sessions als Liste von SessionRecord zurück
+    ' Gibt alle Sessions als Liste von SessionRecord zurï¿½ck
     Public Function GetAllSessionRecords() As List(Of SessionRecord)
         Dim result As New List(Of SessionRecord)()
         Using conn As New SQLiteConnection(connectionString)
@@ -245,7 +286,7 @@ Public Class SessionDatabaseManager
 
 End Class
 
-' Hilfsklasse für EncodedSession
+' Hilfsklasse fï¿½r EncodedSession
 Public Class EncodedSessionRecord
     Public Property SessionID As Integer
     Public Property AusfueBenutzer As Integer
@@ -255,7 +296,7 @@ Public Class EncodedSessionRecord
     Public Property AbsenderDomain As Integer
     Public Property AbsenderKurz As Integer
     Public Property Empfaenger As Integer
-    Public Property Datum As Integer ' Ergänzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
+    Public Property Datum As Integer ' Ergï¿½nzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
     Public Property ProjektPfad As Integer
     Public Property ProjektstrukturPfad As Integer
     Public Property Titel As Integer
@@ -266,7 +307,7 @@ Public Class EncodedSessionRecord
     Public Property AnhaengeAblegen As Integer
 End Class
 
-' Repräsentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
+' Reprï¿½sentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
 Public Class SessionRecord
     Public Property ID As Integer
     Public Property AusfueDatum As DateTime

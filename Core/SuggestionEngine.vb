@@ -6,6 +6,7 @@ Imports System.Threading
 Imports System.Threading.Tasks
 
 Public Class SuggestionEngine
+    Implements IDisposable
 
     Private Shared ReadOnly SharedEngineLazy As New Lazy(Of SuggestionEngine)(
         Function()
@@ -27,9 +28,15 @@ Public Class SuggestionEngine
     Private Property AblageordnerDistances As List(Of Double)
     Private Property ProjektPfadDistances As List(Of Double)
     Private Property ProjektstrukturPfadDistances As List(Of Double)
+    Private _disposed As Boolean = False
 
     Public Sub New()
-        EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+        Try
+            EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+        Catch ex As Exception
+            Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der Session-Historie: " & ex.Message)
+            EnginesHistoricalSessionRecords = New List(Of SessionRecord)()
+        End Try
     End Sub
 
     Public Shared Function GetSharedInstance() As SuggestionEngine
@@ -50,12 +57,30 @@ Public Class SuggestionEngine
                  End Sub)
     End Sub
 
+    Public Shared Sub DisposeSharedInstance()
+        If SharedEngineLazy.IsValueCreated Then
+            SharedEngineLazy.Value.Dispose()
+        End If
+    End Sub
+
     Private Function GetEmbeddingService() As EmbeddingService
         If EnginesEmbeddingService Is Nothing Then
-            EnginesEmbeddingService = New EmbeddingService()
+            Try
+                EnginesEmbeddingService = New EmbeddingService()
+            Catch ex As Exception
+                Debug.WriteLine("[SuggestionEngine] EmbeddingService konnte nicht erstellt werden: " & ex.Message)
+                Return Nothing
+            End Try
         End If
         Return EnginesEmbeddingService
     End Function
+
+    Public Sub Dispose() Implements IDisposable.Dispose
+        If _disposed Then Return
+        EnginesEmbeddingService?.Dispose()
+        EnginesEmbeddingService = Nothing
+        _disposed = True
+    End Sub
 
     ' Berechnet fixe Feature-Distanzen einmalig und initialisiert mutable Features mit 0.
     ' Wird direkt nach New() in PrepareSession aufgerufen.

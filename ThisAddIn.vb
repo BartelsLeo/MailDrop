@@ -24,10 +24,20 @@ Public Class ThisAddIn
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
         explorer = Application.ActiveExplorer()
-        AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
+        If explorer IsNot Nothing Then
+            AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
+        End If
 
         ' Engine im Hintergrund vorladen, damit "Mail ablegen" beim ersten Klick schneller oeffnet.
         SuggestionEngine.PreloadSharedInstanceInBackground(1500)
+    End Sub
+
+    Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        Try
+            SuggestionEngine.DisposeSharedInstance()
+        Catch
+            ' Shutdown cleanup should never block Outlook exit.
+        End Try
     End Sub
 
     Private WithEvents explorer As Outlook.Explorer
