@@ -1,12 +1,10 @@
-Imports System
-Imports System.Collections.Generic
 Imports System.Diagnostics
 Imports System.Linq
 
 Public Class SuggestionEngine
 
     Public Property EnginesHistoricalSessionRecords As List(Of SessionRecord)
-    Private EnginesEmbeddingService As EmbeddingService
+    Private ReadOnly EnginesEmbeddingService As EmbeddingService
 
     ' Diese Listen werden pro aktueller Session einmal berechnet und anschließend beim Suggest genutzt.
     Private Property BetreffDistances As List(Of Double)
@@ -15,20 +13,16 @@ Public Class SuggestionEngine
     Private Property AbsenderDistances As List(Of Double)
     Private Property AusfueBenutzerDistances As List(Of Double)
     Private Property TitelDistances As List(Of Double)
+    Private Property AbsenderKurzDistances As List(Of Double)
     Private Property AblageordnerDistances As List(Of Double)
+    Private Property MsgDateinameSchemaDistances As List(Of Double)
     Private Property ProjektPfadDistances As List(Of Double)
     Private Property ProjektstrukturPfadDistances As List(Of Double)
 
     Public Sub New()
         EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+        EnginesEmbeddingService = New EmbeddingService()
     End Sub
-
-    Private Function GetEmbeddingService() As EmbeddingService
-        If EnginesEmbeddingService Is Nothing Then
-            EnginesEmbeddingService = New EmbeddingService()
-        End If
-        Return EnginesEmbeddingService
-    End Function
 
     ' Berechnet fixe Feature-Distanzen einmalig und initialisiert mutable Features mit 0.
     ' Wird direkt nach New() in PrepareSession aufgerufen.
@@ -44,7 +38,9 @@ Public Class SuggestionEngine
         ' Mutable Features sind zur Initialisierungszeit leer – 0 als Startwert.
         Dim recordCount = EnginesHistoricalSessionRecords.Count
         TitelDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        AbsenderKurzDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         AblageordnerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        MsgDateinameSchemaDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektstrukturPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
     End Sub
@@ -109,6 +105,15 @@ Public Class SuggestionEngine
         TitelDistances = newDistances
     End Sub
 
+    Public Sub RecalculateAbsenderKurzDistances(session As Session)
+        If session Is Nothing Then Return
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        For Each record In EnginesHistoricalSessionRecords
+            newDistances.Add(CalculateCategoricalSimilarity(session.AbsenderKurz, record.AbsenderKurz))
+        Next
+        AbsenderKurzDistances = newDistances
+    End Sub
+
     Public Sub RecalculateAblageordnerDistances(session As Session)
         If session Is Nothing Then Return
         Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
@@ -116,6 +121,15 @@ Public Class SuggestionEngine
             newDistances.Add(CalculateTextSimilarity(session.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
         Next
         AblageordnerDistances = newDistances
+    End Sub
+
+    Public Sub RecalculateMsgDateinameSchemaDistances(session As Session)
+        If session Is Nothing Then Return
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        For Each record In EnginesHistoricalSessionRecords
+            newDistances.Add(CalculateTextSimilarity(session.MsgDateinameSchema, record.MsgDateinameSchema))
+        Next
+        MsgDateinameSchemaDistances = newDistances
     End Sub
 
     Public Sub RecalculateProjektPfadDistances(session As Session)
@@ -138,49 +152,56 @@ Public Class SuggestionEngine
 
     Public Function SuggestProjektPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), "ProjektPfad")?.ProjektPfad, String.Empty)
+        Return If(FindBestRecord(Function(r) r.ProjektPfad)?.ProjektPfad, String.Empty)
     End Function
 
     Public Function SuggestProjektstrukturPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), "ProjektstrukturPfad")?.ProjektstrukturPfad, String.Empty)
+        Return If(FindBestRecord(Function(r) r.ProjektstrukturPfad)?.ProjektstrukturPfad, String.Empty)
     End Function
 
     Public Function SuggestTitel(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel")?.Titel, String.Empty)
+        Return If(FindBestRecord(Function(r) r.Titel)?.Titel, String.Empty)
     End Function
 
     Public Function SuggestAbsenderKurz(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz")?.AbsenderKurz, String.Empty)
+        Return If(FindBestRecord(Function(r) r.AbsenderKurz)?.AbsenderKurz, String.Empty)
     End Function
 
     Public Function SuggestAblageordnerSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema")?.AblageordnerSchema, String.Empty)
+        Return If(FindBestRecord(Function(r) r.AblageordnerSchema)?.AblageordnerSchema, String.Empty)
     End Function
 
     Public Function SuggestMsgDateinameSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.MsgDateinameSchema, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema")?.MsgDateinameSchema, String.Empty)
-    End Function
-
-    Public Function SuggestAnhaengeAblegen(session As Session) As Boolean?
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
-        Dim bestRecord = FindBestRecordByField(Function(r) String.Empty, GetFeatureWeightsForAnhaengeAblegenSuggestion(), "AnhaengeAblegen", requireNonEmptyField:=False)
-        If bestRecord Is Nothing Then Return Nothing
-        Return bestRecord.AnhaengeAblegen
+        Return If(FindBestRecord(Function(r) r.MsgDateinameSchema)?.MsgDateinameSchema, String.Empty)
     End Function
 
     ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
-    Private Function FindBestRecordByField(fieldSelector As Func(Of SessionRecord, String), featureWeights As IDictionary(Of String, Double), suggestionName As String, Optional requireNonEmptyField As Boolean = True) As SessionRecord
+    Private Function FindBestRecord(fieldSelector As Func(Of SessionRecord, String)) As SessionRecord
+        ' Die Feature-Gewichte werden hier definiert, damit Scoring-Logik und Tuning-Werte gemeinsam gepflegt werden.
+        Dim featureWeights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
+            {"Betreff", 0.3},
+            {"Datum", 0.15},
+            {"AbsenderDomain", 0.08},
+            {"Absender", 0.08},
+            {"AusfueBenutzer", 0.15},
+            {"Titel", 0.1},
+            {"AbsenderKurz", 0.05},
+            {"Ablageordner", 0.07},
+            {"MsgDateinameSchema", 0.03},
+            {"ProjektPfad", 0.04},
+            {"ProjektstrukturPfad", 0.03}
+        }
 
         Dim bestScore As Double = Double.MinValue
         Dim bestRecord As SessionRecord = Nothing
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
-            If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
+            If String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
 
             Dim score =
                 WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
@@ -189,7 +210,9 @@ Public Class SuggestionEngine
                 WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
                 WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
+                WeightedFeatureScore(featureWeights, "AbsenderKurz", AbsenderKurzDistances(i)) +
                 WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
+                WeightedFeatureScore(featureWeights, "MsgDateinameSchema", MsgDateinameSchemaDistances(i)) +
                 WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
                 WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
 
@@ -200,107 +223,9 @@ Public Class SuggestionEngine
         Next
 
         If bestRecord IsNot Nothing Then
-            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore}, BestRecordId={bestRecord.ID}")
+            Debug.WriteLine($"[SuggestionEngine] Best score: {bestScore}, ProjektPfad: {bestRecord.ProjektPfad}")
         End If
         Return bestRecord
-    End Function
-
-    Private Function GetFeatureWeightsForProjektPfadSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0.2},
-            {"Absender", 0.2},
-            {"AusfueBenutzer", 0.1},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0},
-            {"ProjektstrukturPfad", 0}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForProjektstrukturPfadSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0.1},
-            {"Absender", 0.1},
-            {"AusfueBenutzer", 0.1},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.2},
-            {"ProjektstrukturPfad", 0}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForTitelSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.05},
-            {"AbsenderDomain", 0.05},
-            {"Absender", 0.05},
-            {"AusfueBenutzer", 0.05},
-            {"Titel", 0},
-            {"Ablageordner", 0.2},
-            {"ProjektPfad", 0.1},
-            {"ProjektstrukturPfad", 0.1}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForAbsenderKurzSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
-            {"Datum", 0.05},
-            {"AbsenderDomain", 0.30},
-            {"Absender", 0.20},
-            {"AusfueBenutzer", 0.05},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.40},
-            {"ProjektstrukturPfad", 0}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
-        }
-    End Function
-
-    Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
-        Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.1},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.4}
-        }
     End Function
 
     ' Erzeugt das Embedding für den aktuellen Betreff und speichert es in der Session.
@@ -312,7 +237,7 @@ Public Class SuggestionEngine
             Return Nothing
         End If
 
-        currentSession.BetreffEmbedded = GetEmbeddingService().GenerateEmbedding(currentSession.Betreff.ToLower())
+        currentSession.BetreffEmbedded = EnginesEmbeddingService.GenerateEmbedding(currentSession.Betreff.ToLower())
         Return currentSession.BetreffEmbedded
     End Function
 
@@ -415,7 +340,7 @@ Public Class SuggestionEngine
     Private Function TokenizeForSimilarity(value As String) As IEnumerable(Of String)
         Return value _
             .ToLowerInvariant() _
-            .Split(New Char() {" "c, "_"c, "-"c, "."c, "/"c, "\"c, ","c, ";"c, ":"c, "("c, ")"c, "["c, "]"c}, StringSplitOptions.RemoveEmptyEntries) _
+            .Split(New Char() {" "c, "_"c, "-"c, "."c, "/"c, "\\"c, ","c, ";"c, ":"c, "("c, ")"c, "["c, "]"c}, StringSplitOptions.RemoveEmptyEntries) _
             .Where(Function(token) token.Trim().Length > 0)
     End Function
 

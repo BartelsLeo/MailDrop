@@ -2,6 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
+Imports System.Threading.Tasks
 
 Public Class Session
     Implements INotifyPropertyChanged
@@ -21,19 +22,18 @@ Public Class Session
     Private _ausfueBenutzer As String = Environment.UserName
     Private _absender As String
     Private _absenderDomain As String
-    Private _absenderKurz As String
     Private _empfaenger As String
     Private _betreff As String
     Private _betreffEmbedded As Single()
     Private _datum As DateTime
     Private _datumFormatiert As String
+    Private _absenderKurz As String
     Private _isSuggestedProjektPfad As Boolean
     Private _isSuggestedProjektstrukturPfad As Boolean
     Private _isSuggestedTitel As Boolean
     Private _isSuggestedAbsenderKurz As Boolean
     Private _isSuggestedAblageordnerSchema As Boolean
     Private _isSuggestedMsgDateinameSchema As Boolean
-    Private _isSuggestedAnhaengeAblegen As Boolean
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -71,14 +71,9 @@ Public Class Session
                 OnPropertyChanged(NameOf(Titel))
                 UpdateResolvedAfterTitelChange()
                 SuggestionEngineInstance?.RecalculateTitelDistances(Me)
-                Dim suggestedAbsenderKurz = SuggestionEngineInstance?.SuggestAbsenderKurz(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedAbsenderKurz) Then
-                    SuggestAbsenderKurz(suggestedAbsenderKurz)
-                Else
-                    Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                    If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
-                        SuggestAblageordnerSchema(suggestedAbl)
-                    End If
+                Dim suggestedAbsKurz = SuggestionEngineInstance?.SuggestAbsenderKurz(Me)
+                If Not String.IsNullOrWhiteSpace(suggestedAbsKurz) Then
+                    SuggestAbsenderKurz(suggestedAbsKurz)
                 End If
             End If
         End Set
@@ -147,10 +142,9 @@ Public Class Session
                 _ablageordnerSchema = value
                 OnPropertyChanged(NameOf(AblageordnerSchema))
                 UpdateAblageordnerAufgeloest()
-                AblageordnerFeld = AblageordnerAufgeloest
-                Dim suggestedMsgDateinameSchema = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
-                    SuggestMsgDateinameSchema(suggestedMsgDateinameSchema)
+                Dim suggestedMsg = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
+                If Not String.IsNullOrWhiteSpace(suggestedMsg) Then
+                    SuggestMsgDateinameSchema(suggestedMsg)
                 End If
             End If
         End Set
@@ -171,11 +165,7 @@ Public Class Session
                 _msgDateinameSchema = value
                 OnPropertyChanged(NameOf(MsgDateinameSchema))
                 UpdateMsgDateinameAufgeloest()
-                MsgDateinameFeld = MsgDateinameAufgeloest
-                Dim suggestedAnhaengeAblegen = SuggestionEngineInstance?.SuggestAnhaengeAblegen(Me)
-                If suggestedAnhaengeAblegen.HasValue Then
-                    SuggestAnhaengeAblegen(suggestedAnhaengeAblegen.Value)
-                End If
+                SuggestionEngineInstance?.RecalculateMsgDateinameSchemaDistances(Me)
             End If
         End Set
     End Property
@@ -254,7 +244,6 @@ Public Class Session
         IsSuggestedAbsenderKurz = False
         IsSuggestedAblageordnerSchema = False
         IsSuggestedMsgDateinameSchema = False
-        IsSuggestedAnhaengeAblegen = False
         Debug.WriteLine("[Session] Reset ausgef�hrt")
     End Sub
 
@@ -332,18 +321,6 @@ Public Class Session
         End Set
     End Property
 
-    Public Property IsSuggestedAnhaengeAblegen As Boolean
-        Get
-            Return _isSuggestedAnhaengeAblegen
-        End Get
-        Set(value As Boolean)
-            If _isSuggestedAnhaengeAblegen <> value Then
-                _isSuggestedAnhaengeAblegen = value
-                OnPropertyChanged(NameOf(IsSuggestedAnhaengeAblegen))
-            End If
-        End Set
-    End Property
-
     Public Sub SuggestProjektPfad(value As String)
         ProjektPfad = value
         IsSuggestedProjektPfad = True
@@ -366,17 +343,14 @@ Public Class Session
 
     Public Sub SuggestAblageordnerSchema(value As String)
         AblageordnerSchema = value
+        AblageordnerFeld = AblageordnerAufgeloest
         IsSuggestedAblageordnerSchema = True
     End Sub
 
     Public Sub SuggestMsgDateinameSchema(value As String)
         MsgDateinameSchema = value
+        MsgDateinameFeld = MsgDateinameAufgeloest
         IsSuggestedMsgDateinameSchema = True
-    End Sub
-
-    Public Sub SuggestAnhaengeAblegen(value As Boolean)
-        AnhaengeAblegen = value
-        IsSuggestedAnhaengeAblegen = True
     End Sub
 
     Public Sub PrepareSession()
@@ -385,8 +359,13 @@ Public Class Session
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
 
-        ' SuggestionEngine Instanz erstellen (lädt Historie und Embedding-Service einmalig)
-        SuggestionEngineInstance = New SuggestionEngine()
+        ' Reuse pre-loaded engine if ready, otherwise create synchronously on the click path.
+        If ThisAddIn.CachedSuggestionEngine IsNot Nothing Then
+            SuggestionEngineInstance = ThisAddIn.CachedSuggestionEngine
+            ThisAddIn.CachedSuggestionEngine = Nothing
+        Else
+            SuggestionEngineInstance = New SuggestionEngine()
+        End If
 
         ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
@@ -510,7 +489,7 @@ Public Class Session
             End If
         End If
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
-        ' PredictionEngine.TrainDecisionTreeModels()
+        Task.Run(Sub() ThisAddIn.CachedSuggestionEngine = New SuggestionEngine())
         Me.Reset()
         Return String.Empty
     End Function
@@ -585,7 +564,7 @@ Public Class Session
             If _absenderKurz <> value Then
                 _absenderKurz = value
                 OnPropertyChanged(NameOf(AbsenderKurz))
-                UpdateResolvedAfterTitelChange()
+                SuggestionEngineInstance?.RecalculateAbsenderKurzDistances(Me)
                 Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
                 If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
                     SuggestAblageordnerSchema(suggestedAbl)
