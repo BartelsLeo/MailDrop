@@ -76,8 +76,6 @@ Public Class MailDropWpfTaskPane
                 If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner)
             Case NameOf(Session.IsSuggestedMsgDateinameSchema)
                 If Session.IsSuggestedMsgDateinameSchema Then ShowSparkle(SparkleMsgDateiname)
-            Case NameOf(Session.IsSuggestedAnhaengeAblegen)
-                If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen)
         End Select
     End Sub
 
@@ -109,11 +107,6 @@ Public Class MailDropWpfTaskPane
 
     Private Sub TextBoxMsgDateiname_LostFocus(sender As Object, e As RoutedEventArgs)
         Session.EndMsgDateinameEdit()
-    End Sub
-
-    Private Sub CheckBoxAnhaenge_Click(sender As Object, e As RoutedEventArgs)
-        Session.IsSuggestedAnhaengeAblegen = False
-        HideSparkle(SparkleAnhaengeAblegen)
     End Sub
 
     Private Sub ButtonInfo_Click(sender As Object, e As RoutedEventArgs)

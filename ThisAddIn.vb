@@ -1,42 +1,30 @@
-﻿Imports Microsoft.Office.Tools.Ribbon
+Imports Microsoft.Office.Tools.Ribbon
 Imports System.Runtime.InteropServices
 Imports Microsoft.Office.Core
 Imports System.IO
+Imports System.Threading.Tasks
 
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
-    Private Shared _currentDatabaseManager As SessionDatabaseManager
+    Private _wpfTaskPane As MailDropWpfTaskPane
+    Private _activeExplorer As Outlook.Explorer
 
     Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
     Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
-    Public Shared ReadOnly Property CurrentDatabaseManager As SessionDatabaseManager
-        Get
-            If _currentDatabaseManager Is Nothing Then
-                _currentDatabaseManager = New SessionDatabaseManager()
-            End If
-            Return _currentDatabaseManager
-        End Get
-    End Property
+    Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
+    Public Shared Property CachedSuggestionEngine As SuggestionEngine
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
-        explorer = Application.ActiveExplorer()
-        AddHandler explorer.SelectionChange, AddressOf Explorer_SelectionChange
+        CurrentDatabaseManager = New SessionDatabaseManager()
+        Task.Run(Sub() CachedSuggestionEngine = New SuggestionEngine())
     End Sub
 
-    Private WithEvents explorer As Outlook.Explorer
-
-    ' Kapselt die Logik für die TaskPane-Initialisierung und Editierbarkeit
-    Private Sub MailSelected()
-        Dim wpfTaskPane As MailDropWpfTaskPane = GetWpfTaskPane()
-        If wpfTaskPane IsNot Nothing Then
-            If wpfTaskPane.SingleMailSelected() Then
-                wpfTaskPane.Session.PrepareSession()
-                wpfTaskPane.SetEditMode(True)
-            Else
-                wpfTaskPane.Session.Reset()
-                wpfTaskPane.SetEditMode(False)
-            End If
+    Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        If _activeExplorer IsNot Nothing Then
+            RemoveHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
+            Marshal.ReleaseComObject(_activeExplorer)
+            _activeExplorer = Nothing
         End If
     End Sub
 
@@ -44,41 +32,33 @@ Public Class ThisAddIn
         MailSelected()
     End Sub
 
-    ' Hilfsmethode, um die WPF TaskPane Instanz zu bekommen
-    Private Function GetWpfTaskPane() As MailDropWpfTaskPane
-        If taskPane Is Nothing Then Return Nothing
-        Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
-        If wpfPane IsNot Nothing Then
-            Return TryCast(wpfPane.Child, MailDropWpfTaskPane)
+    Private Sub MailSelected()
+        If _wpfTaskPane IsNot Nothing Then
+            If _wpfTaskPane.SingleMailSelected() Then
+                _wpfTaskPane.Session.PrepareSession()
+                _wpfTaskPane.SetEditMode(True)
+            Else
+                _wpfTaskPane.Session.Reset()
+                _wpfTaskPane.SetEditMode(False)
+            End If
         End If
-        Return Nothing
-    End Function
+    End Sub
 
     Protected Overrides Function CreateRibbonExtensibilityObject() As IRibbonExtensibility
         ribbonObj = New MailDropRibbon()
         Return ribbonObj
     End Function
 
-    ' Callback for Ribbon button
     Public Sub MailAblegen_Click(control As Object)
-        Dim wpfTaskPane As MailDropWpfTaskPane = Nothing
-
         If taskPane Is Nothing Then
             Dim paneControl As New MailDropWpfHostControl()
-            Dim wpfPane = TryCast(paneControl.Controls(0), System.Windows.Forms.Integration.ElementHost)
-            If wpfPane IsNot Nothing Then
-                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
-            End If
+            _wpfTaskPane = paneControl.WpfTaskPane
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
-            taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
+            taskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             taskPane.Width = 1000
-        Else
-            Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
-            If wpfPane IsNot Nothing Then
-                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
-            End If
+            _activeExplorer = Application.ActiveExplorer()
+            AddHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
         End If
-
         MailSelected()
         taskPane.Visible = True
     End Sub
