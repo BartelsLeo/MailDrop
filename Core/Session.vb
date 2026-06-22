@@ -470,12 +470,22 @@ Public Class Session
         Try
             Dim checkedInput = InputChecker.CheckInput(Me)
             If checkedInput.ErrorMessage <> String.Empty Then Return checkedInput.ErrorMessage
-            Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
+
+            Dim ablageOrdnerPfad = checkedInput.CheckedAblageOrdner
+            Dim ablageResult = Me.CreateAblageordner(ablageOrdnerPfad)
             If ablageResult <> String.Empty Then Return ablageResult
-            Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
+
+            ' Paths recomputed here so they track any rename that happened in CreateAblageordner
+            Dim msgZielPfad = Path.Combine(ablageOrdnerPfad, Path.GetFileName(checkedInput.CheckedMsgZielpfad))
+            Dim anhZielpfade = New List(Of String)()
+            For Each p In checkedInput.CheckedAnhZielpfade
+                anhZielpfade.Add(Path.Combine(ablageOrdnerPfad, Path.GetFileName(p)))
+            Next
+
+            Dim mailResult = MailUtils.SaveSelectedMailAsMsg(msgZielPfad)
             If mailResult <> String.Empty Then Return mailResult
             If AnhaengeAblegen Then
-                Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
+                Dim anhangResult = MailUtils.SaveMailAttachments(anhZielpfade)
                 If anhangResult <> String.Empty Then Return anhangResult
             End If
             ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
@@ -487,14 +497,30 @@ Public Class Session
         End Try
     End Function
 
-    Private Function CreateAblageordner(ablageOrdnerPfad As String) As String
+    Private Function CreateAblageordner(ByRef ablageOrdnerPfad As String) As String
         Try
-            If Not Directory.Exists(ablageOrdnerPfad) Then
-                Directory.CreateDirectory(ablageOrdnerPfad)
-            End If
+            Directory.CreateDirectory(ablageOrdnerPfad)
             Return String.Empty
         Catch ex As Exception
-            Return $"Fehler beim Erstellen des Ablageordners: {ex.Message}"
+            ' Ordner konnte nicht erstellt werden: Umbenennen / Abbrechen
+            Dim parentPath = Path.GetDirectoryName(ablageOrdnerPfad)
+            Dim dlgResult = System.Windows.MessageBox.Show(
+                $"Der Ordner ""{Path.GetFileName(ablageOrdnerPfad)}"" konnte nicht erstellt werden:{vbCrLf}{ex.Message}{vbCrLf}{vbCrLf}Soll ein anderer Ordnername vergeben werden?",
+                "Ordner nicht erstellbar",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning)
+            If dlgResult <> System.Windows.MessageBoxResult.Yes Then Return "Vorgang abgebrochen."
+            Dim newName = InputChecker.ShowAttachmentRenameDialog(
+                Path.GetFileName(ablageOrdnerPfad), parentPath,
+                "Bitte geben Sie einen neuen Ordnernamen ein:", "Ordner umbenennen")
+            If String.IsNullOrEmpty(newName) Then Return "Vorgang abgebrochen."
+            ablageOrdnerPfad = Path.Combine(parentPath, newName)
+            Try
+                Directory.CreateDirectory(ablageOrdnerPfad)
+                Return String.Empty
+            Catch ex2 As Exception
+                Return $"Fehler beim Erstellen des Ablageordners: {ex2.Message}"
+            End Try
         End Try
     End Function
 
