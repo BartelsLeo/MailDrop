@@ -278,6 +278,9 @@
     <Compile Include="UI\AttachmentRenameDialog.xaml.vb">
       <DependentUpon>AttachmentRenameDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\SavePreviewDialog.xaml.vb">
+      <DependentUpon>SavePreviewDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Helpers\DatabaseUtils.vb" />
     <Compile Include="Helpers\DirectoryTreeHelper.vb" />
     <Compile Include="UI\InfoPopup.xaml.vb">
@@ -337,6 +340,9 @@
   </ItemGroup>
   <ItemGroup>
     <Page Include="UI\AttachmentRenameDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\SavePreviewDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\InfoPopup.xaml">

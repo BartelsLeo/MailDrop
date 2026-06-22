@@ -12,7 +12,8 @@
             <RowDefinition Height="Auto"/> <!-- Überlänge-Zähler -->
             <RowDefinition Height="Auto"/> <!-- Buttons -->
         </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="Der Dateiname ist zu lang. Bitte geben Sie einen neuen Namen ein:" 
+        <TextBlock x:Name="TextBlockHint" Grid.Row="0"
+                   Text="Der Dateiname ist zu lang. Bitte geben Sie einen neuen Namen ein:"
                    FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" TextWrapping="Wrap" Width="380" Margin="0,0,0,8"/>
         <TextBox x:Name="TextBoxFileName" Grid.Row="1" Height="28" FontSize="14" Margin="0,0,0,8"/>
         <TextBlock x:Name="TextBlockOverlength" Grid.Row="2" Foreground="Red" FontSize="12" Margin="0,0,0,8" Visibility="Collapsed"/>

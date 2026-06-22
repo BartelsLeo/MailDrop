@@ -38,9 +38,11 @@ Public Module InputChecker
         Return String.Empty
     End Function
 
-    ' Zeigt einen Dialog zur Umbenennung eines Anhangs, gibt neuen Namen oder String.Empty zurück
-    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
-        Dim dlg As New AttachmentRenameDialog(currentName, basePath)
+    ' Zeigt einen Dialog zur Umbenennung, gibt neuen Namen oder String.Empty zurück
+    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String,
+                                               Optional hintText As String = Nothing,
+                                               Optional windowTitle As String = Nothing) As String
+        Dim dlg As New AttachmentRenameDialog(currentName, basePath, hintText, windowTitle)
         If System.Windows.Application.Current IsNot Nothing AndAlso System.Windows.Application.Current.MainWindow IsNot Nothing Then
             dlg.Owner = System.Windows.Application.Current.MainWindow
         End If

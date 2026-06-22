@@ -23,7 +23,7 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 	- On focus loss: resolve placeholders and show the resolved result.
 - Input validation checks required values, invalid path/file characters, and path length limits.
 - Optional attachment filing saves all attachments; long attachment names can be adjusted via rename dialog.
-- On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
+- On OK, the add-in checks for file conflicts (existing msg/attachments), then either saves directly (no conflicts) or shows a SavePreviewDialog listing all files/folders with their status. The dialog allows overwrite, rename, or skip per file. Once all items are resolved, saving proceeds and statuses flip to ✅; the dialog closes automatically.
 - A SuggestionEngine with ONNX embeddings is initialized for project path suggestion.
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.
 - Suggestion-relevant features are split into two groups: fixed features (Betreff, Datum, AbsenderDomain, Absender, AusfueBenutzer) are computed once per mail selection via dedicated per-feature subs called from PrepareSession(); mutable features (Titel, AbsenderKurz, AblageordnerAufgeloest, MsgDateinameSchema, ProjektPfad, ProjektstrukturPfad) are recomputed via dedicated per-feature subs triggered from the corresponding Session property setters and are zero-initialized at engine construction.
@@ -55,6 +55,7 @@ MailDrop/
 |- Helpers/
 |  |- DatabaseUtils.vb
 |  |- DirectoryTreeHelper.vb
+|  |- ErrorHandler.vb
 |  |- MailUtils.vb
 |  |- PathShortenerConverter.vb
 |- Models/
@@ -82,6 +83,8 @@ MailDrop/
 	|- MailDropWpfHostControl.vb
 	|- MailDropWpfTaskPane.xaml
 	|- MailDropWpfTaskPane.xaml.vb
+	|- SavePreviewDialog.xaml
+	|- SavePreviewDialog.xaml.vb
 
 ## Build and run (local)
 
@@ -107,7 +110,7 @@ MailDrop/
 - Selection updates: Explorer.SelectionChange -> Explorer_SelectionChange -> MailSelected().
 - Session preparation: Session.PrepareSession() -> Reset, mail metadata read, recent project paths load, SuggestionEngine init (reuses ThisAddIn.CachedSuggestionEngine if pre-loaded, otherwise creates synchronously), feature distance precompute, suggested ProjektPfad apply (if valid).
 - SuggestionEngine pre-load: ThisAddIn_Startup fires Task.Run to construct SuggestionEngine (SQLite record load + ONNX model load) in the background. PrepareSession consumes the cached instance and clears the slot. ProcessSession fires another Task.Run after saving so the next PrepareSession has a fresh engine ready.
-- Save flow on OK: Session.ProcessSession() -> InputChecker -> create folder -> save .msg -> optional attachments -> persist SessionRecord -> reset session.
+- Save flow on OK: Session.ProcessSession() -> InputChecker -> build SaveItems (folder + msg + attachments with save lambdas) -> if no conflicts, save directly; else show SavePreviewDialog -> after save, persist SessionRecord -> reset session.
 
 ## Key files for first orientation
 
@@ -116,7 +119,9 @@ MailDrop/
 - UI/MailDropWpfTaskPane.xaml and UI/MailDropWpfTaskPane.xaml.vb: primary UI and event handling.
 - Core/Session.vb: central state object and business flow.
 - Core/InputChecker.vb: input validation and attachment rename dialog path handling.
-- Helpers/MailUtils.vb: Outlook MailItem metadata read/save operations.
+- Helpers/MailUtils.vb: Outlook MailItem metadata read (ReadMailMeta). File saving is done via lambdas in ProcessSession, not MailUtils.
+- Helpers/ErrorHandler.vb: BuildErrorString (walks InnerException chain) and ShowError helper.
+- UI/SavePreviewDialog.xaml and UI/SavePreviewDialog.xaml.vb: pre-save conflict preview table; SaveItem class (INotifyPropertyChanged, SaveItemStatus enum: Ok/Conflict/Skipped/Saved).
 - Helpers/DatabaseUtils.vb: SQLite persistence (SessionRecord) and retrieval of recent project paths.
 - Services/EmbeddingService.vb and Core/SuggestionEngine.vb: ONNX embedding and suggestion logic.
 
@@ -151,7 +156,10 @@ Note:
 - Feature weights are defined in FindBestRecord in Core/SuggestionEngine.vb and are applied independently during score aggregation. Weights do not need to sum to 1.0 — only relative ranking matters.
 - Distance lists are initialized with zeros at construction (length = historical record count). Fixed-feature subs overwrite them in PrepareSession(); mutable-feature subs overwrite them incrementally as the user edits fields.
 - Current feature weighting is heuristic constants in Core/SuggestionEngine.vb and may need tuning with real usage data.
-- In Core/InputChecker.vb, the Path.Combine call for ablageOrdnerPfad combines projektPfad and an already-combined projektstrukturPfad, which can duplicate path segments.
+- ProcessSession builds SaveItem instances with captured lambdas (folder, msg, attachments). Attachment lambdas capture a 1-based integer index into mail.Attachments; the index is captured via a local Dim inside the loop to avoid closure aliasing.
+- SavePreviewDialog handles file-exists conflicts (overwrite/rename/skip) and save-time folder creation failures (rename or cancel-all). When the folder is renamed during save, all non-folder item FullPaths are rebased to the new folder path.
+- If all SaveItems are Ok (no conflicts detected), SavePreviewDialog is never shown — ProcessSession saves directly.
+- MailUtils.ReadMailMeta throws InvalidOperationException for invalid selection; the caller (PrepareSession) catches and re-wraps the exception.
 - Text encoding/comments show mixed umlaut encoding artifacts in several files; prefer preserving existing file encoding unless intentionally normalizing.
 
 ## Conventions for Claude Code contributions
