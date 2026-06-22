@@ -121,12 +121,16 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonOk_Click(sender As Object, e As RoutedEventArgs)
-        Dim result As String = Session.ProcessSession()
-        If Not String.IsNullOrEmpty(result) Then
-            MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
-        Else
-            MessageBox.Show("Vorgang erfolgreich abgeschlossen.", "Info", MessageBoxButton.OK, MessageBoxImage.Information)
-        End If
+        Try
+            Dim result As String = Session.ProcessSession()
+            If Not String.IsNullOrEmpty(result) Then
+                MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
+            Else
+                MessageBox.Show("Vorgang erfolgreich abgeschlossen.", "Info", MessageBoxButton.OK, MessageBoxImage.Information)
+            End If
+        Catch ex As Exception
+            ErrorHandler.ShowError(ex)
+        End Try
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
