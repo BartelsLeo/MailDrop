@@ -21,6 +21,10 @@ Public Class ThisAddIn
     End Sub
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        DisconnectExplorer()
+    End Sub
+
+    Private Sub DisconnectExplorer()
         If _activeExplorer IsNot Nothing Then
             RemoveHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
             Marshal.ReleaseComObject(_activeExplorer)
@@ -61,6 +65,8 @@ Public Class ThisAddIn
                 taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
                 taskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
                 taskPane.Width = 1000
+            End If
+            If _activeExplorer Is Nothing Then
                 _activeExplorer = Application.ActiveExplorer()
                 AddHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
             End If
@@ -75,6 +81,7 @@ Public Class ThisAddIn
         If taskPane IsNot Nothing Then
             taskPane.Visible = False
         End If
+        DisconnectExplorer()
     End Sub
 
 End Class

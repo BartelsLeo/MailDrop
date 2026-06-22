@@ -88,7 +88,6 @@ Public Class SessionDatabaseManager
                         Dim pfad = reader("ProjektPfad").ToString()
                         If Not String.IsNullOrWhiteSpace(pfad) AndAlso Not result.Contains(pfad) Then
                             result.Add(pfad)
-                            If result.Count = 4 Then Exit While
                         End If
                     End While
                 End Using
