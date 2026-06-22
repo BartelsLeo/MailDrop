@@ -593,7 +593,7 @@ Public Class Session
         End Set
     End Property
 
-    <DisplayName("Datum")>
+    <DisplayName("Betreff Embedded")>
     Public Property BetreffEmbedded As Single()
         Get
             Return _betreffEmbedded
@@ -604,7 +604,7 @@ Public Class Session
         End Set
     End Property
 
-    <DisplayName("Betreff Embedded")>
+    <DisplayName("Datum")>
     Public Property Datum As DateTime
         Get
             Return _datum
