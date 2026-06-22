@@ -471,56 +471,76 @@ Public Class Session
             Dim checkedInput = InputChecker.CheckInput(Me)
             If checkedInput.ErrorMessage <> String.Empty Then Return checkedInput.ErrorMessage
 
+            Dim app As Outlook.Application = Globals.ThisAddIn.Application
+            Dim mail = TryCast(app.ActiveExplorer().Selection.Item(1), Outlook.MailItem)
+            If mail Is Nothing Then Return "Bitte wählen Sie eine einzelne E-Mail aus."
+
             Dim ablageOrdnerPfad = checkedInput.CheckedAblageOrdner
-            Dim ablageResult = Me.CreateAblageordner(ablageOrdnerPfad)
-            If ablageResult <> String.Empty Then Return ablageResult
+            Dim items As New List(Of SaveItem)
 
-            ' Paths recomputed here so they track any rename that happened in CreateAblageordner
-            Dim msgZielPfad = Path.Combine(ablageOrdnerPfad, Path.GetFileName(checkedInput.CheckedMsgZielpfad))
-            Dim anhZielpfade = New List(Of String)()
-            For Each p In checkedInput.CheckedAnhZielpfade
-                anhZielpfade.Add(Path.Combine(ablageOrdnerPfad, Path.GetFileName(p)))
-            Next
+            ' Folder item — always Ok initially; creation errors handled in TrySaveFolder
+            Dim folderItem As New SaveItem() With {
+                .DisplayName = Path.GetFileName(ablageOrdnerPfad),
+                .FullPath = ablageOrdnerPfad,
+                .IsFolder = True,
+                .Status = SaveItemStatus.Ok
+            }
+            folderItem.SaveAction = Sub(item) Directory.CreateDirectory(item.FullPath)
+            items.Add(folderItem)
 
-            Dim mailResult = MailUtils.SaveSelectedMailAsMsg(msgZielPfad)
-            If mailResult <> String.Empty Then Return mailResult
+            ' Msg file item
+            Dim msgFileName = Path.GetFileName(checkedInput.CheckedMsgZielpfad)
+            Dim msgPfad = Path.Combine(ablageOrdnerPfad, msgFileName)
+            Dim capturedMail = mail
+            Dim msgItem As New SaveItem() With {
+                .DisplayName = msgFileName,
+                .FullPath = msgPfad,
+                .IsFolder = False,
+                .Status = If(File.Exists(msgPfad), SaveItemStatus.Conflict, SaveItemStatus.Ok)
+            }
+            msgItem.SaveAction = Sub(item)
+                Dim path = If(item.FullPath.ToLower().EndsWith(".msg"), item.FullPath, item.FullPath & ".msg")
+                capturedMail.SaveAs(path, Outlook.OlSaveAsType.olMSG)
+            End Sub
+            items.Add(msgItem)
+
+            ' Attachment items
             If AnhaengeAblegen Then
-                Dim anhangResult = MailUtils.SaveMailAttachments(anhZielpfade)
-                If anhangResult <> String.Empty Then Return anhangResult
+                For i As Integer = 0 To checkedInput.CheckedAnhZielpfade.Count - 1
+                    Dim anhFileName = Path.GetFileName(checkedInput.CheckedAnhZielpfade(i))
+                    Dim anhPfad = Path.Combine(ablageOrdnerPfad, anhFileName)
+                    Dim capturedIdx = i + 1  ' Outlook Attachments collection is 1-based
+                    Dim anhItem As New SaveItem() With {
+                        .DisplayName = anhFileName,
+                        .FullPath = anhPfad,
+                        .IsFolder = False,
+                        .Status = If(File.Exists(anhPfad), SaveItemStatus.Conflict, SaveItemStatus.Ok)
+                    }
+                    anhItem.SaveAction = Sub(item) capturedMail.Attachments(capturedIdx).SaveAsFile(item.FullPath)
+                    items.Add(anhItem)
+                Next
             End If
+
+            ' If no conflicts: skip dialog, save directly
+            If items.All(Function(i) i.Status = SaveItemStatus.Ok) Then
+                For Each item In items
+                    Try
+                        item.SaveAction(item)
+                    Catch ex As Exception
+                        Return $"Fehler beim Speichern von '{item.DisplayName}': {ex.Message}"
+                    End Try
+                Next
+            Else
+                Dim dlg As New SavePreviewDialog(items)
+                If dlg.ShowDialog() <> True Then Return "Vorgang abgebrochen."
+            End If
+
             ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
             Task.Run(Sub() ThisAddIn.CachedSuggestionEngine = New SuggestionEngine())
             Me.Reset()
             Return String.Empty
         Catch ex As Exception
             Return ErrorHandler.BuildErrorString(ex)
-        End Try
-    End Function
-
-    Private Function CreateAblageordner(ByRef ablageOrdnerPfad As String) As String
-        Try
-            Directory.CreateDirectory(ablageOrdnerPfad)
-            Return String.Empty
-        Catch ex As Exception
-            ' Ordner konnte nicht erstellt werden: Umbenennen / Abbrechen
-            Dim parentPath = Path.GetDirectoryName(ablageOrdnerPfad)
-            Dim dlgResult = System.Windows.MessageBox.Show(
-                $"Der Ordner ""{Path.GetFileName(ablageOrdnerPfad)}"" konnte nicht erstellt werden:{vbCrLf}{ex.Message}{vbCrLf}{vbCrLf}Soll ein anderer Ordnername vergeben werden?",
-                "Ordner nicht erstellbar",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Warning)
-            If dlgResult <> System.Windows.MessageBoxResult.Yes Then Return "Vorgang abgebrochen."
-            Dim newName = InputChecker.ShowAttachmentRenameDialog(
-                Path.GetFileName(ablageOrdnerPfad), parentPath,
-                "Bitte geben Sie einen neuen Ordnernamen ein:", "Ordner umbenennen")
-            If String.IsNullOrEmpty(newName) Then Return "Vorgang abgebrochen."
-            ablageOrdnerPfad = Path.Combine(parentPath, newName)
-            Try
-                Directory.CreateDirectory(ablageOrdnerPfad)
-                Return String.Empty
-            Catch ex2 As Exception
-                Return $"Fehler beim Erstellen des Ablageordners: {ex2.Message}"
-            End Try
         End Try
     End Function
 
