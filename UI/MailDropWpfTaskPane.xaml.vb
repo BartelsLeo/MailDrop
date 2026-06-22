@@ -64,7 +64,12 @@ Public Class MailDropWpfTaskPane
                     Dispatcher.BeginInvoke(New Action(Sub()
                         _applyingTreeViewSuggestion = True
                         Dim tvi = FindTreeViewItem(TreeView1, targetPath)
-                        If tvi IsNot Nothing Then tvi.IsSelected = True
+                        If tvi IsNot Nothing Then
+                            tvi.IsSelected = True
+                        Else
+                            Session.IsSuggestedProjektstrukturPfad = False
+                            HideSparkle(SparkleProjektstrukturPfad)
+                        End If
                         _applyingTreeViewSuggestion = False
                     End Sub))
                 End If

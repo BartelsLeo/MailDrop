@@ -561,6 +561,7 @@ Public Class Session
             If _absenderKurz <> value Then
                 _absenderKurz = value
                 OnPropertyChanged(NameOf(AbsenderKurz))
+                UpdateResolvedAfterTitelChange()
                 SuggestionEngineInstance?.RecalculateAbsenderKurzDistances(Me)
                 Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
                 If Not String.IsNullOrWhiteSpace(suggestedAbl) Then

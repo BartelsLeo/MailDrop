@@ -340,7 +340,7 @@ Public Class SuggestionEngine
     Private Function TokenizeForSimilarity(value As String) As IEnumerable(Of String)
         Return value _
             .ToLowerInvariant() _
-            .Split(New Char() {" "c, "_"c, "-"c, "."c, "/"c, "\\"c, ","c, ";"c, ":"c, "("c, ")"c, "["c, "]"c}, StringSplitOptions.RemoveEmptyEntries) _
+            .Split(New Char() {" "c, "_"c, "-"c, "."c, "/"c, "\"c, ","c, ";"c, ":"c, "("c, ")"c, "["c, "]"c}, StringSplitOptions.RemoveEmptyEntries) _
             .Where(Function(token) token.Trim().Length > 0)
     End Function
 
