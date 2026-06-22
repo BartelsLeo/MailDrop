@@ -13,7 +13,7 @@ Public Class ThisAddIn
     Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
     Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
     Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
-    Public Shared Property CachedSuggestionEngine As SuggestionEngine
+    Public Shared CachedSuggestionEngine As SuggestionEngine
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
         CurrentDatabaseManager = New SessionDatabaseManager()
@@ -29,7 +29,11 @@ Public Class ThisAddIn
     End Sub
 
     Private Sub Explorer_SelectionChange()
-        MailSelected()
+        Try
+            MailSelected()
+        Catch ex As Exception
+            ErrorHandler.ShowError(ex)
+        End Try
     End Sub
 
     Private Sub MailSelected()
@@ -50,17 +54,21 @@ Public Class ThisAddIn
     End Function
 
     Public Sub MailAblegen_Click(control As Object)
-        If taskPane Is Nothing Then
-            Dim paneControl As New MailDropWpfHostControl()
-            _wpfTaskPane = paneControl.WpfTaskPane
-            taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
-            taskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-            taskPane.Width = 1000
-            _activeExplorer = Application.ActiveExplorer()
-            AddHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
-        End If
-        MailSelected()
-        taskPane.Visible = True
+        Try
+            If taskPane Is Nothing Then
+                Dim paneControl As New MailDropWpfHostControl()
+                _wpfTaskPane = paneControl.WpfTaskPane
+                taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
+                taskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                taskPane.Width = 1000
+                _activeExplorer = Application.ActiveExplorer()
+                AddHandler _activeExplorer.SelectionChange, AddressOf Explorer_SelectionChange
+            End If
+            MailSelected()
+            taskPane.Visible = True
+        Catch ex As Exception
+            ErrorHandler.ShowError(ex)
+        End Try
     End Sub
 
     Public Sub HideTaskPane()

@@ -69,7 +69,7 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If
-        Dim ablageOrdnerPfad As String = Path.Combine(projektPfad, projektstrukturPfad, session.AblageordnerAufgeloest)
+        Dim ablageOrdnerPfad As String = Path.Combine(projektstrukturPfad, session.AblageordnerAufgeloest)
         Dim ablageOrdnerCheck = CheckFolderNameAndPath(ablageOrdnerPfad)
         If ablageOrdnerCheck <> String.Empty Then
             result.ErrorMessage = ablageOrdnerCheck

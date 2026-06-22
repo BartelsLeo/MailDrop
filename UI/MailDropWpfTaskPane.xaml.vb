@@ -64,7 +64,12 @@ Public Class MailDropWpfTaskPane
                     Dispatcher.BeginInvoke(New Action(Sub()
                         _applyingTreeViewSuggestion = True
                         Dim tvi = FindTreeViewItem(TreeView1, targetPath)
-                        If tvi IsNot Nothing Then tvi.IsSelected = True
+                        If tvi IsNot Nothing Then
+                            tvi.IsSelected = True
+                        Else
+                            Session.IsSuggestedProjektstrukturPfad = False
+                            HideSparkle(SparkleProjektstrukturPfad)
+                        End If
                         _applyingTreeViewSuggestion = False
                     End Sub))
                 End If
@@ -121,12 +126,16 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonOk_Click(sender As Object, e As RoutedEventArgs)
-        Dim result As String = Session.ProcessSession()
-        If Not String.IsNullOrEmpty(result) Then
-            MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
-        Else
-            MessageBox.Show("Vorgang erfolgreich abgeschlossen.", "Info", MessageBoxButton.OK, MessageBoxImage.Information)
-        End If
+        Try
+            Dim result As String = Session.ProcessSession()
+            If Not String.IsNullOrEmpty(result) Then
+                MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
+            Else
+                MessageBox.Show("Vorgang erfolgreich abgeschlossen.", "Info", MessageBoxButton.OK, MessageBoxImage.Information)
+            End If
+        Catch ex As Exception
+            ErrorHandler.ShowError(ex)
+        End Try
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)

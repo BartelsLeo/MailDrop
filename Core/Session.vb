@@ -9,7 +9,7 @@ Public Class Session
 
     Private _projektPfad As String
     Private _titel As String
-    Private _anhaengeAblegen As Boolean
+    Private _anhaengeAblegen As Boolean = True
     Private _projektstrukturPfad As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
     Private _ablageordnerSchema As String
@@ -236,7 +236,7 @@ Public Class Session
         MsgDateinameSchema = String.Empty
         _msgDateinameAufgeloest = String.Empty
         MsgDateinameFeld = String.Empty
-        AnhaengeAblegen = False
+        AnhaengeAblegen = True
         ProjektstrukturPfad = Nothing
         IsSuggestedProjektPfad = False
         IsSuggestedProjektstrukturPfad = False
@@ -354,34 +354,31 @@ Public Class Session
     End Sub
 
     Public Sub PrepareSession()
-        Reset()
-        MailUtils.ReadMailMeta(Me)
-        ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
-        GetProjektVerzeichnisse()
+        Try
+            Reset()
+            MailUtils.ReadMailMeta(Me)
+            GetProjektVerzeichnisse()
 
-        ' Reuse pre-loaded engine if ready, otherwise create synchronously on the click path.
-        If ThisAddIn.CachedSuggestionEngine IsNot Nothing Then
-            SuggestionEngineInstance = ThisAddIn.CachedSuggestionEngine
-            ThisAddIn.CachedSuggestionEngine = Nothing
-        Else
-            SuggestionEngineInstance = New SuggestionEngine()
-        End If
+            Try
+                Dim cached = Threading.Interlocked.Exchange(Of SuggestionEngine)(ThisAddIn.CachedSuggestionEngine, Nothing)
+                SuggestionEngineInstance = If(cached IsNot Nothing, cached, New SuggestionEngine())
+                SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
+            Catch ex As Exception
+                Throw New Exception("SuggestionEngine konnte nicht initialisiert werden", ex)
+            End Try
 
-        ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
-        SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
-
-        ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
-        Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
-
-        ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
-        If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
-            If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
-                ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
+            Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
+            If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
+                If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
+                    ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
+                End If
+                SuggestProjektPfad(suggestedProjektPfad)
             End If
-            SuggestProjektPfad(suggestedProjektPfad)
-        End If
 
-        Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
+            Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
+        Catch ex As Exception
+            Throw New Exception("Sitzungsvorbereitung fehlgeschlagen", ex)
+        End Try
     End Sub
 
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
@@ -470,28 +467,24 @@ Public Class Session
     End Sub
 
     Public Function ProcessSession() As String
-        Dim checkedInput = InputChecker.CheckInput(Me)
-        If checkedInput.ErrorMessage <> String.Empty Then
-            Return checkedInput.ErrorMessage
-        End If
-        Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
-        If ablageResult <> String.Empty Then
-            Return ablageResult
-        End If
-        Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
-        If mailResult <> String.Empty Then
-            Return mailResult
-        End If
-        If AnhaengeAblegen Then
-            Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
-            If anhangResult <> String.Empty Then
-                Return anhangResult
+        Try
+            Dim checkedInput = InputChecker.CheckInput(Me)
+            If checkedInput.ErrorMessage <> String.Empty Then Return checkedInput.ErrorMessage
+            Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
+            If ablageResult <> String.Empty Then Return ablageResult
+            Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
+            If mailResult <> String.Empty Then Return mailResult
+            If AnhaengeAblegen Then
+                Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
+                If anhangResult <> String.Empty Then Return anhangResult
             End If
-        End If
-        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
-        Task.Run(Sub() ThisAddIn.CachedSuggestionEngine = New SuggestionEngine())
-        Me.Reset()
-        Return String.Empty
+            ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
+            Task.Run(Sub() ThisAddIn.CachedSuggestionEngine = New SuggestionEngine())
+            Me.Reset()
+            Return String.Empty
+        Catch ex As Exception
+            Return ErrorHandler.BuildErrorString(ex)
+        End Try
     End Function
 
     Private Function CreateAblageordner(ablageOrdnerPfad As String) As String
@@ -564,6 +557,7 @@ Public Class Session
             If _absenderKurz <> value Then
                 _absenderKurz = value
                 OnPropertyChanged(NameOf(AbsenderKurz))
+                UpdateResolvedAfterTitelChange()
                 SuggestionEngineInstance?.RecalculateAbsenderKurzDistances(Me)
                 Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
                 If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
@@ -599,7 +593,7 @@ Public Class Session
         End Set
     End Property
 
-    <DisplayName("Datum")>
+    <DisplayName("Betreff Embedded")>
     Public Property BetreffEmbedded As Single()
         Get
             Return _betreffEmbedded
@@ -610,7 +604,7 @@ Public Class Session
         End Set
     End Property
 
-    <DisplayName("Betreff Embedded")>
+    <DisplayName("Datum")>
     Public Property Datum As DateTime
         Get
             Return _datum
