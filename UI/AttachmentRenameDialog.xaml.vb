@@ -7,9 +7,13 @@ Public Class AttachmentRenameDialog
     Private Const MaxPathLength As Integer = 255
     Private ReadOnly _basePath As String
 
-    Public Sub New(currentName As String, basePath As String)
+    Public Sub New(currentName As String, basePath As String,
+                   Optional hintText As String = Nothing,
+                   Optional windowTitle As String = Nothing)
         InitializeComponent()
         _basePath = basePath
+        If hintText IsNot Nothing Then TextBlockHint.Text = hintText
+        If windowTitle IsNot Nothing Then Me.Title = windowTitle
         TextBoxFileName.Text = currentName
         TextBoxFileName.SelectAll()
         TextBoxFileName.Focus()
@@ -31,7 +35,7 @@ Public Class AttachmentRenameDialog
         Dim fullPath = Path.Combine(_basePath, TextBoxFileName.Text)
         Dim overlength As Integer = fullPath.Length - MaxPathLength
         If overlength > 0 Then
-            TextBlockOverlength.Text = $"Überlänge von {overlength} Zeichen"
+            TextBlockOverlength.Text = $"ï¿½berlï¿½nge von {overlength} Zeichen"
             TextBlockOverlength.Visibility = Visibility.Visible
         Else
             TextBlockOverlength.Text = String.Empty
