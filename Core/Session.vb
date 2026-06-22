@@ -9,7 +9,7 @@ Public Class Session
 
     Private _projektPfad As String
     Private _titel As String
-    Private _anhaengeAblegen As Boolean
+    Private _anhaengeAblegen As Boolean = True
     Private _projektstrukturPfad As String
     Private _treeViewData As ObservableCollection(Of DirectoryNode)
     Private _ablageordnerSchema As String
@@ -236,7 +236,7 @@ Public Class Session
         MsgDateinameSchema = String.Empty
         _msgDateinameAufgeloest = String.Empty
         MsgDateinameFeld = String.Empty
-        AnhaengeAblegen = False
+        AnhaengeAblegen = True
         ProjektstrukturPfad = Nothing
         IsSuggestedProjektPfad = False
         IsSuggestedProjektstrukturPfad = False
