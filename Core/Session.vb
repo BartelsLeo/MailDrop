@@ -381,11 +381,10 @@ Public Class Session
         End Try
     End Sub
 
-    ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
+    ' Holt die letzten 10 eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
     Public Sub GetProjektVerzeichnisse()
         Dim verzeichnisse = ThisAddIn.CurrentDatabaseManager.GetLastProjektVerzeichnisseForUser(Me.AusfueBenutzer)
-        ' Maximal 3 aus der DB, letzter Eintrag immer "anderes..."
-        Dim list As New List(Of String)(verzeichnisse.Take(3))
+        Dim list As New List(Of String)(verzeichnisse)
         list.Add("anderes...")
         ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
         Debug.WriteLine($"[Session] ProjektVerzeichnisse f�r Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
@@ -396,8 +395,8 @@ Public Class Session
     End Sub
 
     Public Sub CancelSession()
+        Reset()
         Debug.WriteLine("[Session] CancelSession ausgef�hrt")
-        ' TODO: Implementiere die Logik f�r das Abbrechen der Session
     End Sub
 
     Public Sub HandleProjektSelection(selectedValue As String, uiContext As System.Windows.Window)

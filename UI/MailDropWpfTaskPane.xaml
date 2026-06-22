@@ -70,7 +70,8 @@
                 <ListBox x:Name="ListBox1"
                          ItemsSource="{Binding ProjektVerzeichnisse}"
                          SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Grid.Column="0" HorizontalAlignment="Stretch">
+                         Grid.Column="0" HorizontalAlignment="Stretch" MaxHeight="160"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">

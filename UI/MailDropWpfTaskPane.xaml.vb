@@ -139,15 +139,14 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
-        ' Schlie�e InfoPopup, falls offen
         If infoPopup IsNot Nothing AndAlso infoPopup.IsLoaded Then
             infoPopup.Close()
             infoPopup = Nothing
         End If
+        Session.CancelSession()
         Try
             Globals.ThisAddIn.HideTaskPane()
         Catch
-            ' Fallback: Fenster schlie�en
             Dim wnd = Window.GetWindow(Me)
             If wnd IsNot Nothing Then wnd.Close()
         End Try
