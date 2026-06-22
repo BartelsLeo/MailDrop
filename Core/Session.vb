@@ -396,6 +396,7 @@ Public Class Session
 
     Public Sub CancelSession()
         Reset()
+        Task.Run(Sub() ThisAddIn.CachedSuggestionEngine = New SuggestionEngine())
         Debug.WriteLine("[Session] CancelSession ausgef�hrt")
     End Sub
 
