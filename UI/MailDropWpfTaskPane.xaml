@@ -25,9 +25,39 @@
             <Border Grid.Row="0" Background="#F0F0F0" BorderBrush="#CCCCCC" BorderThickness="0,0,0,1"
                     Padding="6,6,6,6" Margin="0,0,0,8">
                 <StackPanel>
-                    <TextBlock Text="{Binding Betreff}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="12"/>
-                    <TextBlock Text="{Binding Datum, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
-                               Foreground="#666666" FontSize="11" Margin="0,2,0,0"/>
+                    <TextBlock Text="(keine Mail ausgew&#228;hlt)" FontStyle="Italic" Foreground="#999999" FontSize="12">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Betreff}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Betreff}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Betreff}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Betreff}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="{Binding Betreff}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="12"/>
+                        <TextBlock Text="{Binding Datum, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
+                                   Foreground="#666666" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="1" HorizontalAlignment="Stretch"/>
