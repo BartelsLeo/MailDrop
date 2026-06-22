@@ -360,12 +360,8 @@ Public Class Session
             GetProjektVerzeichnisse()
 
             Try
-                If ThisAddIn.CachedSuggestionEngine IsNot Nothing Then
-                    SuggestionEngineInstance = ThisAddIn.CachedSuggestionEngine
-                    ThisAddIn.CachedSuggestionEngine = Nothing
-                Else
-                    SuggestionEngineInstance = New SuggestionEngine()
-                End If
+                Dim cached = Threading.Interlocked.Exchange(Of SuggestionEngine)(ThisAddIn.CachedSuggestionEngine, Nothing)
+                SuggestionEngineInstance = If(cached IsNot Nothing, cached, New SuggestionEngine())
                 SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
             Catch ex As Exception
                 Throw New Exception("SuggestionEngine konnte nicht initialisiert werden", ex)

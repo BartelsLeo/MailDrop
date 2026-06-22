@@ -13,7 +13,7 @@ Public Class ThisAddIn
     Public Shared ReadOnly Property DbPath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop", "sessions.db")
     Public Shared ReadOnly Property DbDirectory As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MailDrop")
     Public Shared Property CurrentDatabaseManager As SessionDatabaseManager
-    Public Shared Property CachedSuggestionEngine As SuggestionEngine
+    Public Shared CachedSuggestionEngine As SuggestionEngine
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
         CurrentDatabaseManager = New SessionDatabaseManager()
