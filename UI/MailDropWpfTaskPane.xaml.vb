@@ -196,4 +196,10 @@ Public Class MailDropWpfTaskPane
             Debug.WriteLine("ProjektstrukturPfad (relativ) gesetzt: " & node.RelativePath)
         End If
     End Sub
+    Private Sub UserControl_PreviewKeyDown(sender As Object, e As System.Windows.Input.KeyEventArgs)
+        If e.Key = System.Windows.Input.Key.Enter AndAlso ButtonOk.IsEnabled Then
+            ButtonOk_Click(ButtonOk, New RoutedEventArgs())
+            e.Handled = True
+        End If
+    End Sub
 End Class
