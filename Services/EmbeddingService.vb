@@ -1,13 +1,14 @@
 Imports System.IO
-Imports System.Reflection
 Imports Microsoft.ML.OnnxRuntime
 Imports Microsoft.ML.OnnxRuntime.Tensors
 Imports Microsoft.ML.Tokenizers
 
 Public Class EmbeddingService
+    Implements IDisposable
 
     Private ReadOnly _session As InferenceSession
     Private ReadOnly _tokenizer As BertTokenizer
+    Private _disposed As Boolean = False
 
     Public Sub New()
         Dim codeBase As String = System.Reflection.Assembly.GetExecutingAssembly().CodeBase
@@ -66,5 +67,12 @@ Public Class EmbeddingService
         Dim norm As Double = Math.Sqrt(vector.Sum(Function(x) CDbl(x) * x))
         Return vector.Select(Function(x) CSng(x / norm)).ToArray()
     End Function
+
+    Public Sub Dispose() Implements IDisposable.Dispose
+        If Not _disposed Then
+            _session?.Dispose()
+            _disposed = True
+        End If
+    End Sub
 
 End Class

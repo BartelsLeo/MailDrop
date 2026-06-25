@@ -1,7 +1,14 @@
 ﻿Imports System.IO
-Imports System.Collections.ObjectModel
+Imports System.Runtime.InteropServices
 
 Public Module InputChecker
+    Private Sub ReleaseComObjectSafe(comObject As Object)
+        If comObject Is Nothing Then Return
+        If Marshal.IsComObject(comObject) Then
+            Marshal.FinalReleaseComObject(comObject)
+        End If
+    End Sub
+
     ' Hilfsklasse für die geprüften Pfade
     Public Class CheckedInputResult
         Public Property CheckedAblageOrdner As String
@@ -69,7 +76,7 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If
-        Dim ablageOrdnerPfad As String = Path.Combine(projektPfad, projektstrukturPfad, session.AblageordnerAufgeloest)
+        Dim ablageOrdnerPfad As String = Path.Combine(projektstrukturPfad, session.AblageordnerAufgeloest)
         Dim ablageOrdnerCheck = CheckFolderNameAndPath(ablageOrdnerPfad)
         If ablageOrdnerCheck <> String.Empty Then
             result.ErrorMessage = ablageOrdnerCheck
@@ -89,31 +96,43 @@ Public Module InputChecker
         result.CheckedMsgZielpfad = msgZielPfad
         If session.AnhaengeAblegen Then
             Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer = app.ActiveExplorer()
-            If explorer IsNot Nothing AndAlso explorer.Selection.Count = 1 Then
-                Dim mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
-                If mail IsNot Nothing Then
-                    For i As Integer = 1 To mail.Attachments.Count
-                        Dim att = mail.Attachments(i)
-                        Dim anhangName = att.FileName
-                        Dim anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
-                        If anhangPfad.Length > 255 Then
-                            Dim newName = ShowAttachmentRenameDialog(anhangName, ablageOrdnerPfad)
-                            If String.IsNullOrEmpty(newName) Then
-                                Continue For
-                            End If
-                            anhangName = newName
-                            anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
-                        End If
-                        Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
-                        If anhangNameCheck <> String.Empty Then
-                            result.ErrorMessage = anhangNameCheck
-                            Return result
-                        End If
-                        result.CheckedAnhZielpfade.Add(anhangPfad)
-                    Next
+            Dim explorer As Object = Nothing
+            Dim mail As Object = Nothing
+            Try
+                explorer = app.ActiveExplorer()
+                If explorer IsNot Nothing AndAlso explorer.Selection.Count = 1 Then
+                    mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+                    If mail IsNot Nothing Then
+                        For i As Integer = 1 To mail.Attachments.Count
+                            Dim att As Object = Nothing
+                            Try
+                                att = mail.Attachments(i)
+                                Dim anhangName = att.FileName
+                                Dim anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
+                                If anhangPfad.Length > 255 Then
+                                    Dim newName = ShowAttachmentRenameDialog(anhangName, ablageOrdnerPfad)
+                                    If String.IsNullOrEmpty(newName) Then
+                                        Continue For
+                                    End If
+                                    anhangName = newName
+                                    anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
+                                End If
+                                Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
+                                If anhangNameCheck <> String.Empty Then
+                                    result.ErrorMessage = anhangNameCheck
+                                    Return result
+                                End If
+                                result.CheckedAnhZielpfade.Add(anhangPfad)
+                            Finally
+                                ReleaseComObjectSafe(att)
+                            End Try
+                        Next
+                    End If
                 End If
-            End If
+            Finally
+                ReleaseComObjectSafe(mail)
+                ReleaseComObjectSafe(explorer)
+            End Try
         End If
         Return result
     End Function
