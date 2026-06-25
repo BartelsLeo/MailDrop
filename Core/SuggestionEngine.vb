@@ -12,6 +12,7 @@ Public Class SuggestionEngine
     Private Property AbsenderDomainDistances As List(Of Double)
     Private Property AbsenderDistances As List(Of Double)
     Private Property AusfueBenutzerDistances As List(Of Double)
+    Private Property AusfueDatumDistances As List(Of Double)
     Private Property TitelDistances As List(Of Double)
     Private Property AbsenderKurzDistances As List(Of Double)
     Private Property AblageordnerDistances As List(Of Double)
@@ -34,6 +35,7 @@ Public Class SuggestionEngine
         RecalculateAbsenderDomainDistances(session)
         RecalculateAbsenderDistances(session)
         RecalculateAusfueBenutzerDistances(session)
+        RecalculateAusfueDatumDistances(session)
 
         ' Mutable Features sind zur Initialisierungszeit leer – 0 als Startwert.
         Dim recordCount = EnginesHistoricalSessionRecords.Count
@@ -92,6 +94,16 @@ Public Class SuggestionEngine
             newDistances.Add(CalculateCategoricalSimilarity(session.AusfueBenutzer, record.AusfueBenutzer))
         Next
         AusfueBenutzerDistances = newDistances
+    End Sub
+
+    Public Sub RecalculateAusfueDatumDistances(session As Session)
+        If session Is Nothing Then Return
+        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        Dim maxDistance = GetMaxDateDistanceInDays(session.AusfueDatum)
+        For Each record In EnginesHistoricalSessionRecords
+            newDistances.Add(CalculateDateSimilarity(session.AusfueDatum, record.AusfueDatum, maxDistance))
+        Next
+        AusfueDatumDistances = newDistances
     End Sub
 
     ' === Mutable Features – ausgelöst bei Feldänderung über Session-Property-Setter ===
@@ -185,6 +197,7 @@ Public Class SuggestionEngine
         Dim weights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.1},
             {"Datum", 0.1},
+            {"AusfueDatum", 0.05},
             {"AbsenderDomain", 0.3},
             {"Absender", 0.2},
             {"AusfueBenutzer", 0.2},
@@ -211,6 +224,7 @@ Public Class SuggestionEngine
             Dim score =
                 WeightedFeatureScore(weights, "Betreff", BetreffDistances(i)) +
                 WeightedFeatureScore(weights, "Datum", DatumsDistances(i)) +
+                WeightedFeatureScore(weights, "AusfueDatum", AusfueDatumDistances(i)) +
                 WeightedFeatureScore(weights, "AbsenderDomain", AbsenderDomainDistances(i)) +
                 WeightedFeatureScore(weights, "Absender", AbsenderDistances(i)) +
                 WeightedFeatureScore(weights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
@@ -236,6 +250,7 @@ Public Class SuggestionEngine
     Private ReadOnly _defaultWeights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
         {"Betreff", 0.3},
         {"Datum", 0.15},
+        {"AusfueDatum", 0.05},
         {"AbsenderDomain", 0.08},
         {"Absender", 0.08},
         {"AusfueBenutzer", 0.15},
