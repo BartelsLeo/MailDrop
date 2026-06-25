@@ -180,23 +180,28 @@ Public Class SuggestionEngine
         Return If(FindBestRecord(Function(r) r.MsgDateinameSchema)?.MsgDateinameSchema, String.Empty)
     End Function
 
-    ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
-    Private Function FindBestRecord(fieldSelector As Func(Of SessionRecord, String)) As SessionRecord
-        ' Die Feature-Gewichte werden hier definiert, damit Scoring-Logik und Tuning-Werte gemeinsam gepflegt werden.
-        Dim featureWeights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.3},
-            {"Datum", 0.15},
-            {"AbsenderDomain", 0.08},
-            {"Absender", 0.08},
-            {"AusfueBenutzer", 0.15},
-            {"Titel", 0.1},
+    Public Function SuggestAnhaengeAblegen(session As Session) As Boolean?
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        Dim weights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
+            {"Betreff", 0.1},
+            {"Datum", 0.1},
+            {"AbsenderDomain", 0.3},
+            {"Absender", 0.2},
+            {"AusfueBenutzer", 0.2},
+            {"Titel", 0.05},
             {"AbsenderKurz", 0.05},
-            {"Ablageordner", 0.07},
+            {"Ablageordner", 0.1},
             {"MsgDateinameSchema", 0.03},
             {"ProjektPfad", 0.04},
             {"ProjektstrukturPfad", 0.03}
         }
+        Dim best = FindBestRecord(Function(r) r.AnhaengeAblegen.ToString(), weights)
+        If best Is Nothing Then Return Nothing
+        Return best.AnhaengeAblegen
+    End Function
 
+    ' Shared scoring core. fieldSelector skips records with an empty target field.
+    Private Function FindBestRecord(fieldSelector As Func(Of SessionRecord, String), weights As Dictionary(Of String, Double)) As SessionRecord
         Dim bestScore As Double = Double.MinValue
         Dim bestRecord As SessionRecord = Nothing
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
@@ -204,28 +209,46 @@ Public Class SuggestionEngine
             If String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
 
             Dim score =
-                WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Datum", DatumsDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AbsenderDomain", AbsenderDomainDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AbsenderKurz", AbsenderKurzDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "MsgDateinameSchema", MsgDateinameSchemaDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
+                WeightedFeatureScore(weights, "Betreff", BetreffDistances(i)) +
+                WeightedFeatureScore(weights, "Datum", DatumsDistances(i)) +
+                WeightedFeatureScore(weights, "AbsenderDomain", AbsenderDomainDistances(i)) +
+                WeightedFeatureScore(weights, "Absender", AbsenderDistances(i)) +
+                WeightedFeatureScore(weights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
+                WeightedFeatureScore(weights, "Titel", TitelDistances(i)) +
+                WeightedFeatureScore(weights, "AbsenderKurz", AbsenderKurzDistances(i)) +
+                WeightedFeatureScore(weights, "Ablageordner", AblageordnerDistances(i)) +
+                WeightedFeatureScore(weights, "MsgDateinameSchema", MsgDateinameSchemaDistances(i)) +
+                WeightedFeatureScore(weights, "ProjektPfad", ProjektPfadDistances(i)) +
+                WeightedFeatureScore(weights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
 
             If score > bestScore Then
                 bestScore = score
                 bestRecord = record
             End If
         Next
-
         If bestRecord IsNot Nothing Then
             Debug.WriteLine($"[SuggestionEngine] Best score: {bestScore}, ProjektPfad: {bestRecord.ProjektPfad}")
         End If
         Return bestRecord
+    End Function
+
+    ' Default weights used by all String-field suggestions.
+    Private ReadOnly _defaultWeights As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
+        {"Betreff", 0.3},
+        {"Datum", 0.15},
+        {"AbsenderDomain", 0.08},
+        {"Absender", 0.08},
+        {"AusfueBenutzer", 0.15},
+        {"Titel", 0.1},
+        {"AbsenderKurz", 0.05},
+        {"Ablageordner", 0.07},
+        {"MsgDateinameSchema", 0.03},
+        {"ProjektPfad", 0.04},
+        {"ProjektstrukturPfad", 0.03}
+    }
+
+    Private Function FindBestRecord(fieldSelector As Func(Of SessionRecord, String)) As SessionRecord
+        Return FindBestRecord(fieldSelector, _defaultWeights)
     End Function
 
     ' Erzeugt das Embedding für den aktuellen Betreff und speichert es in der Session.

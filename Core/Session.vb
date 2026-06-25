@@ -34,6 +34,7 @@ Public Class Session
     Private _isSuggestedAbsenderKurz As Boolean
     Private _isSuggestedAblageordnerSchema As Boolean
     Private _isSuggestedMsgDateinameSchema As Boolean
+    Private _isSuggestedAnhaengeAblegen As Boolean
 
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
@@ -244,6 +245,7 @@ Public Class Session
         IsSuggestedAbsenderKurz = False
         IsSuggestedAblageordnerSchema = False
         IsSuggestedMsgDateinameSchema = False
+        IsSuggestedAnhaengeAblegen = False
         Debug.WriteLine("[Session] Reset ausgef�hrt")
     End Sub
 
@@ -321,6 +323,18 @@ Public Class Session
         End Set
     End Property
 
+    Public Property IsSuggestedAnhaengeAblegen As Boolean
+        Get
+            Return _isSuggestedAnhaengeAblegen
+        End Get
+        Set(value As Boolean)
+            If _isSuggestedAnhaengeAblegen <> value Then
+                _isSuggestedAnhaengeAblegen = value
+                OnPropertyChanged(NameOf(IsSuggestedAnhaengeAblegen))
+            End If
+        End Set
+    End Property
+
     Public Sub SuggestProjektPfad(value As String)
         ProjektPfad = value
         IsSuggestedProjektPfad = True
@@ -353,6 +367,11 @@ Public Class Session
         IsSuggestedMsgDateinameSchema = True
     End Sub
 
+    Public Sub SuggestAnhaengeAblegen(value As Boolean)
+        AnhaengeAblegen = value
+        IsSuggestedAnhaengeAblegen = True
+    End Sub
+
     Public Sub PrepareSession()
         Try
             Reset()
@@ -373,6 +392,11 @@ Public Class Session
                     ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
                 End If
                 SuggestProjektPfad(suggestedProjektPfad)
+            End If
+
+            Dim suggestedAnhaenge = SuggestionEngineInstance.SuggestAnhaengeAblegen(Me)
+            If suggestedAnhaenge.HasValue Then
+                SuggestAnhaengeAblegen(suggestedAnhaenge.Value)
             End If
 
             Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
