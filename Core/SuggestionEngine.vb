@@ -113,6 +113,9 @@ Public Class SuggestionEngine
             newDistances.Add(CalculateCosineSimilarity(currentEmbedding, record.BetreffEmbedded))
         Next
         BetreffDistances = newDistances
+        Debug.WriteLine("[SuggestionEngine] BetreffDistances: " &
+            String.Join(", ", EnginesHistoricalSessionRecords.Select(
+                Function(r, i) $"Id={r.ID}:{newDistances(i):F3}")))
     End Sub
 
     Public Sub RecalculateDatumsDistances(session As Session)
@@ -222,12 +225,18 @@ Public Class SuggestionEngine
 
     Public Function SuggestAblageordnerSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema")?.AblageordnerSchema, String.Empty)
+        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema")
+        If best IsNot Nothing Then Return best.AblageordnerSchema
+        Dim fallback = FindBestRecordByField(Function(r) r.AblageordnerAufgeloest, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema_fallback")
+        Return If(fallback?.AblageordnerAufgeloest, String.Empty)
     End Function
 
     Public Function SuggestMsgDateinameSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.MsgDateinameSchema, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema")?.MsgDateinameSchema, String.Empty)
+        Dim best = FindBestRecordByField(Function(r) r.MsgDateinameSchema, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema")
+        If best IsNot Nothing Then Return best.MsgDateinameSchema
+        Dim fallback = FindBestRecordByField(Function(r) r.MsgDateinameAufgeloest, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema_fallback")
+        Return If(fallback?.MsgDateinameAufgeloest, String.Empty)
     End Function
 
     Public Function SuggestAnhaengeAblegen(session As Session) As Boolean?
@@ -266,6 +275,10 @@ Public Class SuggestionEngine
             End If
         Next
 
+        If bestRecord Is Nothing Then
+            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no matching record found (records with non-empty field: " &
+                $"{EnginesHistoricalSessionRecords.Count(Function(r) Not String.IsNullOrWhiteSpace(fieldSelector(r)))} of {EnginesHistoricalSessionRecords.Count})")
+        End If
         If bestRecord IsNot Nothing Then
             Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore:F3}, BestRecordId={bestRecord.ID} | " &
                 $"Betreff={BetreffDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Betreff"), featureWeights("Betreff"), 0)} " &
@@ -313,17 +326,20 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForTitelSuggestion() As IDictionary(Of String, Double)
+        ' Titel and Ablageordner are always 0 at suggestion time (mutable, not yet set in cascade).
+        ' ProjektstrukturPfad is 0 intentionally: it was itself suggested from the cascade (often from
+        ' the same record as ProjektPfad), creating a circular self-reinforcing bias — excluded here.
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.05},
-            {"AbsenderDomain", 0.05},
-            {"Absender", 0.05},
-            {"AusfueBenutzer", 0.025},
-            {"AusfueDatum", 0.2},
+            {"Betreff", 0.55},
+            {"Datum", 0.0},
+            {"AbsenderDomain", 0.1},
+            {"Absender", 0.1},
+            {"AusfueBenutzer", 0.0},
+            {"AusfueDatum", 0.15},
             {"Titel", 0},
-            {"Ablageordner", 0.2},
+            {"Ablageordner", 0},
             {"ProjektPfad", 0.1},
-            {"ProjektstrukturPfad", 0.1}
+            {"ProjektstrukturPfad", 0.0}
         }
     End Function
 

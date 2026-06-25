@@ -255,6 +255,10 @@ Public Class Session
         IsSuggestedAblageordnerSchema = False
         IsSuggestedMsgDateinameSchema = False
         IsSuggestedAnhaengeAblegen = False
+        ' AbsenderKurz is not set by ReadMailMeta — clear backing field directly to avoid
+        ' the setter's cascade guard (If _absenderKurz <> value) suppressing the next suggestion.
+        _absenderKurz = String.Empty
+        OnPropertyChanged(NameOf(AbsenderKurz))
         Debug.WriteLine("[Session] Reset ausgef�hrt")
     End Sub
 
