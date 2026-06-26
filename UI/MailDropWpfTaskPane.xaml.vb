@@ -96,7 +96,11 @@ Public Class MailDropWpfTaskPane
                         Dispatcher.BeginInvoke(New Action(Sub()
                             _applyingTreeViewSuggestion = True
                             Dim tvi = FindTreeViewItem(TreeView1, targetPath)
-                            If tvi IsNot Nothing Then tvi.IsSelected = True
+                            If tvi IsNot Nothing Then
+                                tvi.IsSelected = True
+                                tvi.IsExpanded = True
+                                tvi.BringIntoView()
+                            End If
                             _applyingTreeViewSuggestion = False
                         End Sub))
                     End If
@@ -222,8 +226,25 @@ Public Class MailDropWpfTaskPane
         If node IsNot Nothing Then
             Session.ProjektstrukturPfad = node.RelativePath
             Debug.WriteLine("ProjektstrukturPfad (relativ) gesetzt: " & node.RelativePath)
+            Dim tvi = FindSelectedTreeViewItem(TreeView1)
+            If tvi IsNot Nothing Then tvi.IsExpanded = True
         End If
     End Sub
+
+    ' Findet das aktuell selektierte TreeViewItem, indem nur bereits aufgeklappte Knoten
+    ' durchsucht werden (der Benutzer muss die Eltern geöffnet haben, um den Knoten zu wählen).
+    Private Function FindSelectedTreeViewItem(container As ItemsControl) As TreeViewItem
+        For Each item In container.Items
+            Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+            If tvi Is Nothing Then Continue For
+            If tvi.IsSelected Then Return tvi
+            If tvi.IsExpanded Then
+                Dim found = FindSelectedTreeViewItem(tvi)
+                If found IsNot Nothing Then Return found
+            End If
+        Next
+        Return Nothing
+    End Function
 
     Private Function EnsureValidProjektPfad() As Boolean
         If String.IsNullOrWhiteSpace(Session.ProjektPfad) OrElse Not Directory.Exists(Session.ProjektPfad) Then
