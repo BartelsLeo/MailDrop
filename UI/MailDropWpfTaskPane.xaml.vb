@@ -166,8 +166,21 @@ Public Class MailDropWpfTaskPane
         If Not String.IsNullOrEmpty(result) Then
             MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
         Else
-            MessageBox.Show("Vorgang erfolgreich abgeschlossen.", "Info", MessageBoxButton.OK, MessageBoxImage.Information)
+            ShowSuccessNotification()
         End If
+    End Sub
+
+    Private Sub ShowSuccessNotification()
+        SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
+        Dim timer As New System.Windows.Threading.DispatcherTimer()
+        timer.Interval = TimeSpan.FromSeconds(2.5)
+        AddHandler timer.Tick, Sub(s, ev)
+            timer.Stop()
+            SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
+                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+        End Sub
+        timer.Start()
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
