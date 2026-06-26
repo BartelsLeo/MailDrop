@@ -168,8 +168,8 @@
                                     </Style.Triggers>
                                 </Style>
                             </StackPanel.Style>
-                            <TextBlock Text="{Binding Betreff}" FontWeight="SemiBold"
-                                       TextWrapping="Wrap" FontSize="12.5" Foreground="#111827"/>
+                            <TextBlock Text="{Binding Betreff}" FontWeight="Normal"
+                                       TextWrapping="Wrap" FontSize="12" Foreground="#111827"/>
                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                                 <TextBlock Text="{Binding Datum, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
                                            Foreground="#9CA3AF" FontSize="11"/>
@@ -259,7 +259,7 @@
                     <Button x:Name="ButtonNeuenOrdner" Content="Neuen Ordner"
                             Grid.Row="1" Grid.Column="0"
                             Style="{StaticResource SecondaryButton}"
-                            Width="110" HorizontalAlignment="Left" Margin="0,8,0,0"
+                            Width="110" HorizontalAlignment="Left" Margin="0,8,0,18"
                             Click="ButtonNeuenOrdner_Click"/>
                     <TextBlock x:Name="SparkleProjektstrukturPfad" Text="&#x2726;"
                                Grid.RowSpan="2" Grid.Column="1"
@@ -342,7 +342,7 @@
                 </Grid>
 
                 <!-- ── Anhänge ablegen ── -->
-                <Grid Grid.Row="9" Margin="14,8,0,0">
+                <Grid Grid.Row="9" Margin="14,8,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="110"/>
                         <ColumnDefinition Width="*"/>
