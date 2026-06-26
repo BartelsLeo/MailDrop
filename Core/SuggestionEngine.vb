@@ -203,51 +203,52 @@ Public Class SuggestionEngine
         ProjektstrukturPfadDistances = newDistances
     End Sub
 
+    Private Const DefaultSchemaTemplate As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
+
     Public Function SuggestProjektPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), "ProjektPfad")?.ProjektPfad, String.Empty)
+        Return If(FindBestRecordByField(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), "ProjektPfad", minScore:=SuggestionScoreThreshold)?.ProjektPfad, String.Empty)
     End Function
 
     Public Function SuggestProjektstrukturPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), "ProjektstrukturPfad")?.ProjektstrukturPfad, String.Empty)
+        Return If(FindBestRecordByField(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), "ProjektstrukturPfad", minScore:=SuggestionScoreThreshold)?.ProjektstrukturPfad, String.Empty)
     End Function
 
     Public Function SuggestTitel(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel")?.Titel, String.Empty)
+        Return If(FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel", minScore:=SuggestionScoreThreshold)?.Titel, String.Empty)
     End Function
 
     Public Function SuggestAbsenderKurz(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz")?.AbsenderKurz, String.Empty)
+        Return If(FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz", minScore:=SuggestionScoreThreshold)?.AbsenderKurz, String.Empty)
     End Function
 
     Public Function SuggestAblageordnerSchema(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema")
-        If best IsNot Nothing Then Return best.AblageordnerSchema
-        Dim fallback = FindBestRecordByField(Function(r) r.AblageordnerAufgeloest, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema_fallback")
-        Return If(fallback?.AblageordnerAufgeloest, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return DefaultSchemaTemplate
+        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema", minScore:=SuggestionScoreThreshold)
+        Return If(best?.AblageordnerSchema, DefaultSchemaTemplate)
     End Function
 
     Public Function SuggestMsgDateinameSchema(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Dim best = FindBestRecordByField(Function(r) r.MsgDateinameSchema, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema")
-        If best IsNot Nothing Then Return best.MsgDateinameSchema
-        Dim fallback = FindBestRecordByField(Function(r) r.MsgDateinameAufgeloest, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema_fallback")
-        Return If(fallback?.MsgDateinameAufgeloest, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return DefaultSchemaTemplate
+        Dim best = FindBestRecordByField(Function(r) r.MsgDateinameSchema, GetFeatureWeightsForMsgDateinameSuggestion(), "MsgDateinameSchema", minScore:=SuggestionScoreThreshold)
+        Return If(best?.MsgDateinameSchema, DefaultSchemaTemplate)
     End Function
 
     Public Function SuggestAnhaengeAblegen(session As Session) As Boolean?
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
-        Dim bestRecord = FindBestRecordByField(Function(r) String.Empty, GetFeatureWeightsForAnhaengeAblegenSuggestion(), "AnhaengeAblegen", requireNonEmptyField:=False)
+        Dim bestRecord = FindBestRecordByField(Function(r) String.Empty, GetFeatureWeightsForAnhaengeAblegenSuggestion(), "AnhaengeAblegen", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
         If bestRecord Is Nothing Then Return Nothing
         Return bestRecord.AnhaengeAblegen
     End Function
 
+    Private Const SuggestionScoreThreshold As Double = 0.3
+
     ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
-    Private Function FindBestRecordByField(fieldSelector As Func(Of SessionRecord, String), featureWeights As IDictionary(Of String, Double), suggestionName As String, Optional requireNonEmptyField As Boolean = True) As SessionRecord
+    ' Gibt Nothing zurück wenn der beste Score unter minScore liegt.
+    Private Function FindBestRecordByField(fieldSelector As Func(Of SessionRecord, String), featureWeights As IDictionary(Of String, Double), suggestionName As String, Optional requireNonEmptyField As Boolean = True, Optional minScore As Double = 0.0) As SessionRecord
 
         Dim bestScore As Double = Double.MinValue
         Dim bestRecord As SessionRecord = Nothing
@@ -278,9 +279,13 @@ Public Class SuggestionEngine
         If bestRecord Is Nothing Then
             Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no matching record found (records with non-empty field: " &
                 $"{EnginesHistoricalSessionRecords.Count(Function(r) Not String.IsNullOrWhiteSpace(fieldSelector(r)))} of {EnginesHistoricalSessionRecords.Count})")
+            Return Nothing
         End If
-        If bestRecord IsNot Nothing Then
-            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore:F3}, BestRecordId={bestRecord.ID} | " &
+        If bestScore < minScore Then
+            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: score {bestScore:F3} below threshold {minScore} — no suggestion")
+            Return Nothing
+        End If
+        Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore:F3}, BestRecordId={bestRecord.ID} | " &
                 $"Betreff={BetreffDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Betreff"), featureWeights("Betreff"), 0)} " &
                 $"Datum={DatumsDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Datum"), featureWeights("Datum"), 0)} " &
                 $"Domain={AbsenderDomainDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AbsenderDomain"), featureWeights("AbsenderDomain"), 0)} " &
@@ -291,7 +296,6 @@ Public Class SuggestionEngine
                 $"Ablageordner={AblageordnerDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Ablageordner"), featureWeights("Ablageordner"), 0)} " &
                 $"ProjektPfad={ProjektPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektPfad"), featureWeights("ProjektPfad"), 0)} " &
                 $"ProjektstrukturPfad={ProjektstrukturPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektstrukturPfad"), featureWeights("ProjektstrukturPfad"), 0)}")
-        End If
         Return bestRecord
     End Function
 
