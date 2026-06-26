@@ -52,14 +52,17 @@ Public Class Session
                 BuildDirectoryTree()
                 SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
                 Dim suggestedProjstr = SuggestionEngineInstance?.SuggestProjektstrukturPfad(Me)
-                If String.IsNullOrWhiteSpace(suggestedProjstr) Then
-                    Debug.WriteLine("[Session] ProjektstrukturPfad: kein Vorschlag vom Engine")
-                ElseIf String.IsNullOrWhiteSpace(_projektPfad) Then
-                    Debug.WriteLine("[Session] ProjektstrukturPfad: ProjektPfad leer — Cascade abgebrochen")
-                ElseIf Not IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
-                    Debug.WriteLine($"[Session] ProjektstrukturPfad: Vorschlag '{suggestedProjstr}' existiert nicht unter '{_projektPfad}' — Cascade abgebrochen")
-                Else
+                If Not String.IsNullOrWhiteSpace(suggestedProjstr) AndAlso
+                   Not String.IsNullOrWhiteSpace(_projektPfad) AndAlso
+                   IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
                     SuggestProjektstrukturPfad(suggestedProjstr)
+                Else
+                    If String.IsNullOrWhiteSpace(suggestedProjstr) Then
+                        Debug.WriteLine("[Session] ProjektstrukturPfad: kein Vorschlag — fahre mit Titel fort")
+                    Else
+                        Debug.WriteLine($"[Session] ProjektstrukturPfad: '{suggestedProjstr}' existiert nicht — fahre mit Titel fort")
+                    End If
+                    RunSuggestionCascadeFromTitel()
                 End If
             End If
         End Set
@@ -79,13 +82,8 @@ Public Class Session
                 If Not String.IsNullOrWhiteSpace(suggestedAbsenderKurz) Then
                     SuggestAbsenderKurz(suggestedAbsenderKurz)
                 Else
-                    Debug.WriteLine("[Session] AbsenderKurz: kein Vorschlag vom Engine — versuche AblageordnerSchema direkt")
-                    Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                    If String.IsNullOrWhiteSpace(suggestedAbl) Then
-                        Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag vom Engine")
-                    Else
-                        SuggestAblageordnerSchema(suggestedAbl)
-                    End If
+                    Debug.WriteLine("[Session] AbsenderKurz: kein Vorschlag — fahre mit AblageordnerSchema fort")
+                    RunSuggestionCascadeFromAblageordnerSchema()
                 End If
             End If
         End Set
@@ -113,10 +111,11 @@ Public Class Session
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
                 Dim suggestedTitel = SuggestionEngineInstance?.SuggestTitel(Me)
-                If String.IsNullOrWhiteSpace(suggestedTitel) Then
-                    Debug.WriteLine("[Session] Titel: kein Vorschlag vom Engine")
-                Else
+                If Not String.IsNullOrWhiteSpace(suggestedTitel) Then
                     SuggestTitel(suggestedTitel)
+                Else
+                    Debug.WriteLine("[Session] Titel: kein Vorschlag — fahre mit AbsenderKurz fort")
+                    RunSuggestionCascadeFromAbsenderKurz()
                 End If
             End If
         End Set
@@ -158,10 +157,11 @@ Public Class Session
                 UpdateAblageordnerAufgeloest()
                 AblageordnerFeld = AblageordnerAufgeloest
                 Dim suggestedMsgDateinameSchema = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
-                If String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
-                    Debug.WriteLine("[Session] MsgDateinameSchema: kein Vorschlag vom Engine")
-                Else
+                If Not String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
                     SuggestMsgDateinameSchema(suggestedMsgDateinameSchema)
+                Else
+                    Debug.WriteLine("[Session] MsgDateinameSchema: kein Vorschlag — fahre mit AnhaengeAblegen fort")
+                    RunSuggestionCascadeFromAnhaengeAblegen()
                 End If
             End If
         End Set
@@ -184,9 +184,7 @@ Public Class Session
                 UpdateMsgDateinameAufgeloest()
                 MsgDateinameFeld = MsgDateinameAufgeloest
                 Dim suggestedAnhaengeAblegen = SuggestionEngineInstance?.SuggestAnhaengeAblegen(Me)
-                If Not suggestedAnhaengeAblegen.HasValue Then
-                    Debug.WriteLine("[Session] AnhaengeAblegen: kein Vorschlag vom Engine")
-                Else
+                If suggestedAnhaengeAblegen.HasValue Then
                     SuggestAnhaengeAblegen(suggestedAnhaengeAblegen.Value)
                 End If
             End If
@@ -394,6 +392,57 @@ Public Class Session
     Public Sub SuggestAnhaengeAblegen(value As Boolean)
         AnhaengeAblegen = value
         IsSuggestedAnhaengeAblegen = True
+    End Sub
+
+    ' Cascade-Fortsetzungshelfer: werden aufgerufen wenn ein Schritt keinen Vorschlag liefert,
+    ' damit die nachfolgenden Schritte trotzdem ausgeführt werden.
+    Private Sub RunSuggestionCascadeFromTitel()
+        Dim suggested = SuggestionEngineInstance?.SuggestTitel(Me)
+        If Not String.IsNullOrWhiteSpace(suggested) Then
+            SuggestTitel(suggested)
+        Else
+            Debug.WriteLine("[Session] Titel: kein Vorschlag — fahre mit AbsenderKurz fort")
+            RunSuggestionCascadeFromAbsenderKurz()
+        End If
+    End Sub
+
+    Private Sub RunSuggestionCascadeFromAbsenderKurz()
+        Dim suggested = SuggestionEngineInstance?.SuggestAbsenderKurz(Me)
+        If Not String.IsNullOrWhiteSpace(suggested) Then
+            SuggestAbsenderKurz(suggested)
+        Else
+            Debug.WriteLine("[Session] AbsenderKurz: kein Vorschlag — fahre mit AblageordnerSchema fort")
+            RunSuggestionCascadeFromAblageordnerSchema()
+        End If
+    End Sub
+
+    Private Sub RunSuggestionCascadeFromAblageordnerSchema()
+        Dim suggested = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
+        If Not String.IsNullOrWhiteSpace(suggested) Then
+            SuggestAblageordnerSchema(suggested)
+        Else
+            Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag — fahre mit MsgDateinameSchema fort")
+            RunSuggestionCascadeFromMsgDateinameSchema()
+        End If
+    End Sub
+
+    Private Sub RunSuggestionCascadeFromMsgDateinameSchema()
+        Dim suggested = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
+        If Not String.IsNullOrWhiteSpace(suggested) Then
+            SuggestMsgDateinameSchema(suggested)
+        Else
+            Debug.WriteLine("[Session] MsgDateinameSchema: kein Vorschlag — fahre mit AnhaengeAblegen fort")
+            RunSuggestionCascadeFromAnhaengeAblegen()
+        End If
+    End Sub
+
+    Private Sub RunSuggestionCascadeFromAnhaengeAblegen()
+        Dim suggested = SuggestionEngineInstance?.SuggestAnhaengeAblegen(Me)
+        If suggested.HasValue Then
+            SuggestAnhaengeAblegen(suggested.Value)
+        Else
+            Debug.WriteLine("[Session] AnhaengeAblegen: kein Vorschlag")
+        End If
     End Sub
 
     Public Sub PrepareSession()
@@ -608,10 +657,11 @@ Public Class Session
                 OnPropertyChanged(NameOf(AbsenderKurz))
                 UpdateResolvedAfterTitelChange()
                 Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                If String.IsNullOrWhiteSpace(suggestedAbl) Then
-                    Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag vom Engine")
-                Else
+                If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
                     SuggestAblageordnerSchema(suggestedAbl)
+                Else
+                    Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag — fahre mit MsgDateinameSchema fort")
+                    RunSuggestionCascadeFromMsgDateinameSchema()
                 End If
             End If
         End Set
