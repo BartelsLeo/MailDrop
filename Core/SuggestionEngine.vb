@@ -30,6 +30,16 @@ Public Class SuggestionEngine
     Private Property ProjektPfadDistances As List(Of Double)
     Private Property ProjektstrukturPfadDistances As List(Of Double)
     Private _disposed As Boolean = False
+    Private _cascadeInProgress As Boolean = False
+
+    Public Enum CascadeStep
+        ProjektstrukturPfad = 0
+        Titel = 1
+        AbsenderKurz = 2
+        AblageordnerSchema = 3
+        MsgDateinameSchema = 4
+        AnhaengeAblegen = 5
+    End Enum
 
     Public Sub New()
         Try
@@ -236,7 +246,74 @@ Public Class SuggestionEngine
         Return bestRecord.AnhaengeAblegen
     End Function
 
-    Private Const SuggestionScoreThreshold As Double = 0.3
+    ' Orchestriert alle Vorschlagsschritte ab startFrom abwärts.
+    ' Wird von Session-Property-Settern und PrepareSession aufgerufen.
+    ' _cascadeInProgress verhindert Rekursion wenn ein Suggest-Aufruf den Setter triggert.
+    Public Sub RunSuggestionCascade(session As Session, startFrom As CascadeStep)
+        If session Is Nothing OrElse _cascadeInProgress Then Return
+        _cascadeInProgress = True
+        Try
+            If startFrom <= CascadeStep.ProjektstrukturPfad Then
+                Dim suggested = SuggestProjektstrukturPfad(session)
+                If Not String.IsNullOrWhiteSpace(suggested) AndAlso
+                   Not String.IsNullOrWhiteSpace(session.ProjektPfad) AndAlso
+                   IO.Directory.Exists(IO.Path.Combine(session.ProjektPfad, suggested)) Then
+                    session.SuggestProjektstrukturPfad(suggested)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: ProjektstrukturPfad übersprungen")
+                End If
+            End If
+
+            If startFrom <= CascadeStep.Titel Then
+                Dim suggested = SuggestTitel(session)
+                If Not String.IsNullOrWhiteSpace(suggested) Then
+                    session.SuggestTitel(suggested)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: Titel übersprungen")
+                End If
+            End If
+
+            If startFrom <= CascadeStep.AbsenderKurz Then
+                Dim suggested = SuggestAbsenderKurz(session)
+                If Not String.IsNullOrWhiteSpace(suggested) Then
+                    session.SuggestAbsenderKurz(suggested)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: AbsenderKurz übersprungen")
+                End If
+            End If
+
+            If startFrom <= CascadeStep.AblageordnerSchema Then
+                Dim suggested = SuggestAblageordnerSchema(session)
+                If Not String.IsNullOrWhiteSpace(suggested) Then
+                    session.SuggestAblageordnerSchema(suggested)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: AblageordnerSchema übersprungen")
+                End If
+            End If
+
+            If startFrom <= CascadeStep.MsgDateinameSchema Then
+                Dim suggested = SuggestMsgDateinameSchema(session)
+                If Not String.IsNullOrWhiteSpace(suggested) Then
+                    session.SuggestMsgDateinameSchema(suggested)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: MsgDateinameSchema übersprungen")
+                End If
+            End If
+
+            If startFrom <= CascadeStep.AnhaengeAblegen Then
+                Dim suggested = SuggestAnhaengeAblegen(session)
+                If suggested.HasValue Then
+                    session.SuggestAnhaengeAblegen(suggested.Value)
+                Else
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: AnhaengeAblegen übersprungen")
+                End If
+            End If
+        Finally
+            _cascadeInProgress = False
+        End Try
+    End Sub
+
+    Private Const SuggestionScoreThreshold As Double = 0.5
 
     ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
     ' Gibt Nothing zurück wenn der beste Score unter minScore liegt.
