@@ -329,7 +329,7 @@ Public Class SuggestionEngine
             {"Betreff", 0.46},
             {"AbsenderDomain", 0.09},
             {"Absender", 0.09},
-            {"AusfueDatum", 0.10},
+            {"AusfueDatum", 0.1},
             {"ProjektPfad", 0.18}
         }
     End Function
@@ -350,7 +350,6 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
             {"ProjektstrukturPfad", 0.41}
@@ -360,7 +359,6 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAbsenderKurzSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 Domain=0.3 Absender=0.2 AusfueDatum=0.2 ProjektPfad=0.4 → sum=1.15 → ×20/23
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-
             {"AbsenderDomain", 0.26},
             {"Absender", 0.17},
             {"AusfueDatum", 0.17},
@@ -371,7 +369,6 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
             {"ProjektstrukturPfad", 0.41}
@@ -381,7 +378,7 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Absender", 0.20},
+            {"Absender", 0.2},
             {"AusfueDatum", 0.08},
             {"ProjektPfad", 0.16},
             {"ProjektstrukturPfad", 0.41}
@@ -455,7 +452,7 @@ Public Class SuggestionEngine
         If maxUse <= 0 Then maxUse = 1.0
         Return rawDays.Select(Function(d)
                                   If d < 0 Then Return 0.0
-                                  Return Math.Max(0.0, 1.0 - d / maxDays)
+                                  Return Math.Max(0.0, 1.0 - d / maxUse)
                               End Function).ToList()
     End Function
 
