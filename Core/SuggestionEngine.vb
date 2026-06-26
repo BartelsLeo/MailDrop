@@ -300,110 +300,79 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForProjektPfadSuggestion() As IDictionary(Of String, Double)
+        ' Betreff=0.4 Datum=0.1 Domain=0.2 Absender=0.2 AusfueDatum=0.2 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0.2},
-            {"Absender", 0.2},
-            {"AusfueBenutzer", 0.05},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0},
-            {"ProjektstrukturPfad", 0}
+            {"Betreff", 0.36},
+            {"Datum", 0.10},
+            {"AbsenderDomain", 0.18},
+            {"Absender", 0.18},
+            {"AusfueDatum", 0.18}
         }
     End Function
 
     Private Function GetFeatureWeightsForProjektstrukturPfadSuggestion() As IDictionary(Of String, Double)
+        ' Betreff=0.4 Datum=0.1 Domain=0.1 Absender=0.1 AusfueDatum=0.2 ProjektPfad=0.2 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.4},
-            {"Datum", 0.1},
-            {"AbsenderDomain", 0.1},
-            {"Absender", 0.1},
-            {"AusfueBenutzer", 0.05},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.2},
-            {"ProjektstrukturPfad", 0}
+            {"Betreff", 0.37},
+            {"Datum", 0.09},
+            {"AbsenderDomain", 0.09},
+            {"Absender", 0.09},
+            {"AusfueDatum", 0.18},
+            {"ProjektPfad", 0.18}
         }
     End Function
 
     Private Function GetFeatureWeightsForTitelSuggestion() As IDictionary(Of String, Double)
+        ' AusfueBenutzer was already 0 — sum unchanged at 1.0.
         ' Titel and Ablageordner are always 0 at suggestion time (mutable, not yet set in cascade).
-        ' ProjektstrukturPfad is 0 intentionally: it was itself suggested from the cascade (often from
-        ' the same record as ProjektPfad), creating a circular self-reinforcing bias — excluded here.
+        ' ProjektstrukturPfad is 0 intentionally: circular self-reinforcing cascade bias — excluded.
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.55},
-            {"Datum", 0.0},
             {"AbsenderDomain", 0.1},
             {"Absender", 0.1},
-            {"AusfueBenutzer", 0.0},
             {"AusfueDatum", 0.15},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.1},
-            {"ProjektstrukturPfad", 0.0}
+            {"ProjektPfad", 0.1}
         }
     End Function
 
     Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
+        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
             {"Datum", 0.05},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.05},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.45}
+            {"AusfueDatum", 0.18},
+            {"ProjektPfad", 0.36},
+            {"ProjektstrukturPfad", 0.41}
         }
     End Function
 
     Private Function GetFeatureWeightsForAbsenderKurzSuggestion() As IDictionary(Of String, Double)
+        ' Datum=0.05 Domain=0.3 Absender=0.2 AusfueDatum=0.2 ProjektPfad=0.4 → sum=1.15 → ×20/23
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
-            {"Datum", 0.05},
-            {"AbsenderDomain", 0.3},
-            {"Absender", 0.2},
-            {"AusfueBenutzer", 0.025},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0}
+            {"Datum", 0.04},
+            {"AbsenderDomain", 0.26},
+            {"Absender", 0.17},
+            {"AusfueDatum", 0.17},
+            {"ProjektPfad", 0.36}
         }
     End Function
 
     Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
+        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
             {"Datum", 0.05},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.05},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.45}
+            {"AusfueDatum", 0.18},
+            {"ProjektPfad", 0.36},
+            {"ProjektstrukturPfad", 0.41}
         }
     End Function
 
     Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
+        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0},
             {"Datum", 0.05},
-            {"AbsenderDomain", 0},
-            {"Absender", 0},
-            {"AusfueBenutzer", 0.05},
-            {"AusfueDatum", 0.2},
-            {"Titel", 0},
-            {"Ablageordner", 0},
-            {"ProjektPfad", 0.4},
-            {"ProjektstrukturPfad", 0.45}
+            {"AusfueDatum", 0.18},
+            {"ProjektPfad", 0.36},
+            {"ProjektstrukturPfad", 0.41}
         }
     End Function
 
