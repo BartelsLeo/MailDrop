@@ -79,7 +79,6 @@ Public Class MailDropWpfTaskPane
 
     Private Sub ListBox1_SelectionChanged(sender As Object, e As SelectionChangedEventArgs)
         Session.IsSuggestedProjektPfad = False
-        HideSparkle(SparkleProjektPfad)
         If ListBox1.SelectedItem IsNot Nothing Then
             Session.HandleProjektSelection(ListBox1.SelectedItem.ToString())
         End If
@@ -88,7 +87,7 @@ Public Class MailDropWpfTaskPane
     Private Sub Session_PropertyChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
         Select Case e.PropertyName
             Case NameOf(Session.IsSuggestedProjektPfad)
-                If Session.IsSuggestedProjektPfad Then ShowSparkle(SparkleProjektPfad)
+                If Session.IsSuggestedProjektPfad Then ShowSparkle(SparkleProjektPfad) Else HideSparkle(SparkleProjektPfad)
             Case NameOf(Session.IsSuggestedProjektstrukturPfad)
                 If Session.IsSuggestedProjektstrukturPfad Then
                     ShowSparkle(SparkleProjektstrukturPfad)
@@ -101,33 +100,32 @@ Public Class MailDropWpfTaskPane
                             _applyingTreeViewSuggestion = False
                         End Sub))
                     End If
+                Else
+                    HideSparkle(SparkleProjektstrukturPfad)
                 End If
             Case NameOf(Session.IsSuggestedTitel)
-                If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel)
+                If Session.IsSuggestedTitel Then ShowSparkle(SparkleTitel) Else HideSparkle(SparkleTitel)
             Case NameOf(Session.IsSuggestedAbsenderKurz)
-                If Session.IsSuggestedAbsenderKurz Then ShowSparkle(SparkleAbsenderKurz)
+                If Session.IsSuggestedAbsenderKurz Then ShowSparkle(SparkleAbsenderKurz) Else HideSparkle(SparkleAbsenderKurz)
             Case NameOf(Session.IsSuggestedAblageordnerSchema)
-                If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner)
+                If Session.IsSuggestedAblageordnerSchema Then ShowSparkle(SparkleAblageordner) Else HideSparkle(SparkleAblageordner)
             Case NameOf(Session.IsSuggestedMsgDateinameSchema)
-                If Session.IsSuggestedMsgDateinameSchema Then ShowSparkle(SparkleMsgDateiname)
+                If Session.IsSuggestedMsgDateinameSchema Then ShowSparkle(SparkleMsgDateiname) Else HideSparkle(SparkleMsgDateiname)
             Case NameOf(Session.IsSuggestedAnhaengeAblegen)
-                If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen)
+                If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen) Else HideSparkle(SparkleAnhaengeAblegen)
         End Select
     End Sub
 
     Private Sub TextBoxTitel_GotFocus(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedTitel = False
-        HideSparkle(SparkleTitel)
     End Sub
 
     Private Sub TextBoxAbsenderKurz_GotFocus(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedAbsenderKurz = False
-        HideSparkle(SparkleAbsenderKurz)
     End Sub
 
     Private Sub TextBoxAblageordner_GotFocus(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedAblageordnerSchema = False
-        HideSparkle(SparkleAblageordner)
         Session.BeginAblageordnerEdit()
     End Sub
 
@@ -137,7 +135,6 @@ Public Class MailDropWpfTaskPane
 
     Private Sub TextBoxMsgDateiname_GotFocus(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedMsgDateinameSchema = False
-        HideSparkle(SparkleMsgDateiname)
         Session.BeginMsgDateinameEdit()
     End Sub
 
@@ -147,7 +144,6 @@ Public Class MailDropWpfTaskPane
 
     Private Sub CheckBoxAnhaenge_Click(sender As Object, e As RoutedEventArgs)
         Session.IsSuggestedAnhaengeAblegen = False
-        HideSparkle(SparkleAnhaengeAblegen)
     End Sub
 
     Private Sub ButtonInfo_Click(sender As Object, e As RoutedEventArgs)
@@ -221,7 +217,6 @@ Public Class MailDropWpfTaskPane
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
         If Not _applyingTreeViewSuggestion Then
             Session.IsSuggestedProjektstrukturPfad = False
-            HideSparkle(SparkleProjektstrukturPfad)
         End If
         Dim node = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If node IsNot Nothing Then

@@ -52,9 +52,13 @@ Public Class Session
                 BuildDirectoryTree()
                 SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
                 Dim suggestedProjstr = SuggestionEngineInstance?.SuggestProjektstrukturPfad(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedProjstr) AndAlso
-                   Not String.IsNullOrWhiteSpace(_projektPfad) AndAlso
-                   IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
+                If String.IsNullOrWhiteSpace(suggestedProjstr) Then
+                    Debug.WriteLine("[Session] ProjektstrukturPfad: kein Vorschlag vom Engine")
+                ElseIf String.IsNullOrWhiteSpace(_projektPfad) Then
+                    Debug.WriteLine("[Session] ProjektstrukturPfad: ProjektPfad leer — Cascade abgebrochen")
+                ElseIf Not IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
+                    Debug.WriteLine($"[Session] ProjektstrukturPfad: Vorschlag '{suggestedProjstr}' existiert nicht unter '{_projektPfad}' — Cascade abgebrochen")
+                Else
                     SuggestProjektstrukturPfad(suggestedProjstr)
                 End If
             End If
@@ -75,8 +79,11 @@ Public Class Session
                 If Not String.IsNullOrWhiteSpace(suggestedAbsenderKurz) Then
                     SuggestAbsenderKurz(suggestedAbsenderKurz)
                 Else
+                    Debug.WriteLine("[Session] AbsenderKurz: kein Vorschlag vom Engine — versuche AblageordnerSchema direkt")
                     Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                    If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
+                    If String.IsNullOrWhiteSpace(suggestedAbl) Then
+                        Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag vom Engine")
+                    Else
                         SuggestAblageordnerSchema(suggestedAbl)
                     End If
                 End If
@@ -106,7 +113,9 @@ Public Class Session
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
                 Dim suggestedTitel = SuggestionEngineInstance?.SuggestTitel(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedTitel) Then
+                If String.IsNullOrWhiteSpace(suggestedTitel) Then
+                    Debug.WriteLine("[Session] Titel: kein Vorschlag vom Engine")
+                Else
                     SuggestTitel(suggestedTitel)
                 End If
             End If
@@ -149,7 +158,9 @@ Public Class Session
                 UpdateAblageordnerAufgeloest()
                 AblageordnerFeld = AblageordnerAufgeloest
                 Dim suggestedMsgDateinameSchema = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
+                If String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
+                    Debug.WriteLine("[Session] MsgDateinameSchema: kein Vorschlag vom Engine")
+                Else
                     SuggestMsgDateinameSchema(suggestedMsgDateinameSchema)
                 End If
             End If
@@ -173,7 +184,9 @@ Public Class Session
                 UpdateMsgDateinameAufgeloest()
                 MsgDateinameFeld = MsgDateinameAufgeloest
                 Dim suggestedAnhaengeAblegen = SuggestionEngineInstance?.SuggestAnhaengeAblegen(Me)
-                If suggestedAnhaengeAblegen.HasValue Then
+                If Not suggestedAnhaengeAblegen.HasValue Then
+                    Debug.WriteLine("[Session] AnhaengeAblegen: kein Vorschlag vom Engine")
+                Else
                     SuggestAnhaengeAblegen(suggestedAnhaengeAblegen.Value)
                 End If
             End If
@@ -399,7 +412,11 @@ Public Class Session
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
 
         ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
-        If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
+        If String.IsNullOrWhiteSpace(suggestedProjektPfad) Then
+            Debug.WriteLine("[Session] ProjektPfad: kein Vorschlag vom Engine")
+        ElseIf Not Directory.Exists(suggestedProjektPfad) Then
+            Debug.WriteLine($"[Session] ProjektPfad: Vorschlag '{suggestedProjektPfad}' existiert nicht — Cascade abgebrochen")
+        Else
             If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
                 ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
             End If
@@ -591,7 +608,9 @@ Public Class Session
                 OnPropertyChanged(NameOf(AbsenderKurz))
                 UpdateResolvedAfterTitelChange()
                 Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
+                If String.IsNullOrWhiteSpace(suggestedAbl) Then
+                    Debug.WriteLine("[Session] AblageordnerSchema: kein Vorschlag vom Engine")
+                Else
                     SuggestAblageordnerSchema(suggestedAbl)
                 End If
             End If

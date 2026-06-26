@@ -253,9 +253,11 @@ Public Class SuggestionEngine
         Dim bestScore As Double = Double.MinValue
         Dim bestRecord As SessionRecord = Nothing
         Dim bestIndex As Integer = -1
+        Dim bestUnconstrainedScore As Double = Double.MinValue
+        Dim bestUnconstrainedIndex As Integer = -1
+
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
-            If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
 
             Dim score =
                 WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
@@ -269,6 +271,13 @@ Public Class SuggestionEngine
                 WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
                 WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
 
+            If score > bestUnconstrainedScore Then
+                bestUnconstrainedScore = score
+                bestUnconstrainedIndex = i
+            End If
+
+            If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
+
             If score > bestScore Then
                 bestScore = score
                 bestRecord = record
@@ -277,33 +286,46 @@ Public Class SuggestionEngine
         Next
 
         If bestRecord Is Nothing Then
-            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no matching record found (records with non-empty field: " &
-                $"{EnginesHistoricalSessionRecords.Count(Function(r) Not String.IsNullOrWhiteSpace(fieldSelector(r)))} of {EnginesHistoricalSessionRecords.Count})")
+            Dim nonEmptyCount = EnginesHistoricalSessionRecords.Where(Function(r) Not String.IsNullOrWhiteSpace(fieldSelector(r))).Count()
+            If bestUnconstrainedIndex >= 0 Then
+                Dim ub = EnginesHistoricalSessionRecords(bestUnconstrainedIndex)
+                Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no suggestion — {nonEmptyCount} of {EnginesHistoricalSessionRecords.Count} records have a non-empty field; best overall: score={bestUnconstrainedScore:F3}, RecordId={ub.ID} | " &
+                    FormatFeatureBreakdown(bestUnconstrainedIndex, featureWeights))
+            Else
+                Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no suggestion — no records available")
+            End If
             Return Nothing
         End If
+
         If bestScore < minScore Then
-            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: score {bestScore:F3} below threshold {minScore} — no suggestion")
+            Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: no suggestion — best score {bestScore:F3} below threshold {minScore}, RecordId={bestRecord.ID} | " &
+                FormatFeatureBreakdown(bestIndex, featureWeights))
             Return Nothing
         End If
+
         Debug.WriteLine($"[SuggestionEngine] FindBestRecord for {suggestionName}: Bestscore={bestScore:F3}, BestRecordId={bestRecord.ID} | " &
-                $"Betreff={BetreffDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Betreff"), featureWeights("Betreff"), 0)} " &
-                $"Datum={DatumsDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Datum"), featureWeights("Datum"), 0)} " &
-                $"Domain={AbsenderDomainDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AbsenderDomain"), featureWeights("AbsenderDomain"), 0)} " &
-                $"Absender={AbsenderDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Absender"), featureWeights("Absender"), 0)} " &
-                $"Benutzer={AusfueBenutzerDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AusfueBenutzer"), featureWeights("AusfueBenutzer"), 0)} " &
-                $"AusfueDatum={AusfueDatumsDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("AusfueDatum"), featureWeights("AusfueDatum"), 0)} " &
-                $"Titel={TitelDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Titel"), featureWeights("Titel"), 0)} " &
-                $"Ablageordner={AblageordnerDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("Ablageordner"), featureWeights("Ablageordner"), 0)} " &
-                $"ProjektPfad={ProjektPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektPfad"), featureWeights("ProjektPfad"), 0)} " &
-                $"ProjektstrukturPfad={ProjektstrukturPfadDistances(bestIndex):F3}*{If(featureWeights.ContainsKey("ProjektstrukturPfad"), featureWeights("ProjektstrukturPfad"), 0)}")
+            FormatFeatureBreakdown(bestIndex, featureWeights))
         Return bestRecord
+    End Function
+
+    Private Function FormatFeatureBreakdown(index As Integer, featureWeights As IDictionary(Of String, Double)) As String
+        Return $"Betreff={BetreffDistances(index):F3}*{If(featureWeights.ContainsKey("Betreff"), featureWeights("Betreff"), 0)} " &
+               $"Datum={DatumsDistances(index):F3}*{If(featureWeights.ContainsKey("Datum"), featureWeights("Datum"), 0)} " &
+               $"Domain={AbsenderDomainDistances(index):F3}*{If(featureWeights.ContainsKey("AbsenderDomain"), featureWeights("AbsenderDomain"), 0)} " &
+               $"Absender={AbsenderDistances(index):F3}*{If(featureWeights.ContainsKey("Absender"), featureWeights("Absender"), 0)} " &
+               $"Benutzer={AusfueBenutzerDistances(index):F3}*{If(featureWeights.ContainsKey("AusfueBenutzer"), featureWeights("AusfueBenutzer"), 0)} " &
+               $"AusfueDatum={AusfueDatumsDistances(index):F3}*{If(featureWeights.ContainsKey("AusfueDatum"), featureWeights("AusfueDatum"), 0)} " &
+               $"Titel={TitelDistances(index):F3}*{If(featureWeights.ContainsKey("Titel"), featureWeights("Titel"), 0)} " &
+               $"Ablageordner={AblageordnerDistances(index):F3}*{If(featureWeights.ContainsKey("Ablageordner"), featureWeights("Ablageordner"), 0)} " &
+               $"ProjektPfad={ProjektPfadDistances(index):F3}*{If(featureWeights.ContainsKey("ProjektPfad"), featureWeights("ProjektPfad"), 0)} " &
+               $"ProjektstrukturPfad={ProjektstrukturPfadDistances(index):F3}*{If(featureWeights.ContainsKey("ProjektstrukturPfad"), featureWeights("ProjektstrukturPfad"), 0)}"
     End Function
 
     Private Function GetFeatureWeightsForProjektPfadSuggestion() As IDictionary(Of String, Double)
         ' Betreff=0.4 Datum=0.1 Domain=0.2 Absender=0.2 AusfueDatum=0.2 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.36},
-            {"Datum", 0.10},
+            {"Datum", 0.1},
             {"AbsenderDomain", 0.18},
             {"Absender", 0.18},
             {"AusfueDatum", 0.18}
