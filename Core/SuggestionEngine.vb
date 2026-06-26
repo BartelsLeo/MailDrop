@@ -120,12 +120,8 @@ Public Class SuggestionEngine
 
     Public Sub RecalculateDatumsDistances(session As Session)
         If session Is Nothing Then Return
-        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
-        Dim maxDistance = GetMaxDateDistanceInDays(session.Datum)
-        For Each record In EnginesHistoricalSessionRecords
-            newDistances.Add(CalculateDateSimilarity(session.Datum, record.Datum, maxDistance))
-        Next
-        DatumsDistances = newDistances
+        Dim rawDays = EnginesHistoricalSessionRecords.Select(Function(r) DateDistanceInDays(session.Datum, r.Datum)).ToList()
+        DatumsDistances = NormalizeDateDistances(rawDays)
     End Sub
 
     Public Sub RecalculateAbsenderDomainDistances(session As Session)
@@ -157,12 +153,8 @@ Public Class SuggestionEngine
 
     Public Sub RecalculateAusfueDatumsDistances(session As Session)
         If session Is Nothing Then Return
-        Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
-        Dim maxDistance = GetMaxDateDistanceInDays(session.AusfueDatum)
-        For Each record In EnginesHistoricalSessionRecords
-            newDistances.Add(CalculateDateSimilarity(session.AusfueDatum, record.AusfueDatum, maxDistance))
-        Next
-        AusfueDatumsDistances = newDistances
+        Dim rawDays = EnginesHistoricalSessionRecords.Select(Function(r) DateDistanceInDays(session.AusfueDatum, r.AusfueDatum)).ToList()
+        AusfueDatumsDistances = NormalizeDateDistances(rawDays)
     End Sub
 
     ' === Mutable Features – ausgelöst bei Feldänderung über Session-Property-Setter ===
@@ -324,8 +316,7 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForProjektPfadSuggestion() As IDictionary(Of String, Double)
         ' Betreff=0.4 Datum=0.1 Domain=0.2 Absender=0.2 AusfueDatum=0.2 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.36},
-            {"Datum", 0.1},
+            {"Betreff", 0.46},
             {"AbsenderDomain", 0.18},
             {"Absender", 0.18},
             {"AusfueDatum", 0.18}
@@ -335,11 +326,10 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForProjektstrukturPfadSuggestion() As IDictionary(Of String, Double)
         ' Betreff=0.4 Datum=0.1 Domain=0.1 Absender=0.1 AusfueDatum=0.2 ProjektPfad=0.2 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Betreff", 0.37},
-            {"Datum", 0.09},
+            {"Betreff", 0.46},
             {"AbsenderDomain", 0.09},
             {"Absender", 0.09},
-            {"AusfueDatum", 0.18},
+            {"AusfueDatum", 0.10},
             {"ProjektPfad", 0.18}
         }
     End Function
@@ -350,17 +340,17 @@ Public Class SuggestionEngine
         ' ProjektstrukturPfad is 0 intentionally: circular self-reinforcing cascade bias — excluded.
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.55},
-            {"AbsenderDomain", 0.1},
             {"Absender", 0.1},
             {"AusfueDatum", 0.15},
-            {"ProjektPfad", 0.1}
+            {"ProjektPfad", 0.1},
+            {"ProjektstrukturPfad", 0.1}
         }
     End Function
 
     Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Datum", 0.05},
+
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
             {"ProjektstrukturPfad", 0.41}
@@ -370,7 +360,7 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAbsenderKurzSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 Domain=0.3 Absender=0.2 AusfueDatum=0.2 ProjektPfad=0.4 → sum=1.15 → ×20/23
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Datum", 0.04},
+
             {"AbsenderDomain", 0.26},
             {"Absender", 0.17},
             {"AusfueDatum", 0.17},
@@ -381,7 +371,7 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Datum", 0.05},
+
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
             {"ProjektstrukturPfad", 0.41}
@@ -391,9 +381,9 @@ Public Class SuggestionEngine
     Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
         ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
-            {"Datum", 0.05},
-            {"AusfueDatum", 0.18},
-            {"ProjektPfad", 0.36},
+            {"Absender", 0.20},
+            {"AusfueDatum", 0.08},
+            {"ProjektPfad", 0.16},
             {"ProjektstrukturPfad", 0.41}
         }
     End Function
@@ -450,34 +440,23 @@ Public Class SuggestionEngine
     End Function
 
     ' Normalisiert Datumsunterschiede auf [0, 1], wobei 1 = sehr ähnlich.
-    Private Function CalculateDateSimilarity(currentDate As DateTime, historicalDate As DateTime, maxDistanceInDays As Double) As Double
-        If currentDate = Date.MinValue OrElse historicalDate = Date.MinValue Then
-            Return 0.0
-        End If
-
-        Dim differenceInDays = Math.Abs((currentDate - historicalDate).TotalDays)
-        Dim normalizedDistance = differenceInDays / maxDistanceInDays
-        Dim similarity = 1.0 - normalizedDistance
-        Return Math.Max(0.0, Math.Min(1.0, similarity))
+    ' Returns the raw absolute distance in days; -1 when either date is missing (sentinel for NormalizeDateDistances).
+    Private Function DateDistanceInDays(a As DateTime, b As DateTime) As Double
+        If a = Date.MinValue OrElse b = Date.MinValue Then Return -1.0
+        Return Math.Abs((a - b).TotalDays)
     End Function
 
-    ' Liefert den größten Datumsabstand zwischen aktueller Session und Historie als Normierungsbasis.
-    Private Function GetMaxDateDistanceInDays(currentDate As DateTime) As Double
-        If currentDate = Date.MinValue OrElse EnginesHistoricalSessionRecords.Count = 0 Then
-            Return 1.0
-        End If
-
-        Dim maxDistance = EnginesHistoricalSessionRecords _
-            .Where(Function(r) r.Datum <> Date.MinValue) _
-            .Select(Function(r) Math.Abs((currentDate - r.Datum).TotalDays)) _
-            .DefaultIfEmpty(0) _
-            .Max()
-
-        If maxDistance <= 0 Then
-            Return 1.0
-        End If
-
-        Return maxDistance
+    ' Converts a list of raw day-distances (from DateDistanceInDays) to [0,1] similarities.
+    ' The most-distant valid entry becomes 0.0, the closest becomes 1.0.
+    ' Entries with the sentinel value -1 (missing date) map to 0.0.
+    Private Function NormalizeDateDistances(rawDays As List(Of Double)) As List(Of Double)
+        Dim maxCalc = rawDays.Where(Function(d) d >= 0).DefaultIfEmpty(0).Max()
+        Dim maxUse = Math.Min(180.0, maxCalc)
+        If maxUse <= 0 Then maxUse = 1.0
+        Return rawDays.Select(Function(d)
+                                  If d < 0 Then Return 0.0
+                                  Return Math.Max(0.0, 1.0 - d / maxDays)
+                              End Function).ToList()
     End Function
 
     ' Textähnlichkeit auf Basis normalisierter Token-Überlappung (Jaccard), Bereich [0,1].
