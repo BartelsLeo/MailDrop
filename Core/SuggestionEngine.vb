@@ -32,6 +32,7 @@ Public Class SuggestionEngine
     Private Property ProjektstrukturPfadDistances As List(Of Double)
     Private _disposed As Boolean = False
     Private _cascadeInProgress As Boolean = False
+    Private _computedWeights As Dictionary(Of String, Dictionary(Of String, Double))
 
     Public Enum CascadeStep
         ProjektstrukturPfad = 0
@@ -49,6 +50,26 @@ Public Class SuggestionEngine
             Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der Session-Historie: " & ex.Message)
             EnginesHistoricalSessionRecords = New List(Of SessionRecord)()
         End Try
+        LoadAllComputedWeights()
+    End Sub
+
+    Private Sub LoadAllComputedWeights()
+        Dim loaded As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
+        Dim targetFields() As String = {
+            "ProjektPfad", "ProjektstrukturPfad", "Titel", "AbsenderKurz",
+            "AblageordnerSchema", "MsgDateinameSchema", "AnhaengeAblegen"
+        }
+        Try
+            For Each field In targetFields
+                Dim weights = ThisAddIn.CurrentDatabaseManager.LoadComputedWeights(field)
+                If weights.Count > 0 Then
+                    loaded(field) = weights
+                End If
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der ComputedWeights: " & ex.Message)
+        End Try
+        _computedWeights = loaded
     End Sub
 
     Public Shared Function GetSharedInstance() As SuggestionEngine
@@ -392,7 +413,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForProjektPfadSuggestion() As IDictionary(Of String, Double)
-        ' Betreff=0.4 Datum=0.1 Domain=0.2 Absender=0.2 AusfueDatum=0.2 → sum=1.1 → ×10/11
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("ProjektPfad", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.46},
             {"AbsenderDomain", 0.18},
@@ -402,7 +424,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForProjektstrukturPfadSuggestion() As IDictionary(Of String, Double)
-        ' Betreff=0.4 Datum=0.1 Domain=0.1 Absender=0.1 AusfueDatum=0.2 ProjektPfad=0.2 → sum=1.1 → ×10/11
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("ProjektstrukturPfad", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.46},
             {"AbsenderDomain", 0.09},
@@ -413,9 +436,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForTitelSuggestion() As IDictionary(Of String, Double)
-        ' AusfueBenutzer was already 0 — sum unchanged at 1.0.
-        ' Titel and Ablageordner are always 0 at suggestion time (mutable, not yet set in cascade).
-        ' ProjektstrukturPfad is 0 intentionally: circular self-reinforcing cascade bias — excluded.
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("Titel", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Betreff", 0.55},
             {"Absender", 0.1},
@@ -426,7 +448,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForAblageordnerSuggestion() As IDictionary(Of String, Double)
-        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("AblageordnerSchema", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
@@ -435,7 +458,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForAbsenderKurzSuggestion() As IDictionary(Of String, Double)
-        ' Datum=0.05 Domain=0.3 Absender=0.2 AusfueDatum=0.2 ProjektPfad=0.4 → sum=1.15 → ×20/23
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("AbsenderKurz", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"AbsenderDomain", 0.26},
             {"Absender", 0.17},
@@ -445,7 +469,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForMsgDateinameSuggestion() As IDictionary(Of String, Double)
-        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("MsgDateinameSchema", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"AusfueDatum", 0.18},
             {"ProjektPfad", 0.36},
@@ -454,7 +479,8 @@ Public Class SuggestionEngine
     End Function
 
     Private Function GetFeatureWeightsForAnhaengeAblegenSuggestion() As IDictionary(Of String, Double)
-        ' Datum=0.05 AusfueDatum=0.2 ProjektPfad=0.4 ProjektstrukturPfad=0.45 → sum=1.1 → ×10/11
+        Dim computed As Dictionary(Of String, Double) = Nothing
+        If _computedWeights?.TryGetValue("AnhaengeAblegen", computed) Then Return computed
         Return New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase) From {
             {"Absender", 0.2},
             {"AusfueDatum", 0.08},
@@ -571,6 +597,184 @@ Public Class SuggestionEngine
             .ToLowerInvariant() _
             .Split(New Char() {" "c, "_"c, "-"c, "."c, "/"c, "\"c, ","c, ";"c, ":"c, "("c, ")"c, "["c, "]"c}, StringSplitOptions.RemoveEmptyEntries) _
             .Where(Function(token) token.Trim().Length > 0)
+    End Function
+
+    ' === Korrelationsbasierte Gewichtsberechnung ===
+
+    Public Sub RecalculateWeightsFromHistory()
+        Dim records As List(Of SessionRecord)
+        Try
+            records = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+        Catch ex As Exception
+            Debug.WriteLine("[SuggestionEngine] RecalculateWeightsFromHistory: DB-Ladefehler: " & ex.Message)
+            Return
+        End Try
+        If records.Count < 2 Then Return
+
+        Dim globalMaxDatumDist As Double = ComputeGlobalMaxDateDistance(records, Function(r) r.Datum)
+        Dim globalMaxAusfueDatumDist As Double = ComputeGlobalMaxDateDistance(records, Function(r) r.AusfueDatum)
+
+        Dim targetFields() As String = {
+            "ProjektPfad", "ProjektstrukturPfad", "Titel", "AbsenderKurz",
+            "AblageordnerSchema", "MsgDateinameSchema", "AnhaengeAblegen"
+        }
+
+        Dim newWeights As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
+        For Each targetField In targetFields
+            Dim weights = ComputeWeightsForTarget(records, targetField, globalMaxDatumDist, globalMaxAusfueDatumDist)
+            If weights IsNot Nothing AndAlso weights.Count > 0 Then
+                Try
+                    ThisAddIn.CurrentDatabaseManager.SaveComputedWeights(targetField, weights, records.Count)
+                Catch ex As Exception
+                    Debug.WriteLine($"[SuggestionEngine] Fehler beim Speichern der Gewichte für '{targetField}': " & ex.Message)
+                End Try
+                newWeights(targetField) = weights
+                Debug.WriteLine($"[SuggestionEngine] Computed weights for '{targetField}': " &
+                                String.Join(", ", weights.Select(Function(kv) $"{kv.Key}={kv.Value:F4}")))
+            End If
+        Next
+        _computedWeights = newWeights
+    End Sub
+
+    Private Function ComputeGlobalMaxDateDistance(records As List(Of SessionRecord),
+                                                  dateSelector As Func(Of SessionRecord, DateTime)) As Double
+        Dim maxDist As Double = 1.0
+        For i As Integer = 0 To records.Count - 2
+            Dim di = dateSelector(records(i))
+            If di = Date.MinValue Then Continue For
+            For j As Integer = i + 1 To records.Count - 1
+                Dim dj = dateSelector(records(j))
+                If dj = Date.MinValue Then Continue For
+                Dim dist = Math.Abs((di - dj).TotalDays)
+                If dist > maxDist Then maxDist = dist
+            Next
+        Next
+        Return maxDist
+    End Function
+
+    Private Function ComputeWeightsForTarget(records As List(Of SessionRecord),
+                                             targetField As String,
+                                             globalMaxDatumDist As Double,
+                                             globalMaxAusfueDatumDist As Double) As Dictionary(Of String, Double)
+        If Not PassesThreshold(records, targetField) Then Return Nothing
+
+        Dim featureVectors As New Dictionary(Of String, List(Of Double))(StringComparer.OrdinalIgnoreCase) From {
+            {"Betreff", New List(Of Double)()},
+            {"Datum", New List(Of Double)()},
+            {"AbsenderDomain", New List(Of Double)()},
+            {"Absender", New List(Of Double)()},
+            {"AusfueBenutzer", New List(Of Double)()},
+            {"AusfueDatum", New List(Of Double)()},
+            {"Titel", New List(Of Double)()},
+            {"Ablageordner", New List(Of Double)()},
+            {"ProjektPfad", New List(Of Double)()},
+            {"ProjektstrukturPfad", New List(Of Double)()}
+        }
+        Dim labelVector As New List(Of Double)()
+        Dim maxDatumUse = Math.Min(180.0, globalMaxDatumDist)
+        Dim maxAusfueUse = Math.Min(180.0, globalMaxAusfueDatumDist)
+        If maxDatumUse <= 0 Then maxDatumUse = 1.0
+        If maxAusfueUse <= 0 Then maxAusfueUse = 1.0
+
+        For i As Integer = 0 To records.Count - 2
+            Dim ri = records(i)
+            For j As Integer = i + 1 To records.Count - 1
+                Dim rj = records(j)
+                labelVector.Add(If(TargetFieldMatch(ri, rj, targetField), 1.0, 0.0))
+                featureVectors("Betreff").Add(CalculateCosineSimilarity(ri.BetreffEmbedded, rj.BetreffEmbedded))
+                Dim rawDatum = DateDistanceInDays(ri.Datum, rj.Datum)
+                featureVectors("Datum").Add(If(rawDatum < 0, 0.0, Math.Max(0.0, 1.0 - rawDatum / maxDatumUse)))
+                featureVectors("AbsenderDomain").Add(CalculateCategoricalSimilarity(ri.AbsenderDomain, rj.AbsenderDomain))
+                featureVectors("Absender").Add(CalculateCategoricalSimilarity(ri.Absender, rj.Absender))
+                featureVectors("AusfueBenutzer").Add(CalculateCategoricalSimilarity(ri.AusfueBenutzer, rj.AusfueBenutzer))
+                Dim rawAusfue = DateDistanceInDays(ri.AusfueDatum, rj.AusfueDatum)
+                featureVectors("AusfueDatum").Add(If(rawAusfue < 0, 0.0, Math.Max(0.0, 1.0 - rawAusfue / maxAusfueUse)))
+                featureVectors("Titel").Add(CalculateTextSimilarity(ri.Titel, rj.Titel))
+                featureVectors("Ablageordner").Add(CalculateTextSimilarity(ri.AblageordnerAufgeloest, rj.AblageordnerAufgeloest))
+                featureVectors("ProjektPfad").Add(CalculateCategoricalSimilarity(ri.ProjektPfad, rj.ProjektPfad))
+                featureVectors("ProjektstrukturPfad").Add(CalculateCategoricalSimilarity(ri.ProjektstrukturPfad, rj.ProjektstrukturPfad))
+            Next
+        Next
+
+        If labelVector.Count = 0 Then Return Nothing
+
+        Dim rawCorrelations As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+        Dim allZero As Boolean = True
+        For Each kvp In featureVectors
+            Dim r = PearsonCorrelation(kvp.Value, labelVector)
+            Dim clipped = Math.Max(0.0, r)
+            rawCorrelations(kvp.Key) = clipped
+            If clipped > 0.0 Then allZero = False
+        Next
+
+        If allZero Then Return Nothing
+
+        Dim total = rawCorrelations.Values.Sum()
+        Dim normalized As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+        For Each kvp In rawCorrelations
+            normalized(kvp.Key) = If(total > 0.0, kvp.Value / total, 0.0)
+        Next
+        Return normalized
+    End Function
+
+    Private Function PassesThreshold(records As List(Of SessionRecord), targetField As String) As Boolean
+        If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
+            Dim trueCount = records.Count(Function(r) r.AnhaengeAblegen = True)
+            Dim falseCount = records.Count - trueCount
+            Return trueCount >= 2 AndAlso falseCount >= 2
+        End If
+
+        Dim propInfo = GetType(SessionRecord).GetProperty(targetField)
+        If propInfo Is Nothing Then Return False
+
+        Dim valueCounts As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+        For Each record In records
+            Dim v = TryCast(propInfo.GetValue(record), String)
+            If String.IsNullOrWhiteSpace(v) Then Continue For
+            Dim key = v.Trim()
+            If Not valueCounts.ContainsKey(key) Then valueCounts(key) = 0
+            valueCounts(key) += 1
+        Next
+
+        Return valueCounts.Count >= 3 AndAlso valueCounts.Values.All(Function(c) c >= 2)
+    End Function
+
+    Private Function TargetFieldMatch(ri As SessionRecord, rj As SessionRecord, targetField As String) As Boolean
+        If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
+            Return ri.AnhaengeAblegen = rj.AnhaengeAblegen
+        End If
+        Dim propInfo = GetType(SessionRecord).GetProperty(targetField)
+        If propInfo Is Nothing Then Return False
+        Dim vi = TryCast(propInfo.GetValue(ri), String)
+        Dim vj = TryCast(propInfo.GetValue(rj), String)
+        If String.IsNullOrWhiteSpace(vi) OrElse String.IsNullOrWhiteSpace(vj) Then Return False
+        Return String.Equals(vi.Trim(), vj.Trim(), StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Private Function PearsonCorrelation(x As List(Of Double), y As List(Of Double)) As Double
+        If x Is Nothing OrElse y Is Nothing Then Return 0.0
+        Dim n = x.Count
+        If n <> y.Count OrElse n < 2 Then Return 0.0
+
+        Dim sumX As Double = 0, sumY As Double = 0
+        For i As Integer = 0 To n - 1
+            sumX += x(i)
+            sumY += y(i)
+        Next
+        Dim meanX = sumX / n
+        Dim meanY = sumY / n
+
+        Dim cov As Double = 0, varX As Double = 0, varY As Double = 0
+        For i As Integer = 0 To n - 1
+            Dim dx = x(i) - meanX
+            Dim dy = y(i) - meanY
+            cov += dx * dy
+            varX += dx * dx
+            varY += dy * dy
+        Next
+
+        If varX = 0.0 OrElse varY = 0.0 Then Return 0.0
+        Return cov / Math.Sqrt(varX * varY)
     End Function
 
 End Class
