@@ -496,7 +496,10 @@ Public Class Session
             End If
         End If
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
-        ' PredictionEngine.TrainDecisionTreeModels()
+        Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
+        If recordCount Mod 50 = 0 Then
+            Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
+        End If
         Me.Reset()
         Return String.Empty
     End Function

@@ -25,6 +25,7 @@ Public Class SessionDatabaseManager
 
             ' Tabellen immer anlegen, falls sie fehlen.
             CreateSessionTable(conn)
+            CreateComputedWeightsTable(conn)
 
             Dim dbVersion = GetDatabaseVersion(conn)
 
@@ -41,6 +42,72 @@ Public Class SessionDatabaseManager
             End If
         End Using
         'CreateEncodedSessionsTable()
+    End Sub
+
+    Private Sub CreateComputedWeightsTable(conn As SQLiteConnection)
+        Dim sql As String =
+            "CREATE TABLE IF NOT EXISTS ComputedWeights (" &
+            "TargetField TEXT NOT NULL, " &
+            "FeatureName TEXT NOT NULL, " &
+            "Weight REAL NOT NULL, " &
+            "RecordCount INTEGER NOT NULL, " &
+            "ComputedAt TEXT NOT NULL, " &
+            "PRIMARY KEY (TargetField, FeatureName)" &
+            ")"
+        Using cmd As New SQLiteCommand(sql, conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Public Function GetSessionRecordCount() As Integer
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using cmd As New SQLiteCommand("SELECT COUNT(*) FROM Sessions", conn)
+                Return Convert.ToInt32(cmd.ExecuteScalar())
+            End Using
+        End Using
+    End Function
+
+    Public Function LoadComputedWeights(targetField As String) As Dictionary(Of String, Double)
+        Dim result As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Dim sql As String = "SELECT FeatureName, Weight FROM ComputedWeights WHERE TargetField = @targetField"
+            Using cmd As New SQLiteCommand(sql, conn)
+                cmd.Parameters.AddWithValue("@targetField", targetField)
+                Using reader As SQLiteDataReader = cmd.ExecuteReader()
+                    While reader.Read()
+                        result(reader("FeatureName").ToString()) = Convert.ToDouble(reader("Weight"))
+                    End While
+                End Using
+            End Using
+        End Using
+        Return result
+    End Function
+
+    Public Sub SaveComputedWeights(targetField As String, weights As Dictionary(Of String, Double), recordCount As Integer)
+        If weights Is Nothing OrElse weights.Count = 0 Then Return
+        Dim computedAt As String = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using txn As SQLiteTransaction = conn.BeginTransaction()
+                Dim sql As String =
+                    "INSERT OR REPLACE INTO ComputedWeights " &
+                    "(TargetField, FeatureName, Weight, RecordCount, ComputedAt) " &
+                    "VALUES (@targetField, @featureName, @weight, @recordCount, @computedAt)"
+                For Each kvp In weights
+                    Using cmd As New SQLiteCommand(sql, conn, txn)
+                        cmd.Parameters.AddWithValue("@targetField", targetField)
+                        cmd.Parameters.AddWithValue("@featureName", kvp.Key)
+                        cmd.Parameters.AddWithValue("@weight", kvp.Value)
+                        cmd.Parameters.AddWithValue("@recordCount", recordCount)
+                        cmd.Parameters.AddWithValue("@computedAt", computedAt)
+                        cmd.ExecuteNonQuery()
+                    End Using
+                Next
+                txn.Commit()
+            End Using
+        End Using
     End Sub
 
     Private Sub CreateSessionTable(conn As SQLiteConnection)

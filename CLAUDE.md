@@ -122,7 +122,10 @@ MailDrop/
 - Task pane default width is set during first creation in ThisAddIn.MailAblegen_Click (currently 500 px) and docked right.
 - Selection updates: Explorer.SelectionChange -> MailSelected().
 - Session preparation: Session.PrepareSession() -> Reset, mail metadata read, recent project paths load, shared SuggestionEngine access, feature distance precompute, suggested ProjektPfad apply (if valid).
-- Save flow on OK: Session.ProcessSession() -> InputChecker -> create folder -> save .msg -> optional attachments -> persist SessionRecord -> reset session.
+- Save flow on OK: Session.ProcessSession() -> InputChecker -> create folder -> save .msg -> optional attachments -> persist SessionRecord -> count check (every 50th record triggers RecalculateWeightsFromHistory in Task.Run on shared engine) -> reset session.
+- SuggestionEngine pre-load: ThisAddIn_Startup fires PreloadSharedInstanceInBackground (SharedEngineLazy). Shared singleton loads historical records + computed weights from DB on first access.
+- Weight recalculation: every 50th ProcessSession (recordCount Mod 50 = 0), Task.Run calls RecalculateWeightsFromHistory() on the shared engine. This reloads all records from DB, computes pairwise Pearson correlation per target field, persists results to ComputedWeights SQLite table, and replaces _computedWeights in memory. Non-milestone sessions skip this step.
+- Feature weights are data-driven per target field when sufficient history exists. Weights are computed via pairwise Pearson correlation between feature similarity vectors and a binary label (same/different target value for each record pair), clipped to [0, ∞) and normalized to sum 1. Stored per target field in the ComputedWeights SQLite table (columns: TargetField, FeatureName, Weight, RecordCount, ComputedAt). Loaded into _computedWeights As Dictionary(Of String, Dictionary(Of String, Double)) during SuggestionEngine.New(). Threshold per target field: ≥3 distinct values each appearing ≥2 times (AnhaengeAblegen: both True and False ≥2 times). Fallback to per-target hardcoded weights (GetFeatureWeightsForXxx) when threshold not met or no stored weights exist. Recalculation is triggered every 50th saved session.
 
 ## Key files for first orientation
 
