@@ -498,7 +498,7 @@ Public Class Session
         End If
         Dim newRecord = Me.ToSessionRecord()
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
-        SuggestionEngine.GetSharedInstance().EnginesHistoricalSessionRecords.Add(newRecord)
+        SuggestionEngine.GetSharedInstance().AppendHistoricalRecord(newRecord)
         Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
         If recordCount Mod 50 = 0 Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())

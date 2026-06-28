@@ -236,6 +236,23 @@ Public Class SuggestionEngine
         ProjektstrukturPfadDistances = newDistances
     End Sub
 
+    ' Adds a newly saved record to the in-memory list AND extends every distance array by one zero,
+    ' keeping all arrays in sync with the list length so FindBestRecordByField never goes out of range.
+    Public Sub AppendHistoricalRecord(record As SessionRecord)
+        If record Is Nothing Then Return
+        EnginesHistoricalSessionRecords.Add(record)
+        BetreffDistances?.Add(0.0)
+        DatumsDistances?.Add(0.0)
+        AbsenderDomainDistances?.Add(0.0)
+        AbsenderDistances?.Add(0.0)
+        AusfueBenutzerDistances?.Add(0.0)
+        AusfueDatumsDistances?.Add(0.0)
+        TitelDistances?.Add(0.0)
+        AblageordnerDistances?.Add(0.0)
+        ProjektPfadDistances?.Add(0.0)
+        ProjektstrukturPfadDistances?.Add(0.0)
+    End Sub
+
     Private Const DefaultSchemaTemplate As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
 
     Public Function SuggestProjektPfad(session As Session) As String
