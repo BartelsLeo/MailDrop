@@ -666,9 +666,9 @@ Public Class SuggestionEngine
                 Debug.WriteLine($"  Threshold: True={trueCount}, False={falseCount}" &
                                 If(passes, " → PASSED", $" → FAILED ({If(trueCount < 2, "True", "False")}<2)"))
             Else
-                passes = K >= 3
+                passes = K >= 2
                 Debug.WriteLine($"  Threshold: K={K} distinct values" &
-                                If(passes, " → PASSED", " → FAILED (K<3)"))
+                                If(passes, " → PASSED", " → FAILED (K<2)"))
             End If
             If Not passes Then Continue For
 
