@@ -46,8 +46,7 @@ Public Module InputChecker
         Return String.Empty
     End Function
 
-    ' Zeigt einen Dialog zur Umbenennung eines Anhangs, gibt neuen Namen oder String.Empty zurück
-    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
+0    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
         Dim dlg As New AttachmentRenameDialog(currentName, basePath)
         If System.Windows.Application.Current IsNot Nothing AndAlso System.Windows.Application.Current.MainWindow IsNot Nothing Then
             dlg.Owner = System.Windows.Application.Current.MainWindow
@@ -96,44 +95,23 @@ Public Module InputChecker
         End If
         result.CheckedMsgZielpfad = msgZielPfad
         If session.AnhaengeAblegen Then
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer As Object = Nothing
-            Dim mail As Object = Nothing
-            Try
-                explorer = app.ActiveExplorer()
-                If explorer IsNot Nothing AndAlso explorer.Selection.Count = 1 Then
-                    mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
-                    If mail IsNot Nothing Then
-                        For i As Integer = 1 To mail.Attachments.Count
-                            Dim att As Object = Nothing
-                            Try
-                                att = mail.Attachments(i)
-                                Dim anhangName = att.FileName
-                                Dim anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
-                                If anhangPfad.Length > 255 Then
-                                    Dim newName = ShowAttachmentRenameDialog(anhangName, ablageOrdnerPfad)
-                                    If String.IsNullOrEmpty(newName) Then
-                                        Continue For
-                                    End If
-                                    anhangName = newName
-                                    anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
-                                End If
-                                Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
-                                If anhangNameCheck <> String.Empty Then
-                                    result.ErrorMessage = anhangNameCheck
-                                    Return result
-                                End If
-                                result.CheckedAnhZielpfade.Add(anhangPfad)
-                            Finally
-                                ReleaseComObjectSafe(att)
-                            End Try
-                        Next
-                    End If
+            For Each item In session.Anhaenge
+                If Not item.IsSelected Then Continue For
+                Dim anhangName = item.Name
+                Dim anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
+                If anhangPfad.Length > 255 Then
+                    Dim newName = ShowAttachmentRenameDialog(anhangName, ablageOrdnerPfad)
+                    If String.IsNullOrEmpty(newName) Then Continue For
+                    anhangName = newName
+                    anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
                 End If
-            Finally
-                ReleaseComObjectSafe(mail)
-                ReleaseComObjectSafe(explorer)
-            End Try
+                Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
+                If anhangNameCheck <> String.Empty Then
+                    result.ErrorMessage = anhangNameCheck
+                    Return result
+                End If
+                result.CheckedAnhZielpfade.Add(anhangPfad)
+            Next
         End If
         Dim existingFiles As New List(Of String)()
         If File.Exists(result.CheckedMsgZielpfad) Then

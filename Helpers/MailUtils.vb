@@ -75,7 +75,37 @@ Public Module MailUtils
         End Try
     End Function
 
-    ' Speichert alle Anh�nge der Mail im Ablageordner
+    ' Liest Anhang-Namen und -Indizes aus der selektierten Mail und befüllt session.Anhaenge
+    Public Sub ReadAttachmentNames(session As Session)
+        Dim mail As Object = Nothing
+        Try
+            Dim app As Outlook.Application = Globals.ThisAddIn.Application
+            Dim explorer As Object = app.ActiveExplorer()
+            If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then Return
+            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            If mail Is Nothing Then Return
+            session.Anhaenge.Clear()
+            For i As Integer = 1 To mail.Attachments.Count
+                Dim att As Object = Nothing
+                Try
+                    att = mail.Attachments(i)
+                    session.Anhaenge.Add(New AttachmentItem() With {
+                        .Name = att.FileName,
+                        .OutlookIndex = i,
+                        .IsSelected = True
+                    })
+                Finally
+                    ReleaseComObjectSafe(att)
+                End Try
+            Next
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] ReadAttachmentNames exception: {ex.Message}")
+        Finally
+            ReleaseComObjectSafe(mail)
+        End Try
+    End Sub
+
+    ' Speichert die selektierten Anhänge der Mail; Zuordnung per Dateiname (nicht per Index)
     Public Function SaveMailAttachments(anhangZielpfade As List(Of String)) As String
         Dim explorer As Object = Nothing
         Dim mail As Object = Nothing
@@ -89,17 +119,20 @@ Public Module MailUtils
             If mail Is Nothing Then
                 Return "Bitte w�hlen Sie eine einzelne E-Mail aus."
             End If
-            For i As Integer = 1 To mail.Attachments.Count
-                If i <= anhangZielpfade.Count Then
+            For Each anhangPfad In anhangZielpfade
+                Dim targetName = Path.GetFileName(anhangPfad)
+                For i As Integer = 1 To mail.Attachments.Count
                     Dim att As Object = Nothing
                     Try
                         att = mail.Attachments(i)
-                        Dim anhangPfad = anhangZielpfade(i - 1)
-                        att.SaveAsFile(anhangPfad)
+                        If String.Equals(att.FileName, targetName, StringComparison.OrdinalIgnoreCase) Then
+                            att.SaveAsFile(anhangPfad)
+                            Exit For
+                        End If
                     Finally
                         ReleaseComObjectSafe(att)
                     End Try
-                End If
+                Next
             Next
             Return String.Empty
         Catch ex As Exception

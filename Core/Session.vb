@@ -4,10 +4,33 @@ Imports System.Diagnostics
 Imports System.IO
 Imports System.Threading.Tasks
 
+Public Class AttachmentItem
+    Implements INotifyPropertyChanged
+
+    Public Property Name As String
+    Public Property OutlookIndex As Integer
+
+    Private _isSelected As Boolean = True
+    Public Property IsSelected As Boolean
+        Get
+            Return _isSelected
+        End Get
+        Set(value As Boolean)
+            If _isSelected <> value Then
+                _isSelected = value
+                RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(IsSelected)))
+            End If
+        End Set
+    End Property
+
+    Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
+End Class
+
 Public Class Session
     Implements INotifyPropertyChanged
 
     Public Property LastDuplicateWarning As String
+    Public Property Anhaenge As New ObservableCollection(Of AttachmentItem)()
 
     Private _projektPfad As String
     Private _titel As String
@@ -220,6 +243,7 @@ Public Class Session
 
     Public Sub Reset()
         LastDuplicateWarning = String.Empty
+        Anhaenge.Clear()
         ProjektPfad = Nothing
         Titel = String.Empty
         AblageordnerSchema = String.Empty
@@ -368,6 +392,7 @@ Public Class Session
     Public Sub PrepareSession()
         Reset()
         MailUtils.ReadMailMeta(Me)
+        MailUtils.ReadAttachmentNames(Me)
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
 

@@ -165,7 +165,7 @@ Public Class MailDropWpfTaskPane
     Private Sub ButtonOk_Click(sender As Object, e As RoutedEventArgs)
         Dim result As String = Session.ProcessSession()
         If Not String.IsNullOrEmpty(result) Then
-            MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
+            ShowErrorNotification(result)
         ElseIf Not String.IsNullOrEmpty(Session.LastDuplicateWarning) Then
             ShowDuplicateWarningNotification(Session.LastDuplicateWarning)
         Else
@@ -181,6 +181,20 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
+                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+        End Sub
+        timer.Start()
+    End Sub
+
+    Private Sub ShowErrorNotification(message As String)
+        ErrorNotificationText.Text = message
+        ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
+        Dim timer As New System.Windows.Threading.DispatcherTimer()
+        timer.Interval = TimeSpan.FromSeconds(8)
+        AddHandler timer.Tick, Sub(s, ev)
+            timer.Stop()
+            ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
         timer.Start()
