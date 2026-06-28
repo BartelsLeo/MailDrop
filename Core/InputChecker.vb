@@ -15,6 +15,7 @@ Public Module InputChecker
         Public Property CheckedMsgZielpfad As String
         Public Property CheckedAnhZielpfade As List(Of String)
         Public Property ErrorMessage As String
+        Public Property DuplicateWarning As String
     End Class
 
     ' Prüft Ordnernamen und Pfadlänge
@@ -133,6 +134,16 @@ Public Module InputChecker
                 ReleaseComObjectSafe(mail)
                 ReleaseComObjectSafe(explorer)
             End Try
+        End If
+        Dim existingFiles As New List(Of String)()
+        If File.Exists(result.CheckedMsgZielpfad) Then
+            existingFiles.Add(Path.GetFileName(result.CheckedMsgZielpfad))
+        End If
+        For Each anhPfad In result.CheckedAnhZielpfade
+            If File.Exists(anhPfad) Then existingFiles.Add(Path.GetFileName(anhPfad))
+        Next
+        If existingFiles.Count > 0 Then
+            result.DuplicateWarning = "Bereits vorhanden: " & String.Join(", ", existingFiles)
         End If
         Return result
     End Function

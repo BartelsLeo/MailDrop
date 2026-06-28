@@ -166,6 +166,8 @@ Public Class MailDropWpfTaskPane
         Dim result As String = Session.ProcessSession()
         If Not String.IsNullOrEmpty(result) Then
             MessageBox.Show(result, "Fehler", MessageBoxButton.OK, MessageBoxImage.Error)
+        ElseIf Not String.IsNullOrEmpty(Session.LastDuplicateWarning) Then
+            ShowDuplicateWarningNotification(Session.LastDuplicateWarning)
         Else
             ShowSuccessNotification()
         End If
@@ -179,6 +181,20 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
+                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+        End Sub
+        timer.Start()
+    End Sub
+
+    Private Sub ShowDuplicateWarningNotification(message As String)
+        DuplicateWarningText.Text = message
+        DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
+        Dim timer As New System.Windows.Threading.DispatcherTimer()
+        timer.Interval = TimeSpan.FromSeconds(5)
+        AddHandler timer.Tick, Sub(s, ev)
+            timer.Stop()
+            DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
         timer.Start()

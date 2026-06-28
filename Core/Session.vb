@@ -7,6 +7,8 @@ Imports System.Threading.Tasks
 Public Class Session
     Implements INotifyPropertyChanged
 
+    Public Property LastDuplicateWarning As String
+
     Private _projektPfad As String
     Private _titel As String
     Private _anhaengeAblegen As Boolean
@@ -217,6 +219,7 @@ Public Class Session
     End Sub
 
     Public Sub Reset()
+        LastDuplicateWarning = String.Empty
         ProjektPfad = Nothing
         Titel = String.Empty
         AblageordnerSchema = String.Empty
@@ -478,10 +481,12 @@ Public Class Session
     End Sub
 
     Public Function ProcessSession() As String
+        LastDuplicateWarning = String.Empty
         Dim checkedInput = InputChecker.CheckInput(Me)
         If checkedInput.ErrorMessage <> String.Empty Then
             Return checkedInput.ErrorMessage
         End If
+        LastDuplicateWarning = checkedInput.DuplicateWarning
         Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
         If ablageResult <> String.Empty Then
             Return ablageResult

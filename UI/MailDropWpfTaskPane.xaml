@@ -392,6 +392,19 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ── Duplicate warning notification (fades in, then out) ── -->
+                <Border x:Name="DuplicateWarningNotification" Grid.Row="11"
+                        Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;" Foreground="#B45309" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="DuplicateWarningText" Foreground="#92400E"
+                                   FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
             </Grid>
         </Border>
     </ScrollViewer>
