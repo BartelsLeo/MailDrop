@@ -666,9 +666,9 @@ Public Class SuggestionEngine
                 Debug.WriteLine($"  Threshold: True={trueCount}, False={falseCount}" &
                                 If(passes, " → PASSED", $" → FAILED ({If(trueCount < 2, "True", "False")}<2)"))
             Else
-                passes = K >= 3 AndAlso M >= 2
-                Debug.WriteLine($"  Threshold: K={K} distinct values, M={M} min count" &
-                                If(passes, " → PASSED", $" → FAILED ({If(K < 3, "K<3", "M<2")})"))
+                passes = K >= 3
+                Debug.WriteLine($"  Threshold: K={K} distinct values" &
+                                If(passes, " → PASSED", " → FAILED (K<3)"))
             End If
             If Not passes Then Continue For
 
@@ -824,7 +824,7 @@ Public Class SuggestionEngine
     End Function
 
     ' Populates threshold diagnostic values for debug output. For AnhaengeAblegen: K/M unused, trueCount/falseCount relevant.
-    ' For string fields: trueCount/falseCount unused, K = distinct value count, M = min count per value.
+    ' For string fields: trueCount/falseCount unused, K = distinct value count, M = min count per value (informational only; not used in threshold).
     Private Sub GetThresholdInfo(records As List(Of SessionRecord), targetField As String,
                                   ByRef K As Integer, ByRef M As Integer,
                                   ByRef trueCount As Integer, ByRef falseCount As Integer)
