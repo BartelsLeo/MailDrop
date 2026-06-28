@@ -2,6 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
+Imports System.Threading.Tasks
 
 Public Class Session
     Implements INotifyPropertyChanged
@@ -495,7 +496,9 @@ Public Class Session
                 Return anhangResult
             End If
         End If
-        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
+        Dim newRecord = Me.ToSessionRecord()
+        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
+        SuggestionEngine.GetSharedInstance().EnginesHistoricalSessionRecords.Add(newRecord)
         Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
         If recordCount Mod 50 = 0 Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())

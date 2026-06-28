@@ -719,7 +719,7 @@ Public Class SuggestionEngine
 
     Private Function PassesThreshold(records As List(Of SessionRecord), targetField As String) As Boolean
         If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
-            Dim trueCount = records.Count(Function(r) r.AnhaengeAblegen = True)
+            Dim trueCount = records.Where(Function(r) r.AnhaengeAblegen = True).Count()
             Dim falseCount = records.Count - trueCount
             Return trueCount >= 2 AndAlso falseCount >= 2
         End If
