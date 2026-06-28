@@ -37,10 +37,10 @@ Public Class SuggestionEngine
     ' Maps mutable engine feature names to the CascadeStep at which they first become available as INPUT.
     ' Uses the existing CascadeStep enum — no separate cascade order definition.
     Private Shared ReadOnly MutableFeatureAvailableFromStep As New Dictionary(Of String, CascadeStep)(StringComparer.OrdinalIgnoreCase) From {
-        {"ProjektPfad",         CascadeStep.ProjektstrukturPfad},
+        {"ProjektPfad", CascadeStep.ProjektstrukturPfad},
         {"ProjektstrukturPfad", CascadeStep.Titel},
-        {"Titel",               CascadeStep.AbsenderKurz},
-        {"Ablageordner",        CascadeStep.MsgDateinameSchema}
+        {"Titel", CascadeStep.AbsenderKurz},
+        {"Ablageordner", CascadeStep.MsgDateinameSchema}
     }
 
     Public Enum CascadeStep

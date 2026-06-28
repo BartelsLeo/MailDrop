@@ -419,6 +419,19 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ── Overwrite warning notification (fades in, then out) ── -->
+                <Border x:Name="OverwriteWarningNotification" Grid.Row="12"
+                        Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="&#x26A0;" Foreground="#B45309" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                        <TextBlock Text="Erfolgreich abgelegt. Existierende Dateien überschrieben."
+                                   Foreground="#92400E" FontSize="12" TextWrapping="Wrap"/>
+                    </DockPanel>
+                </Border>
+
                 <!-- ── Error notification (fades in, then out) ── -->
                 <Border x:Name="ErrorNotification" Grid.Row="12"
                         Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1"

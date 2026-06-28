@@ -30,6 +30,7 @@ Public Class Session
     Implements INotifyPropertyChanged
 
     Public Property LastDuplicateWarning As String
+    Public Property LastOverwriteWarning As String
     Public Property Anhaenge As New ObservableCollection(Of AttachmentItem)()
 
     Private _projektPfad As String
@@ -534,6 +535,7 @@ Public Class Session
 
     Public Function ProcessSession() As String
         LastDuplicateWarning = String.Empty
+        LastOverwriteWarning = String.Empty
         Dim checkedInput = InputChecker.CheckInput(Me)
         If checkedInput.ErrorMessage <> String.Empty Then
             Return checkedInput.ErrorMessage
@@ -542,6 +544,14 @@ Public Class Session
         Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
         If ablageResult <> String.Empty Then
             Return ablageResult
+        End If
+        ' Prüfen ob Dateien bereits existieren; Überschreiben wird durchgeführt.
+        Dim msgPfad = checkedInput.CheckedMsgZielpfad
+        If Not msgPfad.ToLower().EndsWith(".msg") Then msgPfad &= ".msg"
+        Dim overwriteFound = File.Exists(msgPfad) OrElse
+                             checkedInput.CheckedAnhZielpfade.Any(Function(p) File.Exists(p))
+        If overwriteFound Then
+            LastOverwriteWarning = "Erfolgreich abgelegt. Existierende Dateien überschrieben."
         End If
         Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
         If mailResult <> String.Empty Then
@@ -560,7 +570,12 @@ Public Class Session
         If recordCount Mod 50 = 0 Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
         End If
+        ' Warnungswerte vor Reset() sichern, da Reset() sie löscht.
+        Dim savedDuplicate = LastDuplicateWarning
+        Dim savedOverwrite = LastOverwriteWarning
         Me.Reset()
+        LastDuplicateWarning = savedDuplicate
+        LastOverwriteWarning = savedOverwrite
         Return String.Empty
     End Function
 

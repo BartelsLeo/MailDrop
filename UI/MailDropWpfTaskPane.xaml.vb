@@ -170,6 +170,8 @@ Public Class MailDropWpfTaskPane
             ShowErrorNotification(result)
         ElseIf Not String.IsNullOrEmpty(Session.LastDuplicateWarning) Then
             ShowDuplicateWarningNotification(Session.LastDuplicateWarning)
+        ElseIf Not String.IsNullOrEmpty(Session.LastOverwriteWarning) Then
+            ShowOverwriteWarningNotification()
         Else
             ShowSuccessNotification()
         End If
@@ -197,6 +199,19 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
+                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+        End Sub
+        timer.Start()
+    End Sub
+
+    Private Sub ShowOverwriteWarningNotification()
+        OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
+        Dim timer As New System.Windows.Threading.DispatcherTimer()
+        timer.Interval = TimeSpan.FromSeconds(4)
+        AddHandler timer.Tick, Sub(s, ev)
+            timer.Stop()
+            OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
         timer.Start()
