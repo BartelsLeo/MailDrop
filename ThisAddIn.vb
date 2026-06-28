@@ -37,9 +37,47 @@ Public Class ThisAddIn
             Debug.WriteLine($"[ThisAddIn] Startup: no explorer available yet, waiting for NewExplorer. ({sw.ElapsedMilliseconds} ms)")
         End If
 
-        ' Engine im Hintergrund vorladen, damit "Mail ablegen" beim ersten Klick schneller oeffnet.
+        ' Engine im Hintergrund vorladen (inkl. EmbeddingService-Warmup).
         SuggestionEngine.PreloadSharedInstanceInBackground(1500)
-        Debug.WriteLine($"[ThisAddIn] Startup END – PreloadSharedInstanceInBackground queued. Total={sw.ElapsedMilliseconds} ms")
+
+        ' Task pane im Hintergrund vorerstellen: Timer feuert auf dem UI-Thread (WPF/COM-sicher).
+        ' Verzögerung > Engine-Preload damit SQLite-Init und ONNX-Load nicht gleichzeitig laufen.
+        PreloadTaskPaneInBackground(delayMs:=4000)
+
+        Debug.WriteLine($"[ThisAddIn] Startup END – preloads queued. Total={sw.ElapsedMilliseconds} ms")
+    End Sub
+
+    Private Sub PreloadTaskPaneInBackground(delayMs As Integer)
+        Dim timer As New System.Windows.Forms.Timer()
+        timer.Interval = delayMs
+        AddHandler timer.Tick, Sub(s, e)
+            timer.Stop()
+            timer.Dispose()
+            If taskPane IsNot Nothing Then
+                Debug.WriteLine("[ThisAddIn] PreloadTaskPane: already created, skipping.")
+                Return
+            End If
+            Try
+                Dim sw As Stopwatch = Stopwatch.StartNew()
+                Debug.WriteLine("[ThisAddIn] PreloadTaskPane: creating hidden task pane…")
+                CreateAndRegisterTaskPane()
+                taskPane.Visible = False
+                Debug.WriteLine($"[ThisAddIn] PreloadTaskPane: done in {sw.ElapsedMilliseconds} ms — task pane ready.")
+            Catch ex As Exception
+                Debug.WriteLine($"[ThisAddIn] PreloadTaskPane failed: {ex.Message}")
+            End Try
+        End Sub
+        timer.Start()
+    End Sub
+
+    Private Sub CreateAndRegisterTaskPane()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Dim paneControl As New MailDropWpfHostControl()
+        Debug.WriteLine($"[ThisAddIn]   MailDropWpfHostControl created: {sw.ElapsedMilliseconds} ms")
+        taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
+        taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
+        taskPane.Width = 500
+        Debug.WriteLine($"[ThisAddIn]   Task pane registered and docked: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub _explorers_NewExplorer(NewExplorer As Outlook.Explorer) Handles _explorers.NewExplorer
@@ -94,26 +132,12 @@ Public Class ThisAddIn
 
     ' Callback for Ribbon button
     Public Sub MailAblegen_Click(control As Object)
-        Dim wpfTaskPane As MailDropWpfTaskPane = Nothing
-
         If taskPane Is Nothing Then
-            Dim swPane As Stopwatch = Stopwatch.StartNew()
-            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: creating task pane (first open)…")
-            Dim paneControl As New MailDropWpfHostControl()
-            Debug.WriteLine($"[ThisAddIn]   MailDropWpfHostControl created: {swPane.ElapsedMilliseconds} ms")
-            Dim wpfPane = TryCast(paneControl.Controls(0), System.Windows.Forms.Integration.ElementHost)
-            If wpfPane IsNot Nothing Then
-                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
-            End If
-            taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
-            taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
-            taskPane.Width = 500
-            Debug.WriteLine($"[ThisAddIn]   Task pane registered and docked: {swPane.ElapsedMilliseconds} ms")
+            ' Preload hasn't fired yet (clicked within first 4 s) — create synchronously.
+            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: preload not done, creating task pane now…")
+            CreateAndRegisterTaskPane()
         Else
-            Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
-            If wpfPane IsNot Nothing Then
-                wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
-            End If
+            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: task pane was preloaded — showing immediately.")
         End If
 
         MailSelected()

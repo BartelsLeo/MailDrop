@@ -101,12 +101,28 @@ Public Class SuggestionEngine
                              Thread.Sleep(delayMs)
                          End If
                          Debug.WriteLine($"[SuggestionEngine] Preload: starting SharedEngineLazy.Value… ({sw.ElapsedMilliseconds} ms since queued)")
-                         Dim ignored = SharedEngineLazy.Value
-                         Debug.WriteLine($"[SuggestionEngine] Preload: shared instance ready. Total={sw.ElapsedMilliseconds} ms")
+                         Dim engine = SharedEngineLazy.Value
+                         Debug.WriteLine($"[SuggestionEngine] Preload: engine ready at {sw.ElapsedMilliseconds} ms — warming up EmbeddingService…")
+                         engine.PreloadEmbeddingService()
+                         Debug.WriteLine($"[SuggestionEngine] Preload: fully done. Total={sw.ElapsedMilliseconds} ms")
                      Catch ex As Exception
                          Debug.WriteLine($"[SuggestionEngine] Background preload failed after {sw.ElapsedMilliseconds} ms: {ex.Message}")
                      End Try
                  End Sub)
+    End Sub
+
+    ' Erstellt EmbeddingService und führt eine Dummy-Inferenz durch, damit ONNX beim ersten
+    ' echten Aufruf nicht kalt startet. Sicher auf beliebigem Thread aufrufbar.
+    Public Sub PreloadEmbeddingService()
+        Dim svc = GetEmbeddingService()
+        If svc Is Nothing Then Return
+        Try
+            Dim sw As Stopwatch = Stopwatch.StartNew()
+            svc.GenerateEmbedding("warmup")
+            Debug.WriteLine($"[SuggestionEngine] PreloadEmbeddingService: warmup inference done in {sw.ElapsedMilliseconds} ms")
+        Catch ex As Exception
+            Debug.WriteLine($"[SuggestionEngine] PreloadEmbeddingService: warmup failed: {ex.Message}")
+        End Try
     End Sub
 
     Public Shared Sub DisposeSharedInstance()
