@@ -361,17 +361,20 @@
                 </Grid>
 
                 <!-- ── Anhang-Auswahl ── -->
-                <ItemsControl Grid.Row="10" Margin="124,0,14,4"
-                              ItemsSource="{Binding Anhaenge}"
-                              IsEnabled="{Binding AnhaengeAblegen}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                      Content="{Binding Name}"
-                                      FontSize="11" Margin="0,2,0,0"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ScrollViewer Grid.Row="10" Margin="124,0,14,4"
+                              MaxHeight="90" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Anhaenge}"
+                                  IsEnabled="{Binding AnhaengeAblegen}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          Content="{Binding Name}"
+                                          FontSize="11" Margin="0,2,0,0"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <!-- ── Buttons ── -->
                 <StackPanel Orientation="Horizontal" Grid.Row="11"

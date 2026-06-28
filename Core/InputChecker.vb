@@ -46,7 +46,7 @@ Public Module InputChecker
         Return String.Empty
     End Function
 
-0    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
+    Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
         Dim dlg As New AttachmentRenameDialog(currentName, basePath)
         If System.Windows.Application.Current IsNot Nothing AndAlso System.Windows.Application.Current.MainWindow IsNot Nothing Then
             dlg.Owner = System.Windows.Application.Current.MainWindow
