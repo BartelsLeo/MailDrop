@@ -26,16 +26,20 @@ Public Class ThisAddIn
     End Property
 
     Private Sub ThisAddIn_Startup() Handles Me.Startup
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[ThisAddIn] Startup BEGIN")
+
         _explorers = Application.Explorers
         If _explorers.Count > 0 Then
             _currentExplorer = TryCast(_explorers.Item(1), Outlook.Explorer)
-            Debug.WriteLine("[ThisAddIn] Startup: _currentExplorer set.")
+            Debug.WriteLine($"[ThisAddIn] Startup: _currentExplorer set. ({sw.ElapsedMilliseconds} ms)")
         Else
-            Debug.WriteLine("[ThisAddIn] Startup: no explorer available yet, waiting for NewExplorer.")
+            Debug.WriteLine($"[ThisAddIn] Startup: no explorer available yet, waiting for NewExplorer. ({sw.ElapsedMilliseconds} ms)")
         End If
 
         ' Engine im Hintergrund vorladen, damit "Mail ablegen" beim ersten Klick schneller oeffnet.
         SuggestionEngine.PreloadSharedInstanceInBackground(1500)
+        Debug.WriteLine($"[ThisAddIn] Startup END – PreloadSharedInstanceInBackground queued. Total={sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub _explorers_NewExplorer(NewExplorer As Outlook.Explorer) Handles _explorers.NewExplorer
@@ -93,7 +97,10 @@ Public Class ThisAddIn
         Dim wpfTaskPane As MailDropWpfTaskPane = Nothing
 
         If taskPane Is Nothing Then
+            Dim swPane As Stopwatch = Stopwatch.StartNew()
+            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: creating task pane (first open)…")
             Dim paneControl As New MailDropWpfHostControl()
+            Debug.WriteLine($"[ThisAddIn]   MailDropWpfHostControl created: {swPane.ElapsedMilliseconds} ms")
             Dim wpfPane = TryCast(paneControl.Controls(0), System.Windows.Forms.Integration.ElementHost)
             If wpfPane IsNot Nothing Then
                 wpfTaskPane = TryCast(wpfPane.Child, MailDropWpfTaskPane)
@@ -101,6 +108,7 @@ Public Class ThisAddIn
             taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
             taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
             taskPane.Width = 500
+            Debug.WriteLine($"[ThisAddIn]   Task pane registered and docked: {swPane.ElapsedMilliseconds} ms")
         Else
             Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
             If wpfPane IsNot Nothing Then

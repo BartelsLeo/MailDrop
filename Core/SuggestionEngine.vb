@@ -53,16 +53,22 @@ Public Class SuggestionEngine
     End Enum
 
     Public Sub New()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[SuggestionEngine] New() BEGIN")
         Try
             EnginesHistoricalSessionRecords = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
+            Debug.WriteLine($"[SuggestionEngine]   GetAllSessionRecords: {sw.ElapsedMilliseconds} ms – {EnginesHistoricalSessionRecords.Count} records")
         Catch ex As Exception
             Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der Session-Historie: " & ex.Message)
             EnginesHistoricalSessionRecords = New List(Of SessionRecord)()
         End Try
         LoadAllComputedWeights()
+        Debug.WriteLine($"[SuggestionEngine] New() END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub LoadAllComputedWeights()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[SuggestionEngine] LoadAllComputedWeights BEGIN")
         Dim loaded As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
         Dim targetFields() As String = {
             "ProjektPfad", "ProjektstrukturPfad", "Titel", "AbsenderKurz",
@@ -79,6 +85,7 @@ Public Class SuggestionEngine
             Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der ComputedWeights: " & ex.Message)
         End Try
         _computedWeights = loaded
+        Debug.WriteLine($"[SuggestionEngine] LoadAllComputedWeights END – {loaded.Count} fields loaded: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Public Shared Function GetSharedInstance() As SuggestionEngine
@@ -87,14 +94,17 @@ Public Class SuggestionEngine
 
     Public Shared Sub PreloadSharedInstanceInBackground(Optional delayMs As Integer = 1500)
         Task.Run(Sub()
+                     Dim sw As Stopwatch = Stopwatch.StartNew()
                      Try
                          If delayMs > 0 Then
+                             Debug.WriteLine($"[SuggestionEngine] Preload: sleeping {delayMs} ms before init…")
                              Thread.Sleep(delayMs)
                          End If
+                         Debug.WriteLine($"[SuggestionEngine] Preload: starting SharedEngineLazy.Value… ({sw.ElapsedMilliseconds} ms since queued)")
                          Dim ignored = SharedEngineLazy.Value
-                         Debug.WriteLine("[SuggestionEngine] Shared instance preloaded in background.")
+                         Debug.WriteLine($"[SuggestionEngine] Preload: shared instance ready. Total={sw.ElapsedMilliseconds} ms")
                      Catch ex As Exception
-                         Debug.WriteLine("[SuggestionEngine] Background preload failed: " & ex.Message)
+                         Debug.WriteLine($"[SuggestionEngine] Background preload failed after {sw.ElapsedMilliseconds} ms: {ex.Message}")
                      End Try
                  End Sub)
     End Sub
@@ -108,7 +118,10 @@ Public Class SuggestionEngine
     Private Function GetEmbeddingService() As EmbeddingService
         If EnginesEmbeddingService Is Nothing Then
             Try
+                Debug.WriteLine("[SuggestionEngine] GetEmbeddingService: constructing EmbeddingService (first call)…")
+                Dim sw As Stopwatch = Stopwatch.StartNew()
                 EnginesEmbeddingService = New EmbeddingService()
+                Debug.WriteLine($"[SuggestionEngine] GetEmbeddingService: done in {sw.ElapsedMilliseconds} ms")
             Catch ex As Exception
                 Debug.WriteLine("[SuggestionEngine] EmbeddingService konnte nicht erstellt werden: " & ex.Message)
                 Return Nothing
@@ -128,13 +141,27 @@ Public Class SuggestionEngine
     ' Wird direkt nach New() in PrepareSession aufgerufen.
     Public Sub CalculateInitialFeatureDistances(session As Session)
         If session Is Nothing Then Throw New ArgumentNullException(NameOf(session))
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Dim t As Long
+        Debug.WriteLine($"[SuggestionEngine] CalculateInitialFeatureDistances BEGIN ({EnginesHistoricalSessionRecords.Count} records)")
 
         RecalculateBetreffDistances(session)
+        t = sw.ElapsedMilliseconds : Debug.WriteLine($"[SuggestionEngine]   BetreffDistances:       {t} ms")
+
         RecalculateDatumsDistances(session)
+        Debug.WriteLine($"[SuggestionEngine]   DatumsDistances:        {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
         RecalculateAbsenderDomainDistances(session)
+        Debug.WriteLine($"[SuggestionEngine]   AbsenderDomainDistances:{sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
         RecalculateAbsenderDistances(session)
+        Debug.WriteLine($"[SuggestionEngine]   AbsenderDistances:      {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
         RecalculateAusfueBenutzerDistances(session)
+        Debug.WriteLine($"[SuggestionEngine]   AusfueBenutzerDistances:{sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
         RecalculateAusfueDatumsDistances(session)
+        Debug.WriteLine($"[SuggestionEngine]   AusfueDatumsDistances:  {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Mutable Features sind zur Initialisierungszeit leer – 0 als Startwert.
         Dim recordCount = EnginesHistoricalSessionRecords.Count
@@ -142,6 +169,7 @@ Public Class SuggestionEngine
         AblageordnerDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
         ProjektstrukturPfadDistances = Enumerable.Repeat(0.0, recordCount).ToList()
+        Debug.WriteLine($"[SuggestionEngine] CalculateInitialFeatureDistances END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     ' === Fixe Features – einmalig pro Mail-Selektion, aufgerufen aus CalculateInitialFeatureDistances ===

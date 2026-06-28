@@ -390,34 +390,49 @@ Public Class Session
     End Sub
 
     Public Sub PrepareSession()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Dim t As Long
+        Debug.WriteLine("[Session] PrepareSession BEGIN")
+
         Reset()
+        Debug.WriteLine($"[Session]   Reset:                 {sw.ElapsedMilliseconds} ms")
+
         MailUtils.ReadMailMeta(Me)
+        t = sw.ElapsedMilliseconds : Debug.WriteLine($"[Session]   ReadMailMeta:          {t} ms")
+
         MailUtils.ReadAttachmentNames(Me)
+        Debug.WriteLine($"[Session]   ReadAttachmentNames:   {sw.ElapsedMilliseconds - t} ms ({Anhaenge.Count} attachments)") : t = sw.ElapsedMilliseconds
+
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
+        Debug.WriteLine($"[Session]   GetProjektVerzeichnisse:{sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Shared SuggestionEngine nutzen (Historie wird pro Outlook-Start lazy geladen und gecacht).
         SuggestionEngineInstance = SuggestionEngine.GetSharedInstance()
+        Debug.WriteLine($"[Session]   GetSharedInstance:     {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
+        Debug.WriteLine($"[Session]   CalculateInitialFeatureDistances: {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
+        Debug.WriteLine($"[Session]   SuggestProjektPfad:    {sw.ElapsedMilliseconds - t} ms → '{suggestedProjektPfad}'") : t = sw.ElapsedMilliseconds
 
         ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
         If String.IsNullOrWhiteSpace(suggestedProjektPfad) Then
-            Debug.WriteLine("[Session] ProjektPfad: kein Vorschlag vom Engine")
+            Debug.WriteLine("[Session]   ProjektPfad: kein Vorschlag vom Engine")
         ElseIf Not Directory.Exists(suggestedProjektPfad) Then
-            Debug.WriteLine($"[Session] ProjektPfad: Vorschlag '{suggestedProjektPfad}' existiert nicht — Cascade abgebrochen")
+            Debug.WriteLine($"[Session]   ProjektPfad: Vorschlag '{suggestedProjektPfad}' existiert nicht — Cascade abgebrochen")
         Else
             If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
                 ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
             End If
             SuggestProjektPfad(suggestedProjektPfad)
         End If
+        Debug.WriteLine($"[Session]   Cascade+Suggest:       {sw.ElapsedMilliseconds - t} ms")
 
-        Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
+        Debug.WriteLine($"[Session] PrepareSession END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank

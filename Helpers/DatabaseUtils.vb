@@ -1,4 +1,5 @@
 Imports System.Data.SQLite
+Imports System.Diagnostics
 Imports System.IO
 
 Public Class SessionDatabaseManager
@@ -7,12 +8,17 @@ Public Class SessionDatabaseManager
     Private ReadOnly connectionString As String
 
     Public Sub New()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[DatabaseManager] New() BEGIN")
         dbPath = Path.Combine(ThisAddIn.DbDirectory, "sessions.db")
         connectionString = $"Data Source={dbPath};Version=3;"
         EnsureDatabaseExists()
+        Debug.WriteLine($"[DatabaseManager] New() END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub EnsureDatabaseExists()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine($"[DatabaseManager] EnsureDatabaseExists BEGIN – {dbPath}")
         Dim dbDir As String = Path.GetDirectoryName(dbPath)
         If Not Directory.Exists(dbDir) Then
             Directory.CreateDirectory(dbDir)
@@ -42,6 +48,7 @@ Public Class SessionDatabaseManager
             End If
         End Using
         'CreateEncodedSessionsTable()
+        Debug.WriteLine($"[DatabaseManager] EnsureDatabaseExists END – {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub CreateComputedWeightsTable(conn As SQLiteConnection)
@@ -315,9 +322,12 @@ Public Class SessionDatabaseManager
 
     ' Gibt alle Sessions als Liste von SessionRecord zur�ck
     Public Function GetAllSessionRecords() As List(Of SessionRecord)
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[DatabaseManager] GetAllSessionRecords BEGIN")
         Dim result As New List(Of SessionRecord)()
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
+            Debug.WriteLine($"[DatabaseManager]   DB connection opened: {sw.ElapsedMilliseconds} ms")
             Dim sql As String = "SELECT * FROM Sessions ORDER BY ID ASC"
             Using cmd As New SQLiteCommand(sql, conn)
                 Using reader As SQLiteDataReader = cmd.ExecuteReader()
@@ -348,6 +358,7 @@ Public Class SessionDatabaseManager
                 End Using
             End Using
         End Using
+        Debug.WriteLine($"[DatabaseManager] GetAllSessionRecords END – {result.Count} records in {sw.ElapsedMilliseconds} ms")
         Return result
     End Function
 
