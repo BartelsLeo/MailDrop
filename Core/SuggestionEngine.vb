@@ -813,7 +813,7 @@ Public Class SuggestionEngine
                                   ByRef trueCount As Integer, ByRef falseCount As Integer)
         K = 0 : M = 0 : trueCount = 0 : falseCount = 0
         If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
-            trueCount = records.Count(Function(r) r.AnhaengeAblegen = True)
+            trueCount = records.Where(Function(r) r.AnhaengeAblegen = True).Count()
             falseCount = records.Count - trueCount
             Return
         End If
