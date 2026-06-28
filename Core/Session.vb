@@ -61,6 +61,8 @@ Public Class Session
     Private _isSuggestedMsgDateinameSchema As Boolean
     Private _isSuggestedAnhaengeAblegen As Boolean
 
+    Private Const DefaultAblageSchema As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
+
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
     Protected Sub OnPropertyChanged(propertyName As String)
@@ -107,6 +109,12 @@ Public Class Session
                 OnPropertyChanged(NameOf(AnhaengeAblegen))
             End If
         End Set
+    End Property
+
+    Public ReadOnly Property HasAnhaenge As Boolean
+        Get
+            Return Anhaenge.Count > 0
+        End Get
     End Property
 
     Public Property ProjektstrukturPfad As String
@@ -204,33 +212,15 @@ Public Class Session
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
         Dim result = template
-        If Not String.IsNullOrEmpty(Titel) Then
-            result = result.Replace("[Titel]", Titel)
-        End If
-        If Not String.IsNullOrEmpty(Absender) Then
-            result = result.Replace("[Absender]", Absender)
-        End If
-        If Not String.IsNullOrEmpty(AbsenderDomain) Then
-            result = result.Replace("[Absender-Domain]", AbsenderDomain)
-        End If
-        If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empf�nger]", Empfaenger)
-        End If
-        If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empf�nger (kurz)]", Empfaenger)
-        End If
-        If Not String.IsNullOrEmpty(Betreff) Then
-            result = result.Replace("[Betreff]", Betreff)
-        End If
-        If Datum <> Date.MinValue Then
-            result = result.Replace("[Datum]", Datum.ToString("yyyy-MM-dd"))
-        End If
-        If Not String.IsNullOrEmpty(DatumFormatiert) Then
-            result = result.Replace("[Datum (formatiert)]", DatumFormatiert)
-        End If
-        If Not String.IsNullOrEmpty(AbsenderKurz) Then
-            result = result.Replace("[Absender (kurz)]", AbsenderKurz)
-        End If
+        result = result.Replace("[Titel]", If(Titel, String.Empty))
+        result = result.Replace("[Absender]", If(Absender, String.Empty))
+        result = result.Replace("[Absender-Domain]", If(AbsenderDomain, String.Empty))
+        result = result.Replace("[Empf�nger]", If(Empfaenger, String.Empty))
+        result = result.Replace("[Empf�nger (kurz)]", If(Empfaenger, String.Empty))
+        result = result.Replace("[Betreff]", If(Betreff, String.Empty))
+        result = result.Replace("[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty))
+        result = result.Replace("[Datum (formatiert)]", If(DatumFormatiert, String.Empty))
+        result = result.Replace("[Absender (kurz)]", If(AbsenderKurz, String.Empty))
         Return result
     End Function
 
@@ -244,6 +234,7 @@ Public Class Session
     Public Sub Reset()
         LastDuplicateWarning = String.Empty
         Anhaenge.Clear()
+        OnPropertyChanged(NameOf(HasAnhaenge))
         ProjektPfad = Nothing
         Titel = String.Empty
         AblageordnerSchema = String.Empty
@@ -252,7 +243,7 @@ Public Class Session
         MsgDateinameSchema = String.Empty
         _msgDateinameAufgeloest = String.Empty
         MsgDateinameFeld = String.Empty
-        AnhaengeAblegen = False
+        AnhaengeAblegen = True
         ProjektstrukturPfad = Nothing
         IsSuggestedProjektPfad = False
         IsSuggestedProjektstrukturPfad = False
@@ -402,6 +393,7 @@ Public Class Session
 
         MailUtils.ReadAttachmentNames(Me)
         Debug.WriteLine($"[Session]   ReadAttachmentNames:   {sw.ElapsedMilliseconds - t} ms ({Anhaenge.Count} attachments)") : t = sw.ElapsedMilliseconds
+        OnPropertyChanged(NameOf(HasAnhaenge))
 
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
@@ -415,20 +407,40 @@ Public Class Session
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
         Debug.WriteLine($"[Session]   CalculateInitialFeatureDistances: {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
+        ' Schema-Standardwerte direkt in Backing-Fields schreiben, um keinen Cascade auszulösen.
+        ' DatumFormatiert und Absender sind zu diesem Zeitpunkt bereits gesetzt, sodass
+        ' [Datum (formatiert)] sofort aufgelöst wird; Titel und AbsenderKurz werden durch
+        ' den nachfolgenden Cascade-Lauf nachgefüllt.
+        _ablageordnerSchema = DefaultAblageSchema
+        OnPropertyChanged(NameOf(AblageordnerSchema))
+        UpdateAblageordnerAufgeloest()
+        AblageordnerFeld = AblageordnerAufgeloest
+        _msgDateinameSchema = DefaultAblageSchema
+        OnPropertyChanged(NameOf(MsgDateinameSchema))
+        UpdateMsgDateinameAufgeloest()
+        MsgDateinameFeld = MsgDateinameAufgeloest
+        Debug.WriteLine($"[Session]   Schema-Defaults:        {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
         Debug.WriteLine($"[Session]   SuggestProjektPfad:    {sw.ElapsedMilliseconds - t} ms → '{suggestedProjektPfad}'") : t = sw.ElapsedMilliseconds
 
         ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
+        ' SuggestProjektPfad garantiert bereits, dass der Pfad existiert.
         If String.IsNullOrWhiteSpace(suggestedProjektPfad) Then
             Debug.WriteLine("[Session]   ProjektPfad: kein Vorschlag vom Engine")
-        ElseIf Not Directory.Exists(suggestedProjektPfad) Then
-            Debug.WriteLine($"[Session]   ProjektPfad: Vorschlag '{suggestedProjektPfad}' existiert nicht — Cascade abgebrochen")
         Else
             If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
                 ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
             End If
             SuggestProjektPfad(suggestedProjektPfad)
+        End If
+
+        ' Sicherheitsnetz: Mails ohne Anhänge immer mit deaktivierter Checkbox abschließen,
+        ' unabhängig davon ob der Cascade einen Vorschlag gesetzt hat.
+        If Not HasAnhaenge Then
+            AnhaengeAblegen = False
+            IsSuggestedAnhaengeAblegen = False
         End If
         Debug.WriteLine($"[Session]   Cascade+Suggest:       {sw.ElapsedMilliseconds - t} ms")
 
@@ -438,8 +450,8 @@ Public Class Session
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
     Public Sub GetProjektVerzeichnisse()
         Dim verzeichnisse = ThisAddIn.CurrentDatabaseManager.GetLastProjektVerzeichnisseForUser(Me.AusfueBenutzer)
-        ' Maximal 3 aus der DB, letzter Eintrag immer "anderes..."
-        Dim list As New List(Of String)(verzeichnisse.Take(3))
+        ' Maximal 10 aus der DB, letzter Eintrag immer "anderes..."
+        Dim list As New List(Of String)(verzeichnisse.Take(10))
         list.Add("anderes...")
         ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
         Debug.WriteLine($"[Session] ProjektVerzeichnisse f�r Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")

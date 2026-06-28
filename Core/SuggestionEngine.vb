@@ -301,12 +301,30 @@ Public Class SuggestionEngine
 
     Public Function SuggestProjektPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), "ProjektPfad", minScore:=SuggestionScoreThreshold)?.ProjektPfad, String.Empty)
+        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), minScore:=SuggestionScoreThreshold)
+            If Not String.IsNullOrWhiteSpace(record.ProjektPfad) AndAlso IO.Directory.Exists(record.ProjektPfad) Then
+                Debug.WriteLine($"[SuggestionEngine] SuggestProjektPfad: accepted '{record.ProjektPfad}'")
+                Return record.ProjektPfad
+            End If
+            Debug.WriteLine($"[SuggestionEngine] SuggestProjektPfad: skipping non-existent '{record.ProjektPfad}'")
+        Next
+        Return String.Empty
     End Function
 
     Public Function SuggestProjektstrukturPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), "ProjektstrukturPfad", minScore:=SuggestionScoreThreshold)?.ProjektstrukturPfad, String.Empty)
+        If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return String.Empty
+        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), minScore:=SuggestionScoreThreshold)
+            If Not String.IsNullOrWhiteSpace(record.ProjektstrukturPfad) Then
+                Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
+                If IO.Directory.Exists(fullPath) Then
+                    Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
+                    Return record.ProjektstrukturPfad
+                End If
+                Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: skipping non-existent '{fullPath}'")
+            End If
+        Next
+        Return String.Empty
     End Function
 
     Public Function SuggestTitel(session As Session) As String
@@ -347,9 +365,7 @@ Public Class SuggestionEngine
         Try
             If startFrom <= CascadeStep.ProjektstrukturPfad Then
                 Dim suggested = SuggestProjektstrukturPfad(session)
-                If Not String.IsNullOrWhiteSpace(suggested) AndAlso
-                   Not String.IsNullOrWhiteSpace(session.ProjektPfad) AndAlso
-                   IO.Directory.Exists(IO.Path.Combine(session.ProjektPfad, suggested)) Then
+                If Not String.IsNullOrWhiteSpace(suggested) Then
                     session.SuggestProjektstrukturPfad(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: ProjektstrukturPfad übersprungen")
@@ -393,11 +409,15 @@ Public Class SuggestionEngine
             End If
 
             If startFrom <= CascadeStep.AnhaengeAblegen Then
-                Dim suggested = SuggestAnhaengeAblegen(session)
-                If suggested.HasValue Then
-                    session.SuggestAnhaengeAblegen(suggested.Value)
+                If session.HasAnhaenge Then
+                    Dim suggested = SuggestAnhaengeAblegen(session)
+                    If suggested.HasValue Then
+                        session.SuggestAnhaengeAblegen(suggested.Value)
+                    Else
+                        Debug.WriteLine($"[SuggestionEngine] Cascade: AnhaengeAblegen übersprungen")
+                    End If
                 Else
-                    Debug.WriteLine($"[SuggestionEngine] Cascade: AnhaengeAblegen übersprungen")
+                    Debug.WriteLine($"[SuggestionEngine] Cascade: AnhaengeAblegen übersprungen (keine Anhänge)")
                 End If
             End If
         Finally
@@ -406,6 +426,37 @@ Public Class SuggestionEngine
     End Sub
 
     Private Const SuggestionScoreThreshold As Double = 0.5
+
+    ' Gibt alle historischen Datensätze zurück, die den minScore erreichen, sortiert nach Score absteigend.
+    ' Wird für ProjektPfad/ProjektstrukturPfad genutzt, um beim besten Treffer zu starten und
+    ' zum nächsten auszuweichen, wenn der Pfad nicht existiert.
+    Private Function FindRecordsSortedByScore(
+        fieldSelector As Func(Of SessionRecord, String),
+        featureWeights As IDictionary(Of String, Double),
+        Optional requireNonEmptyField As Boolean = True,
+        Optional minScore As Double = 0.0) As IEnumerable(Of SessionRecord)
+
+        Dim scored As New List(Of KeyValuePair(Of Double, SessionRecord))()
+        For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
+            Dim record = EnginesHistoricalSessionRecords(i)
+            If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
+            Dim score =
+                WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
+                WeightedFeatureScore(featureWeights, "Datum", DatumsDistances(i)) +
+                WeightedFeatureScore(featureWeights, "AbsenderDomain", AbsenderDomainDistances(i)) +
+                WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
+                WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
+                WeightedFeatureScore(featureWeights, "AusfueDatum", AusfueDatumsDistances(i)) +
+                WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
+                WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
+                WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
+                WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
+            If score >= minScore Then
+                scored.Add(New KeyValuePair(Of Double, SessionRecord)(score, record))
+            End If
+        Next
+        Return scored.OrderByDescending(Function(kvp) kvp.Key).Select(Function(kvp) kvp.Value)
+    End Function
 
     ' Findet den historischen Datensatz mit dem höchsten Gesamtscore, der für fieldSelector einen nicht-leeren Wert hat.
     ' Gibt Nothing zurück wenn der beste Score unter minScore liegt.

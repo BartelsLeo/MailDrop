@@ -118,6 +118,8 @@ Public Class MailDropWpfTaskPane
                 If Session.IsSuggestedMsgDateinameSchema Then ShowSparkle(SparkleMsgDateiname) Else HideSparkle(SparkleMsgDateiname)
             Case NameOf(Session.IsSuggestedAnhaengeAblegen)
                 If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen) Else HideSparkle(SparkleAnhaengeAblegen)
+            Case NameOf(Session.AnhaengeAblegen)
+                AttachmentScrollViewer.IsEnabled = Session.AnhaengeAblegen
         End Select
     End Sub
 
@@ -231,10 +233,15 @@ Public Class MailDropWpfTaskPane
 
     ' Setzt die Editierbarkeit der TaskPane
     Public Sub SetEditMode(isEditable As Boolean)
-        ' Beispiel: Alle Controls au�er Info-Button deaktivieren/aktivieren
         For Each ctrl In Me.FindVisualChildren(Of Control)(Me)
-            If ctrl.Name <> "ButtonInfo" AndAlso ctrl.Name <> "ButtonGewichteNeuBerechnen" Then
-                ctrl.IsEnabled = isEditable
+            If ctrl.Name <> "ButtonInfo" Then
+                If ctrl.Name = "CheckBoxAnhaenge" Then
+                    ctrl.IsEnabled = isEditable AndAlso Session.HasAnhaenge
+                ElseIf ctrl.Name = "AttachmentScrollViewer" Then
+                    ctrl.IsEnabled = isEditable AndAlso Session.AnhaengeAblegen
+                Else
+                    ctrl.IsEnabled = isEditable
+                End If
             End If
         Next
     End Sub
@@ -449,16 +456,6 @@ Public Class MailDropWpfTaskPane
 
     Private Sub MenuItemUmbenennen_Click(sender As Object, e As RoutedEventArgs)
         RenameSelectedFolder()
-    End Sub
-
-    Private Sub ButtonGewichteNeuBerechnen_Click(sender As Object, e As RoutedEventArgs)
-        Task.Run(Sub()
-                     Try
-                         SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory()
-                     Catch ex As Exception
-                         Debug.WriteLine("[TaskPane] Gewichte-Neuberechnung fehlgeschlagen: " & ex.Message)
-                     End Try
-                 End Sub)
     End Sub
 
     Private Sub TreeView1_PreviewMouseRightButtonDown(sender As Object, e As MouseButtonEventArgs)

@@ -196,7 +196,9 @@
                     <ListBox x:Name="ListBox1"
                              ItemsSource="{Binding ProjektVerzeichnisse}"
                              SelectedItem="{Binding ProjektPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Grid.Column="0" HorizontalAlignment="Stretch">
+                             Grid.Column="0" HorizontalAlignment="Stretch"
+                             MaxHeight="110"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}"
@@ -361,11 +363,10 @@
                 </Grid>
 
                 <!-- ── Anhang-Auswahl ── -->
-                <ScrollViewer Grid.Row="10" Margin="124,0,14,4"
+                <ScrollViewer x:Name="AttachmentScrollViewer" Grid.Row="10" Margin="124,0,14,4"
                               MaxHeight="90" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding Anhaenge}"
-                                  IsEnabled="{Binding AnhaengeAblegen}">
+                    <ItemsControl ItemsSource="{Binding Anhaenge}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
@@ -379,21 +380,17 @@
                 <!-- ── Buttons ── -->
                 <StackPanel Orientation="Horizontal" Grid.Row="11"
                             Margin="14,16,0,0" HorizontalAlignment="Left">
-                    <Button x:Name="ButtonInfo" Content="i" Width="28"
-                            Style="{StaticResource SecondaryButton}"
-                            Padding="0,0"
-                            ToolTip="Hinweise zu Platzhaltern sowie Export/Import der SuggestionRecords"
-                            Click="ButtonInfo_Click" Margin="0,0,8,0"/>
                     <Button x:Name="ButtonOk" Content="OK"
                             Style="{StaticResource PrimaryButton}"
                             Click="ButtonOk_Click" Margin="0,0,8,0"/>
                     <Button x:Name="ButtonAbbrechen" Content="Abbrechen"
                             Style="{StaticResource SecondaryButton}"
                             Click="ButtonAbbrechen_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="ButtonGewichteNeuBerechnen" Content="Gewichte neu berechnen"
+                    <Button x:Name="ButtonInfo" Content="i" Width="28"
                             Style="{StaticResource SecondaryButton}"
-                            ToolTip="Korrelationsgewichte manuell neu berechnen (Debug)"
-                            Click="ButtonGewichteNeuBerechnen_Click"/>
+                            Padding="0,0"
+                            ToolTip="Hinweise zu Platzhaltern sowie Export/Import der SuggestionRecords"
+                            Click="ButtonInfo_Click"/>
                 </StackPanel>
 
                 <!-- ── Success notification (fades in, then out) ── -->

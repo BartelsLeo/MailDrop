@@ -1,7 +1,7 @@
 <Window x:Class="InfoPopup"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MailDrop - Hinweis" Height="420" Width="400"
+        Title="MailDrop - Hinweis" Height="520" Width="400"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="ToolWindow"
@@ -38,6 +38,13 @@
                            Text="Export: Diese Datei an einen sicheren Ort kopieren (z. B. Netzlaufwerk oder USB-Stick)."/>
                 <TextBlock TextWrapping="Wrap"
                            Text="Import: Auf dem anderen PC die Datei wieder unter exakt demselben Pfad ablegen und vorhandene Datei ersetzen."/>
+                <Separator Margin="0,10,0,10"/>
+                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Vorschlagsgewichte</TextBlock>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="Die Gewichte für die Vorschlagsberechnung werden alle 50 Ablagen automatisch neu berechnet. Hier können sie manuell aktualisiert werden – sinnvoll nach dem Import von SuggestionRecords oder wenn Vorschläge unpassend wirken."/>
+                <Button x:Name="ButtonGewichteNeuBerechnen" Content="Gewichte neu berechnen"
+                        HorizontalAlignment="Left" Padding="12,6" FontSize="12"
+                        Click="ButtonGewichteNeuBerechnen_Click"/>
             </StackPanel>
         </ScrollViewer>
     </Grid>
