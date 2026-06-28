@@ -372,7 +372,11 @@
                             Click="ButtonOk_Click" Margin="0,0,8,0"/>
                     <Button x:Name="ButtonAbbrechen" Content="Abbrechen"
                             Style="{StaticResource SecondaryButton}"
-                            Click="ButtonAbbrechen_Click"/>
+                            Click="ButtonAbbrechen_Click" Margin="0,0,8,0"/>
+                    <Button x:Name="ButtonGewichteNeuBerechnen" Content="Gewichte neu berechnen"
+                            Style="{StaticResource SecondaryButton}"
+                            ToolTip="Korrelationsgewichte manuell neu berechnen (Debug)"
+                            Click="ButtonGewichteNeuBerechnen_Click"/>
                 </StackPanel>
 
                 <!-- ── Success notification (fades in, then out) ── -->

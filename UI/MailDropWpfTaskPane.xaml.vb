@@ -1,5 +1,6 @@
 Imports System.Windows.Controls
 Imports System.IO
+Imports System.Threading.Tasks
 Imports System.Windows
 Imports System.Windows.Media
 Imports System.Windows.Media.Animation
@@ -202,7 +203,7 @@ Public Class MailDropWpfTaskPane
     Public Sub SetEditMode(isEditable As Boolean)
         ' Beispiel: Alle Controls au�er Info-Button deaktivieren/aktivieren
         For Each ctrl In Me.FindVisualChildren(Of Control)(Me)
-            If ctrl.Name <> "ButtonInfo" Then
+            If ctrl.Name <> "ButtonInfo" AndAlso ctrl.Name <> "ButtonGewichteNeuBerechnen" Then
                 ctrl.IsEnabled = isEditable
             End If
         Next
@@ -418,6 +419,16 @@ Public Class MailDropWpfTaskPane
 
     Private Sub MenuItemUmbenennen_Click(sender As Object, e As RoutedEventArgs)
         RenameSelectedFolder()
+    End Sub
+
+    Private Sub ButtonGewichteNeuBerechnen_Click(sender As Object, e As RoutedEventArgs)
+        Task.Run(Sub()
+                     Try
+                         SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory()
+                     Catch ex As Exception
+                         Debug.WriteLine("[TaskPane] Gewichte-Neuberechnung fehlgeschlagen: " & ex.Message)
+                     End Try
+                 End Sub)
     End Sub
 
     Private Sub TreeView1_PreviewMouseRightButtonDown(sender As Object, e As MouseButtonEventArgs)
