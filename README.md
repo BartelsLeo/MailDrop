@@ -95,6 +95,31 @@ Hinweis: Die eigentliche Default-Branch-Umstellung und Branch-Protection werden 
 4. Projekt starten (F5).
 5. Visual Studio startet Outlook als Hostprozess; Add-in wird geladen.
 
+### Installation ueber ClickOnce (Endanwender)
+
+Im Ordner `Publish/` liegen `setup.exe` und das ClickOnce-Manifest `MailDrop.vsto`. VSTO-Add-ins
+verlangen zwingend signierte ClickOnce-Manifeste (MSBuild bricht sonst mit
+`Cannot build because the ClickOnce manifest signing option is not selected` ab); MailDrop wird
+daher mit einem selbstsignierten Zertifikat signiert (kein Zertifikat einer offiziellen
+Zertifizierungsstelle). Auf dem Entwicklungsrechner ist dieses Zertifikat bereits vertrauenswuerdig,
+auf jedem anderen Rechner schlaegt die Installation daher mit einer Zertifikatswarnung fehl oder
+bricht ab.
+
+Abhilfe: Vor der ersten Installation `Publish/Install-Certificate.ps1` ausfuehren. Das Skript vertraut
+dem (oeffentlichen) MailDrop-Zertifikat fuer den aktuellen Benutzer, ohne einen privaten Schluessel zu
+benoetigen oder zu enthalten, und **ohne Administratorrechte** (Zertifikatsspeicher des aktuellen
+Benutzers):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Publish\Install-Certificate.ps1
+```
+
+Danach `setup.exe` ausfuehren. Das Zertifikat ist bewusst 30 Jahre gueltig (bis 01.07.2056), damit
+dieser Trust-Schritt nicht periodisch fuer bereits installierte Benutzer wiederholt werden muss. Nur
+falls das Zertifikat jemals neu erzeugt wird (z.B. Kompromittierung des privaten Schluessels), muss
+das Skript neu aus `MailDrop.vsto` erzeugt werden (siehe Kommentar im Skript) und alle Benutzer muessen
+es erneut ausfuehren.
+
 ## Verwendung
 
 1. In Outlook eine einzelne Mail auswaehlen.

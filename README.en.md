@@ -95,6 +95,28 @@ Note: The actual default-branch switch and branch protection are configured in G
 4. Start debugging (F5).
 5. Visual Studio starts Outlook as host process and loads the add-in.
 
+### ClickOnce installation (end users)
+
+The `Publish/` folder contains `setup.exe` and the ClickOnce manifest `MailDrop.vsto`. VSTO add-ins
+require signed ClickOnce manifests (MSBuild refuses to build otherwise, with
+`Cannot build because the ClickOnce manifest signing option is not selected`); MailDrop is therefore
+signed with a self-signed certificate (not one from a public certificate authority). On the
+development machine that certificate is already trusted, but on any other machine the installation
+fails or aborts with a certificate warning.
+
+Fix: run `Publish/Install-Certificate.ps1` before installing. The script trusts the (public) MailDrop
+certificate for the current user; it needs no private key and contains none, and requires
+**no administrator rights** (it only touches the current user's certificate stores):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Publish\Install-Certificate.ps1
+```
+
+Then run `setup.exe`. The certificate is deliberately valid for 30 years (until 2056-07-01) so this
+trust step never has to be repeated for already-installed users. Only if the certificate is ever
+regenerated (e.g. private key compromise) does the script need to be regenerated from `MailDrop.vsto`
+(see the comment in the script) and re-run by every user.
+
 ## Usage
 
 1. Select exactly one email in Outlook.

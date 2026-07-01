@@ -178,6 +178,10 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
+# ...except the top-level Publish/ folder, which is the intentionally committed, GitHub-hosted
+# ClickOnce deployment (setup.exe, MailDrop.vsto, Application Files/, Install-Certificate.ps1).
+!/Publish/
+!/Publish/**
 
 # Publish Web Output
 *.[Pp]ublish.xml
@@ -237,6 +241,9 @@ ClientBin/
 *.dbproj.schemaview
 *.jfm
 *.pfx
+# ...except the ClickOnce manifest-signing key, which is intentionally committed (self-signed,
+# no CA trust value beyond signing this project's own manifests; see Publish/Install-Certificate.ps1).
+!/MailDrop_1_TemporaryKey.pfx
 *.publishsettings
 orleans.codegen.cs
 

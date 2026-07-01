@@ -111,6 +111,15 @@ MailDrop/
 - ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
 - The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
 
+## Distribution (ClickOnce / Publish folder)
+
+- The GitHub-hosted `Publish/` folder contains the ClickOnce deployment (`setup.exe`, `MailDrop.vsto`, `Application Files/`) used for end-user installs (separate from local F5 debugging).
+- VSTO add-ins require signed ClickOnce manifests: MSBuild's `Microsoft.VisualStudio.Tools.Office.targets` hard-fails (`Cannot build because the ClickOnce manifest signing option is not selected`) if `SignManifests` is false, unlike plain ClickOnce (non-Office) projects where unsigned manifests are allowed. `SignManifests=false` was tried and confirmed to break the Release publish build; it is not a viable option for this project.
+- MailDrop.vsto/.dll.manifest are therefore signed with a self-created, self-signed certificate (`MailDrop_1_TemporaryKey.pfx`, subject `CN=MailDrop`, deliberately generated with a 30-year validity via `New-SelfSignedCertificate -NotAfter (Get-Date).AddYears(30)` rather than VS's default 1-year "temporary key", so client trust never needs to be redone due to expiry). This certificate is not issued by a trusted CA, so installation on any machine other than the signing machine fails with a certificate/publisher-verification error.
+- `Publish/Install-Certificate.ps1` fixes this: it embeds the public certificate (extracted right after certificate generation, no private key involved) and imports it into the current user's `Root` and `TrustedPublisher` certificate stores. This uses the `CurrentUser` store scope, which requires **no administrator rights** (chain building consults both `CurrentUser` and `LocalMachine` Root stores, so `CurrentUser\Root` alone is sufficient for that user's trust decisions). Supports `-Uninstall` to remove it again. End users run this once before running `setup.exe`.
+- The embedded certificate expires 2056-07-01. It only needs regenerating if the private key is ever compromised or replaced; in that case `Install-Certificate.ps1`'s embedded `$certBase64` block, `MailDrop_1_TemporaryKey.pfx`, and the `ManifestCertificateThumbprint` in `MailDrop.vbproj` must all be regenerated together, and every already-installed user must re-run the script for the new thumbprint (this is the one structural downside of self-signing vs. a CA-issued cert: cert rotation is not transparent to already-trusted clients).
+- README.md / README.en.md document the end-user install flow (run `Install-Certificate.ps1`, then `setup.exe`).
+
 ## Branching model
 
 - `productive`: stable branch intended for production-ready releases.
