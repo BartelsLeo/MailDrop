@@ -35,13 +35,10 @@
     </NuGetPackageImportStamp>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <PublishUrl>publish\</PublishUrl>
-    <InstallUrl>https://bartelsleo.github.io/MailDrop/</InstallUrl>
     <TargetCulture>de</TargetCulture>
     <ApplicationVersion>1.0.0.1</ApplicationVersion>
     <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
-    <UpdateEnabled>true</UpdateEnabled>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdateEnabled>false</UpdateEnabled>
     <ProductName>MailDrop</ProductName>
     <PublisherName />
     <SupportUrl />
@@ -398,7 +395,7 @@
   <PropertyGroup>
     <ApplicationRevision>0</ApplicationRevision>
     <UpdateMode>Foreground</UpdateMode>
-    <IsWebBootstrapper>True</IsWebBootstrapper>
+    <IsWebBootstrapper>False</IsWebBootstrapper>
     <PublishWizardCompleted>true</PublishWizardCompleted>
   </PropertyGroup>
   <!-- Include the build rules for a Visual Basic project. -->
