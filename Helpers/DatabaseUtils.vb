@@ -1,17 +1,24 @@
 Imports System.Data.SQLite
+Imports System.Diagnostics
 Imports System.IO
 
 Public Class SessionDatabaseManager
+    Private Const CurrentSchemaVersion As Integer = 1
     Private ReadOnly dbPath As String = Path.Combine(ThisAddIn.DbDirectory, "sessions.db")
     Private ReadOnly connectionString As String
 
     Public Sub New()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[DatabaseManager] New() BEGIN")
         dbPath = Path.Combine(ThisAddIn.DbDirectory, "sessions.db")
         connectionString = $"Data Source={dbPath};Version=3;"
         EnsureDatabaseExists()
+        Debug.WriteLine($"[DatabaseManager] New() END â€“ total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Private Sub EnsureDatabaseExists()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine($"[DatabaseManager] EnsureDatabaseExists BEGIN â€“ {dbPath}")
         Dim dbDir As String = Path.GetDirectoryName(dbPath)
         If Not Directory.Exists(dbDir) Then
             Directory.CreateDirectory(dbDir)
@@ -19,40 +26,148 @@ Public Class SessionDatabaseManager
         If Not File.Exists(dbPath) Then
             SQLiteConnection.CreateFile(dbPath)
         End If
-        ' Tabelle immer anlegen, falls sie fehlt!
-        CreateSessionTable()
-        'CreateEncodedSessionsTable()
-    End Sub
-
-    Private Sub CreateSessionTable()
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
-            Dim sql As String =
-                "CREATE TABLE IF NOT EXISTS Sessions (" &
-                "ID INTEGER PRIMARY KEY AUTOINCREMENT, " &
-                "AusfueDatum TEXT, " &
-                "AusfueBenutzer TEXT, " &
-                "Betreff TEXT, " &
-                "BetreffEmbedded BLOB, " & ' Enthält den embeddet Betreff als Vektor
-                "Absender TEXT, " &
-                "AbsenderDomain TEXT, " &
-                "AbsenderKurz TEXT, " &
-                "Empfaenger TEXT, " &
-                "Datum TEXT, " &
-                "DatumFormatiert TEXT, " &
-                "ProjektPfad TEXT, " &
-                "ProjektstrukturPfad TEXT, " &
-                "Titel TEXT, " &
-                "AblageordnerSchema TEXT, " &
-                "AblageordnerAufgeloest TEXT, " &
-                "MsgDateinameSchema TEXT, " &
-                "MsgDateinameAufgeloest TEXT, " &
-                "AnhaengeAblegen BOOLEAN" &
-                ")"
-            Using cmd As New SQLiteCommand(sql, conn)
-                cmd.ExecuteNonQuery()
+
+            ' Tabellen immer anlegen, falls sie fehlen.
+            CreateSessionTable(conn)
+            CreateComputedWeightsTable(conn)
+
+            Dim dbVersion = GetDatabaseVersion(conn)
+
+            ' Bestehende Datenbank ohne Version auf initiales Schema heben.
+            If dbVersion = 0 Then
+                SetDatabaseVersion(conn, CurrentSchemaVersion)
+                dbVersion = CurrentSchemaVersion
+            End If
+
+            If dbVersion < CurrentSchemaVersion Then
+                ApplyMigrations(conn, dbVersion, CurrentSchemaVersion)
+            ElseIf dbVersion > CurrentSchemaVersion Then
+                Throw New InvalidOperationException($"Datenbankversion {dbVersion} ist neuer als die unterstuetzte Version {CurrentSchemaVersion}.")
+            End If
+        End Using
+        'CreateEncodedSessionsTable()
+        Debug.WriteLine($"[DatabaseManager] EnsureDatabaseExists END â€“ {sw.ElapsedMilliseconds} ms")
+    End Sub
+
+    Private Sub CreateComputedWeightsTable(conn As SQLiteConnection)
+        Dim sql As String =
+            "CREATE TABLE IF NOT EXISTS ComputedWeights (" &
+            "TargetField TEXT NOT NULL, " &
+            "FeatureName TEXT NOT NULL, " &
+            "Weight REAL NOT NULL, " &
+            "RecordCount INTEGER NOT NULL, " &
+            "ComputedAt TEXT NOT NULL, " &
+            "PRIMARY KEY (TargetField, FeatureName)" &
+            ")"
+        Using cmd As New SQLiteCommand(sql, conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Public Function GetSessionRecordCount() As Integer
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using cmd As New SQLiteCommand("SELECT COUNT(*) FROM Sessions", conn)
+                Return Convert.ToInt32(cmd.ExecuteScalar())
             End Using
         End Using
+    End Function
+
+    Public Function LoadComputedWeights(targetField As String) As Dictionary(Of String, Double)
+        Dim result As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Dim sql As String = "SELECT FeatureName, Weight FROM ComputedWeights WHERE TargetField = @targetField"
+            Using cmd As New SQLiteCommand(sql, conn)
+                cmd.Parameters.AddWithValue("@targetField", targetField)
+                Using reader As SQLiteDataReader = cmd.ExecuteReader()
+                    While reader.Read()
+                        result(reader("FeatureName").ToString()) = Convert.ToDouble(reader("Weight"))
+                    End While
+                End Using
+            End Using
+        End Using
+        Return result
+    End Function
+
+    Public Sub SaveComputedWeights(targetField As String, weights As Dictionary(Of String, Double), recordCount As Integer)
+        If weights Is Nothing OrElse weights.Count = 0 Then Return
+        Dim computedAt As String = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using txn As SQLiteTransaction = conn.BeginTransaction()
+                Dim sql As String =
+                    "INSERT OR REPLACE INTO ComputedWeights " &
+                    "(TargetField, FeatureName, Weight, RecordCount, ComputedAt) " &
+                    "VALUES (@targetField, @featureName, @weight, @recordCount, @computedAt)"
+                For Each kvp In weights
+                    Using cmd As New SQLiteCommand(sql, conn, txn)
+                        cmd.Parameters.AddWithValue("@targetField", targetField)
+                        cmd.Parameters.AddWithValue("@featureName", kvp.Key)
+                        cmd.Parameters.AddWithValue("@weight", kvp.Value)
+                        cmd.Parameters.AddWithValue("@recordCount", recordCount)
+                        cmd.Parameters.AddWithValue("@computedAt", computedAt)
+                        cmd.ExecuteNonQuery()
+                    End Using
+                Next
+                txn.Commit()
+            End Using
+        End Using
+    End Sub
+
+    Private Sub CreateSessionTable(conn As SQLiteConnection)
+        Dim sql As String =
+            "CREATE TABLE IF NOT EXISTS Sessions (" &
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT, " &
+            "AusfueDatum TEXT, " &
+            "AusfueBenutzer TEXT, " &
+            "Betreff TEXT, " &
+            "BetreffEmbedded BLOB, " & ' Enthï¿½lt den embeddet Betreff als Vektor
+            "Absender TEXT, " &
+            "AbsenderDomain TEXT, " &
+            "AbsenderKurz TEXT, " &
+            "Empfaenger TEXT, " &
+            "Datum TEXT, " &
+            "DatumFormatiert TEXT, " &
+            "ProjektPfad TEXT, " &
+            "ProjektstrukturPfad TEXT, " &
+            "Titel TEXT, " &
+            "AblageordnerSchema TEXT, " &
+            "AblageordnerAufgeloest TEXT, " &
+            "MsgDateinameSchema TEXT, " &
+            "MsgDateinameAufgeloest TEXT, " &
+            "AnhaengeAblegen BOOLEAN" &
+            ")"
+        Using cmd As New SQLiteCommand(sql, conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Function GetDatabaseVersion(conn As SQLiteConnection) As Integer
+        Using cmd As New SQLiteCommand("PRAGMA user_version;", conn)
+            Return Convert.ToInt32(cmd.ExecuteScalar())
+        End Using
+    End Function
+
+    Private Sub SetDatabaseVersion(conn As SQLiteConnection, version As Integer)
+        Using cmd As New SQLiteCommand($"PRAGMA user_version = {version};", conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Private Sub ApplyMigrations(conn As SQLiteConnection, fromVersion As Integer, toVersion As Integer)
+        For targetVersion As Integer = fromVersion + 1 To toVersion
+            Select Case targetVersion
+                Case 1
+                    ' Initiales Baseline-Schema. Fuer bestehende DBs ohne Version ist nichts weiter noetig.
+                Case Else
+                    Throw New NotSupportedException($"Keine Migration fuer Datenbankversion {targetVersion} definiert.")
+            End Select
+
+            SetDatabaseVersion(conn, targetVersion)
+        Next
     End Sub
 
     ' Neue Methode: EncodedSessions Table anlegen
@@ -72,7 +187,7 @@ Public Class SessionDatabaseManager
     '    End Using
     'End Sub
 
-    ' Gibt alle Sessions zurück, die noch nicht encodiert wurden
+    ' Gibt alle Sessions zurï¿½ck, die noch nicht encodiert wurden
     'Public Function GetNotEncodedSessions() As List(Of SessionRecord)
     '    Dim result As New List(Of SessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -109,7 +224,7 @@ Public Class SessionDatabaseManager
     '    Return result
     'End Function
 
-    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zurück
+    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zurï¿½ck
     'Public Function GetAllEncodedSessions() As List(Of EncodedSessionRecord)
     '    Dim result As New List(Of EncodedSessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -183,7 +298,7 @@ Public Class SessionDatabaseManager
         End Using
     End Sub
 
-    ' Gibt die letzten vier eindeutigen ProjektPfad-Einträge für einen Benutzer zurück (absteigend nach AusfueDatum)
+    ' Gibt die letzten vier eindeutigen ProjektPfad-Eintrï¿½ge fï¿½r einen Benutzer zurï¿½ck (absteigend nach AusfueDatum)
     Public Function GetLastProjektVerzeichnisseForUser(benutzer As String) As List(Of String)
         Dim result As New List(Of String)()
         Using conn As New SQLiteConnection(connectionString)
@@ -196,7 +311,7 @@ Public Class SessionDatabaseManager
                         Dim pfad = reader("ProjektPfad").ToString()
                         If Not String.IsNullOrWhiteSpace(pfad) AndAlso Not result.Contains(pfad) Then
                             result.Add(pfad)
-                            If result.Count = 4 Then Exit While
+                            If result.Count = 10 Then Exit While
                         End If
                     End While
                 End Using
@@ -205,12 +320,15 @@ Public Class SessionDatabaseManager
         Return result
     End Function
 
-    ' Gibt alle Sessions als Liste von SessionRecord zurück
+    ' Gibt alle Sessions als Liste von SessionRecord zurï¿½ck
     Public Function GetAllSessionRecords() As List(Of SessionRecord)
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[DatabaseManager] GetAllSessionRecords BEGIN")
         Dim result As New List(Of SessionRecord)()
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
-            Dim sql As String = "SELECT * FROM Sessions"
+            Debug.WriteLine($"[DatabaseManager]   DB connection opened: {sw.ElapsedMilliseconds} ms")
+            Dim sql As String = "SELECT * FROM Sessions ORDER BY ID ASC"
             Using cmd As New SQLiteCommand(sql, conn)
                 Using reader As SQLiteDataReader = cmd.ExecuteReader()
                     While reader.Read()
@@ -240,12 +358,13 @@ Public Class SessionDatabaseManager
                 End Using
             End Using
         End Using
+        Debug.WriteLine($"[DatabaseManager] GetAllSessionRecords END â€“ {result.Count} records in {sw.ElapsedMilliseconds} ms")
         Return result
     End Function
 
 End Class
 
-' Hilfsklasse für EncodedSession
+' Hilfsklasse fï¿½r EncodedSession
 Public Class EncodedSessionRecord
     Public Property SessionID As Integer
     Public Property AusfueBenutzer As Integer
@@ -255,7 +374,7 @@ Public Class EncodedSessionRecord
     Public Property AbsenderDomain As Integer
     Public Property AbsenderKurz As Integer
     Public Property Empfaenger As Integer
-    Public Property Datum As Integer ' Ergänzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
+    Public Property Datum As Integer ' Ergï¿½nzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
     Public Property ProjektPfad As Integer
     Public Property ProjektstrukturPfad As Integer
     Public Property Titel As Integer
@@ -266,7 +385,7 @@ Public Class EncodedSessionRecord
     Public Property AnhaengeAblegen As Integer
 End Class
 
-' Repräsentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
+' Reprï¿½sentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
 Public Class SessionRecord
     Public Property ID As Integer
     Public Property AusfueDatum As DateTime

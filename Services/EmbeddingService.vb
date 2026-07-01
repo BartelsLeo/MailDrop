@@ -1,25 +1,34 @@
 Imports System.IO
-Imports System.Reflection
+Imports System.Diagnostics
 Imports Microsoft.ML.OnnxRuntime
 Imports Microsoft.ML.OnnxRuntime.Tensors
 Imports Microsoft.ML.Tokenizers
 
 Public Class EmbeddingService
+    Implements IDisposable
 
     Private ReadOnly _session As InferenceSession
     Private ReadOnly _tokenizer As BertTokenizer
+    Private _disposed As Boolean = False
 
     Public Sub New()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Debug.WriteLine("[EmbeddingService] New() BEGIN")
         Dim codeBase As String = System.Reflection.Assembly.GetExecutingAssembly().CodeBase
         Dim uri As New Uri(codeBase)
         Dim baseDir As String = System.IO.Path.GetDirectoryName(uri.LocalPath)
         Dim modelPath As String = System.IO.Path.Combine(baseDir, "Models", "model.onnx")
         Dim vocabPath As String = System.IO.Path.Combine(baseDir, "Models", "vocab.txt")
+        Debug.WriteLine($"[EmbeddingService]   Model path resolved: {sw.ElapsedMilliseconds} ms – {modelPath}")
         _session = New InferenceSession(modelPath)
+        Debug.WriteLine($"[EmbeddingService]   InferenceSession loaded: {sw.ElapsedMilliseconds} ms")
         _tokenizer = BertTokenizer.Create(vocabPath)
+        Debug.WriteLine($"[EmbeddingService]   BertTokenizer created: {sw.ElapsedMilliseconds} ms")
+        Debug.WriteLine($"[EmbeddingService] New() END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     Public Function GenerateEmbedding(text As String) As Single()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
 
         ' 1. Tokenisieren
         Dim encoding = _tokenizer.EncodeToIds(text)
@@ -42,7 +51,9 @@ Public Class EmbeddingService
         }
 
         ' 4. Inferenz
+        Dim swInfer As Stopwatch = Stopwatch.StartNew()
         Using results = _session.Run(inputs)
+            Debug.WriteLine($"[EmbeddingService] GenerateEmbedding: tokenize+run={sw.ElapsedMilliseconds} ms (inference={swInfer.ElapsedMilliseconds} ms), tokens={seqLen}, text='{If(text?.Length > 40, text.Substring(0, 40) & "…", text)}'")
             Dim output = results.First().AsTensor(Of Single)()
 
             ' 5. Mean Pooling über alle Token
@@ -66,5 +77,12 @@ Public Class EmbeddingService
         Dim norm As Double = Math.Sqrt(vector.Sum(Function(x) CDbl(x) * x))
         Return vector.Select(Function(x) CSng(x / norm)).ToArray()
     End Function
+
+    Public Sub Dispose() Implements IDisposable.Dispose
+        If Not _disposed Then
+            _session?.Dispose()
+            _disposed = True
+        End If
+    End Sub
 
 End Class

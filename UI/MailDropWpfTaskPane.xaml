@@ -2,163 +2,450 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:MailDrop"
-             Height="400" MinWidth="700">
+             Background="White">
     <UserControl.Resources>
         <local:PathShortenerConverter x:Key="PathShortenerConverter"/>
+
+        <!-- Field label: small, muted -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#6B7280"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Global TextBox: flat, focus ring -->
+        <Style TargetType="TextBox">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D1D5DB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#6366F1"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#F9FAFB"/>
+                    <Setter Property="Foreground" Value="#9CA3AF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Global ListBox -->
+        <Style TargetType="ListBox">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="#D1D5DB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="2"/>
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
+
+        <!-- Global TreeView -->
+        <Style TargetType="TreeView">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="#D1D5DB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+
+        <!-- Primary button (OK) -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#4F46E5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#4338CA"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#C4B5FD"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Secondary button (Abbrechen, Neuen Ordner, Info) -->
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#374151"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D1D5DB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#F9FAFB"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#9CA3AF"/>
+                                <Setter Property="BorderBrush" Value="#E5E7EB"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
-    <Border Padding="0,0,20,0">
-        <Grid Margin="0" HorizontalAlignment="Stretch">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <Label x:Name="LabelProjektordner" Content="Basisverzeichnis / Projektverzeichnis" Grid.Row="0" HorizontalAlignment="Stretch"/>
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <ListBox x:Name="ListBox1"
-                         ItemsSource="{Binding ProjektVerzeichnisse}"
-                         SelectedItem="{Binding ProjektstrukturPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Grid.Column="0" HorizontalAlignment="Stretch">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}" ToolTipService.ShowDuration="60000">
-                                <TextBlock.ToolTip>
-                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" HorizontalAlignment="Stretch"/>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-                <TextBlock x:Name="SparkleProjektPfad" Text="&#x2726;" Grid.Column="1"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-            </Grid>
-            <Label x:Name="LabelAblageordner" Content="Projektstruktur" Grid.Row="2"/>
-            <Grid Grid.Row="3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}" Height="300" Grid.Column="0" HorizontalAlignment="Stretch">
-                    <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Name}"/>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Border Padding="0,0,24,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ── Header: subject · date · sender ── -->
+                <Border Grid.Row="0" Background="#F9FAFB" BorderBrush="#E5E7EB"
+                        BorderThickness="0,0,0,1" Padding="14,10,14,10">
+                    <StackPanel>
+                        <TextBlock Text="(keine Mail ausgew&#228;hlt)" FontStyle="Italic"
+                                   Foreground="#9CA3AF" FontSize="12">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Betreff}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Betreff}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Betreff}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Betreff}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="{Binding Betreff}" FontWeight="Normal"
+                                       TextWrapping="Wrap" FontSize="12" Foreground="#111827"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <TextBlock Text="{Binding Datum, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
+                                           Foreground="#9CA3AF" FontSize="11"/>
+                                <TextBlock Text=" · " Foreground="#9CA3AF" FontSize="11"/>
+                                <TextBlock Text="{Binding Absender}" Foreground="#9CA3AF" FontSize="11"
+                                           TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
-                            <HierarchicalDataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                    <Setter Property="TreeViewItem.IsExpanded" Value="True"/>
-                                </DataTrigger>
-                            </HierarchicalDataTemplate.Triggers>
-                        </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
-                <TextBlock x:Name="SparkleProjektstrukturPfad" Text="&#x2726;" Grid.Column="1"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Projektordner ── -->
+                <TextBlock x:Name="LabelProjektordner" Grid.Row="1"
+                           Text="Basisverzeichnis / Projektverzeichnis"
+                           Style="{StaticResource FieldLabel}"
+                           Margin="14,14,14,4"/>
+                <Grid Grid.Row="2" Margin="14,0,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <ListBox x:Name="ListBox1"
+                             ItemsSource="{Binding ProjektVerzeichnisse}"
+                             SelectedItem="{Binding ProjektPfad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Grid.Column="0" HorizontalAlignment="Stretch"
+                             MaxHeight="110"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={StaticResource PathShortenerConverter}}"
+                                           ToolTipService.ShowDuration="60000">
+                                    <TextBlock.ToolTip>
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" HorizontalAlignment="Stretch"/>
+                                    </TextBlock.ToolTip>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock x:Name="SparkleProjektPfad" Text="&#x2726;" Grid.Column="1"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </Grid>
+
+                <!-- ── Projektstruktur ── -->
+                <TextBlock x:Name="LabelAblageordner" Grid.Row="3"
+                           Text="Projektstruktur"
+                           Style="{StaticResource FieldLabel}"
+                           Margin="14,14,14,4"/>
+                <Grid Grid.Row="4" Margin="14,0,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="150"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}"
+                              Grid.Row="0" Grid.Column="0" HorizontalAlignment="Stretch"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              PreviewMouseRightButtonDown="TreeView1_PreviewMouseRightButtonDown">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Neuer Ordner" Click="MenuItemNeuerOrdner_Click"/>
+                                <MenuItem Header="L&#246;schen" Click="MenuItemLoeschen_Click"/>
+                                <MenuItem Header="Umbenennen" Click="MenuItemUmbenennen_Click"/>
+                            </ContextMenu>
+                        </TreeView.ContextMenu>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}"/>
+                                </StackPanel>
+                                <HierarchicalDataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                        <Setter Property="TreeViewItem.IsExpanded" Value="True"/>
+                                    </DataTrigger>
+                                </HierarchicalDataTemplate.Triggers>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                    <Button x:Name="ButtonNeuenOrdner" Content="Neuen Ordner"
+                            Grid.Row="1" Grid.Column="0"
+                            Style="{StaticResource SecondaryButton}"
+                            Width="110" HorizontalAlignment="Left" Margin="0,8,0,18"
+                            Click="ButtonNeuenOrdner_Click"/>
+                    <TextBlock x:Name="SparkleProjektstrukturPfad" Text="&#x2726;"
+                               Grid.RowSpan="2" Grid.Column="1"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </Grid>
+
+                <!-- ── Titel ── -->
+                <Grid Grid.Row="5" Margin="14,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelTitel" Grid.Column="0" Text="Titel"
+                               Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TextBoxTitel"
+                             Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             GotFocus="TextBoxTitel_GotFocus"
+                             Grid.Column="1"/>
+                    <TextBlock x:Name="SparkleTitel" Text="&#x2726;" Grid.Column="2"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- ── Absender (kurz) ── -->
+                <Grid Grid.Row="6" Margin="14,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelAbsenderKurz" Grid.Column="0" Text="Absender (kurz)"
+                               Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
+                    <TextBox x:Name="TextBoxAbsenderKurz"
+                             Text="{Binding AbsenderKurz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             GotFocus="TextBoxAbsenderKurz_GotFocus"
+                             Grid.Column="1"/>
+                    <TextBlock x:Name="SparkleAbsenderKurz" Text="&#x2726;" Grid.Column="2"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- ── Ablageordner ── -->
+                <Grid Grid.Row="7" Margin="14,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelAblageordnerField" Grid.Column="0" Text="Ablageordner"
+                               Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TextBoxAblageordner"
+                             Text="{Binding AblageordnerFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             GotFocus="TextBoxAblageordner_GotFocus"
+                             LostFocus="TextBoxAblageordner_LostFocus"
+                             Grid.Column="1"/>
+                    <TextBlock x:Name="SparkleAblageordner" Text="&#x2726;" Grid.Column="2"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- ── msg Dateiname ── -->
+                <Grid Grid.Row="8" Margin="14,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelMsgDateiname" Grid.Column="0" Text="msg Dateiname"
+                               Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TextBoxMsgDateiname"
+                             Text="{Binding MsgDateinameFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             GotFocus="TextBoxMsgDateiname_GotFocus"
+                             LostFocus="TextBoxMsgDateiname_LostFocus"
+                             Grid.Column="1"/>
+                    <TextBlock x:Name="SparkleMsgDateiname" Text="&#x2726;" Grid.Column="2"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- ── Anhänge ablegen ── -->
+                <Grid Grid.Row="9" Margin="14,8,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelAnhaenge" Grid.Column="0" Text="Anh&#228;nge ablegen"
+                               Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center"
+                              IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              Click="CheckBoxAnhaenge_Click" Grid.Column="1"/>
+                    <TextBlock x:Name="SparkleAnhaengeAblegen" Text="&#x2726;" Grid.Column="2"
+                               Opacity="0" Foreground="#FFB300" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- ── Anhang-Auswahl ── -->
+                <ScrollViewer x:Name="AttachmentScrollViewer" Grid.Row="10" Margin="124,0,14,4"
+                              MaxHeight="90" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Anhaenge}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          Content="{Binding Name}"
+                                          FontSize="11" Margin="0,2,0,0"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- ── Buttons ── -->
+                <StackPanel Orientation="Horizontal" Grid.Row="11"
+                            Margin="14,16,0,0" HorizontalAlignment="Left">
+                    <Button x:Name="ButtonOk" Content="OK"
+                            Style="{StaticResource PrimaryButton}"
+                            Click="ButtonOk_Click" Margin="0,0,8,0"/>
+                    <Button x:Name="ButtonAbbrechen" Content="Abbrechen"
+                            Style="{StaticResource SecondaryButton}"
+                            Click="ButtonAbbrechen_Click" Margin="0,0,8,0"/>
+                    <Button x:Name="ButtonInfo" Content="i" Width="28"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="0,0"
+                            ToolTip="Hinweise zu Platzhaltern sowie Export/Import der SuggestionRecords"
+                            Click="ButtonInfo_Click"/>
+                </StackPanel>
+
+                <!-- ── Success notification (fades in, then out) ── -->
+                <Border x:Name="SuccessNotification" Grid.Row="12"
+                        Background="#ECFDF5" BorderBrush="#6EE7B7" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x2713;" Foreground="#059669" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Erfolgreich abgelegt." Foreground="#065F46"
+                                   FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Duplicate warning notification (fades in, then out) ── -->
+                <Border x:Name="DuplicateWarningNotification" Grid.Row="12"
+                        Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;" Foreground="#B45309" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="DuplicateWarningText" Foreground="#92400E"
+                                   FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Overwrite warning notification (fades in, then out) ── -->
+                <Border x:Name="OverwriteWarningNotification" Grid.Row="12"
+                        Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="&#x26A0;" Foreground="#B45309" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                        <TextBlock Text="Erfolgreich abgelegt. Existierende Dateien überschrieben."
+                                   Foreground="#92400E" FontSize="12" TextWrapping="Wrap"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- ── Error notification (fades in, then out) ── -->
+                <Border x:Name="ErrorNotification" Grid.Row="12"
+                        Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1"
+                        CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
+                        Opacity="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x2715;" Foreground="#DC2626" FontWeight="Bold"
+                                   FontSize="14" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                        <TextBlock x:Name="ErrorNotificationText" Foreground="#7F1D1D"
+                                   FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
             </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="4" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <Label x:Name="LabelTitel" Content="Titel" Grid.Column="0" VerticalAlignment="Center"/>
-                <TextBox x:Name="TextBoxTitel"
-                         Text="{Binding Titel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         GotFocus="TextBoxTitel_GotFocus"
-                         TextWrapping="Wrap"
-                         HorizontalAlignment="Stretch"
-                         VerticalContentAlignment="Center"
-                         Grid.Column="1" Margin="0"/>
-                <TextBlock x:Name="SparkleTitel" Text="&#x2726;" Grid.Column="2"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="5" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <Label x:Name="LabelAbsenderKurz" Content="Absender (kurz)" Grid.Column="0" VerticalAlignment="Center"/>
-                <TextBox x:Name="TextBoxAbsenderKurz"
-                         Text="{Binding AbsenderKurz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         GotFocus="TextBoxAbsenderKurz_GotFocus"
-                         TextWrapping="Wrap"
-                         HorizontalAlignment="Stretch"
-                         VerticalContentAlignment="Center"
-                         Grid.Column="1" Margin="0"/>
-                <TextBlock x:Name="SparkleAbsenderKurz" Text="&#x2726;" Grid.Column="2"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="6" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <Label x:Name="LabelAblageordnerField" Content="Ablageordner" Grid.Column="0" VerticalAlignment="Center"/>
-                <TextBox x:Name="TextBoxAblageordner"
-                         Text="{Binding AblageordnerFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         GotFocus="TextBoxAblageordner_GotFocus"
-                         LostFocus="TextBoxAblageordner_LostFocus"
-                         TextWrapping="Wrap"
-                         HorizontalAlignment="Stretch"
-                         VerticalContentAlignment="Center"
-                         Grid.Column="1" Margin="0"/>
-                <TextBlock x:Name="SparkleAblageordner" Text="&#x2726;" Grid.Column="2"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="7" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <Label x:Name="LabelMsgDateiname" Content="msg Dateiname" Grid.Column="0" VerticalAlignment="Center"/>
-                <TextBox x:Name="TextBoxMsgDateiname"
-                         Text="{Binding MsgDateinameFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         GotFocus="TextBoxMsgDateiname_GotFocus"
-                         LostFocus="TextBoxMsgDateiname_LostFocus"
-                         TextWrapping="Wrap"
-                         HorizontalAlignment="Stretch"
-                         VerticalContentAlignment="Center"
-                         Grid.Column="1" Margin="0"/>
-                <TextBlock x:Name="SparkleMsgDateiname" Text="&#x2726;" Grid.Column="2"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            <Grid Margin="0,5,0,0" Grid.Row="8" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="20"/>
-                </Grid.ColumnDefinitions>
-                <Label x:Name="LabelAnhaenge" Content="Anh&#228;nge ablegen" Grid.Column="0" VerticalAlignment="Center"/>
-                <CheckBox x:Name="CheckBoxAnhaenge" VerticalAlignment="Center" IsChecked="{Binding AnhaengeAblegen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Click="CheckBoxAnhaenge_Click" Grid.Column="1" Margin="0"/>
-                <TextBlock x:Name="SparkleAnhaengeAblegen" Text="&#x2726;" Grid.Column="2"
-                           Opacity="0" Foreground="#FFB300" FontSize="14"
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-            </Grid>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,5,0,0" Grid.Row="9">
-                <Button x:Name="ButtonInfo" Content="i" Width="24" Height="24" Margin="2,0,2,0" ToolTip="Hinweise zu Platzhaltern" Click="ButtonInfo_Click"/>
-                <Button x:Name="ButtonOk" Content="OK" Width="50" Height="24" Margin="2,0,2,0" Click="ButtonOk_Click"/>
-                <Button x:Name="ButtonAbbrechen" Content="Abbrechen" Width="80" Height="24" Margin="2,0,2,0" Click="ButtonAbbrechen_Click"/>
-            </StackPanel>
-        </Grid>
-    </Border>
+        </Border>
+    </ScrollViewer>
 </UserControl>

@@ -2,9 +2,36 @@ Imports System.Collections.ObjectModel
 Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
+Imports System.Threading.Tasks
+
+Public Class AttachmentItem
+    Implements INotifyPropertyChanged
+
+    Public Property Name As String
+    Public Property OutlookIndex As Integer
+
+    Private _isSelected As Boolean = True
+    Public Property IsSelected As Boolean
+        Get
+            Return _isSelected
+        End Get
+        Set(value As Boolean)
+            If _isSelected <> value Then
+                _isSelected = value
+                RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(IsSelected)))
+            End If
+        End Set
+    End Property
+
+    Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
+End Class
 
 Public Class Session
     Implements INotifyPropertyChanged
+
+    Public Property LastDuplicateWarning As String
+    Public Property LastOverwriteWarning As String
+    Public Property Anhaenge As New ObservableCollection(Of AttachmentItem)()
 
     Private _projektPfad As String
     Private _titel As String
@@ -35,6 +62,8 @@ Public Class Session
     Private _isSuggestedMsgDateinameSchema As Boolean
     Private _isSuggestedAnhaengeAblegen As Boolean
 
+    Private Const DefaultAblageSchema As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
+
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
     Protected Sub OnPropertyChanged(propertyName As String)
@@ -51,12 +80,7 @@ Public Class Session
                 OnPropertyChanged(NameOf(ProjektPfad))
                 BuildDirectoryTree()
                 SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
-                Dim suggestedProjstr = SuggestionEngineInstance?.SuggestProjektstrukturPfad(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedProjstr) AndAlso
-                   Not String.IsNullOrWhiteSpace(_projektPfad) AndAlso
-                   IO.Directory.Exists(IO.Path.Combine(_projektPfad, suggestedProjstr)) Then
-                    SuggestProjektstrukturPfad(suggestedProjstr)
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.ProjektstrukturPfad)
             End If
         End Set
     End Property
@@ -71,15 +95,7 @@ Public Class Session
                 OnPropertyChanged(NameOf(Titel))
                 UpdateResolvedAfterTitelChange()
                 SuggestionEngineInstance?.RecalculateTitelDistances(Me)
-                Dim suggestedAbsenderKurz = SuggestionEngineInstance?.SuggestAbsenderKurz(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedAbsenderKurz) Then
-                    SuggestAbsenderKurz(suggestedAbsenderKurz)
-                Else
-                    Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                    If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
-                        SuggestAblageordnerSchema(suggestedAbl)
-                    End If
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.AbsenderKurz)
             End If
         End Set
     End Property
@@ -96,6 +112,12 @@ Public Class Session
         End Set
     End Property
 
+    Public ReadOnly Property HasAnhaenge As Boolean
+        Get
+            Return Anhaenge.Count > 0
+        End Get
+    End Property
+
     Public Property ProjektstrukturPfad As String
         Get
             Return _projektstrukturPfad
@@ -105,10 +127,7 @@ Public Class Session
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
-                Dim suggestedTitel = SuggestionEngineInstance?.SuggestTitel(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedTitel) Then
-                    SuggestTitel(suggestedTitel)
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.Titel)
             End If
         End Set
     End Property
@@ -148,10 +167,7 @@ Public Class Session
                 OnPropertyChanged(NameOf(AblageordnerSchema))
                 UpdateAblageordnerAufgeloest()
                 AblageordnerFeld = AblageordnerAufgeloest
-                Dim suggestedMsgDateinameSchema = SuggestionEngineInstance?.SuggestMsgDateinameSchema(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedMsgDateinameSchema) Then
-                    SuggestMsgDateinameSchema(suggestedMsgDateinameSchema)
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.MsgDateinameSchema)
             End If
         End Set
     End Property
@@ -172,10 +188,7 @@ Public Class Session
                 OnPropertyChanged(NameOf(MsgDateinameSchema))
                 UpdateMsgDateinameAufgeloest()
                 MsgDateinameFeld = MsgDateinameAufgeloest
-                Dim suggestedAnhaengeAblegen = SuggestionEngineInstance?.SuggestAnhaengeAblegen(Me)
-                If suggestedAnhaengeAblegen.HasValue Then
-                    SuggestAnhaengeAblegen(suggestedAnhaengeAblegen.Value)
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.AnhaengeAblegen)
             End If
         End Set
     End Property
@@ -200,33 +213,15 @@ Public Class Session
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
         Dim result = template
-        If Not String.IsNullOrEmpty(Titel) Then
-            result = result.Replace("[Titel]", Titel)
-        End If
-        If Not String.IsNullOrEmpty(Absender) Then
-            result = result.Replace("[Absender]", Absender)
-        End If
-        If Not String.IsNullOrEmpty(AbsenderDomain) Then
-            result = result.Replace("[Absender-Domain]", AbsenderDomain)
-        End If
-        If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empf�nger]", Empfaenger)
-        End If
-        If Not String.IsNullOrEmpty(Empfaenger) Then
-            result = result.Replace("[Empf�nger (kurz)]", Empfaenger)
-        End If
-        If Not String.IsNullOrEmpty(Betreff) Then
-            result = result.Replace("[Betreff]", Betreff)
-        End If
-        If Datum <> Date.MinValue Then
-            result = result.Replace("[Datum]", Datum.ToString("yyyy-MM-dd"))
-        End If
-        If Not String.IsNullOrEmpty(DatumFormatiert) Then
-            result = result.Replace("[Datum (formatiert)]", DatumFormatiert)
-        End If
-        If Not String.IsNullOrEmpty(AbsenderKurz) Then
-            result = result.Replace("[Absender (kurz)]", AbsenderKurz)
-        End If
+        result = result.Replace("[Titel]", If(Titel, String.Empty))
+        result = result.Replace("[Absender]", If(Absender, String.Empty))
+        result = result.Replace("[Absender-Domain]", If(AbsenderDomain, String.Empty))
+        result = result.Replace("[Empf�nger]", If(Empfaenger, String.Empty))
+        result = result.Replace("[Empf�nger (kurz)]", If(Empfaenger, String.Empty))
+        result = result.Replace("[Betreff]", If(Betreff, String.Empty))
+        result = result.Replace("[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty))
+        result = result.Replace("[Datum (formatiert)]", If(DatumFormatiert, String.Empty))
+        result = result.Replace("[Absender (kurz)]", If(AbsenderKurz, String.Empty))
         Return result
     End Function
 
@@ -238,6 +233,9 @@ Public Class Session
     End Sub
 
     Public Sub Reset()
+        LastDuplicateWarning = String.Empty
+        Anhaenge.Clear()
+        OnPropertyChanged(NameOf(HasAnhaenge))
         ProjektPfad = Nothing
         Titel = String.Empty
         AblageordnerSchema = String.Empty
@@ -246,7 +244,7 @@ Public Class Session
         MsgDateinameSchema = String.Empty
         _msgDateinameAufgeloest = String.Empty
         MsgDateinameFeld = String.Empty
-        AnhaengeAblegen = False
+        AnhaengeAblegen = True
         ProjektstrukturPfad = Nothing
         IsSuggestedProjektPfad = False
         IsSuggestedProjektstrukturPfad = False
@@ -255,6 +253,10 @@ Public Class Session
         IsSuggestedAblageordnerSchema = False
         IsSuggestedMsgDateinameSchema = False
         IsSuggestedAnhaengeAblegen = False
+        ' AbsenderKurz is not set by ReadMailMeta — clear backing field directly to avoid
+        ' the setter's cascade guard (If _absenderKurz <> value) suppressing the next suggestion.
+        _absenderKurz = String.Empty
+        OnPropertyChanged(NameOf(AbsenderKurz))
         Debug.WriteLine("[Session] Reset ausgef�hrt")
     End Sub
 
@@ -380,36 +382,77 @@ Public Class Session
     End Sub
 
     Public Sub PrepareSession()
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        Dim t As Long
+        Debug.WriteLine("[Session] PrepareSession BEGIN")
+
         Reset()
+        Debug.WriteLine($"[Session]   Reset:                 {sw.ElapsedMilliseconds} ms")
+
         MailUtils.ReadMailMeta(Me)
+        t = sw.ElapsedMilliseconds : Debug.WriteLine($"[Session]   ReadMailMeta:          {t} ms")
+
+        MailUtils.ReadAttachmentNames(Me)
+        Debug.WriteLine($"[Session]   ReadAttachmentNames:   {sw.ElapsedMilliseconds - t} ms ({Anhaenge.Count} attachments)") : t = sw.ElapsedMilliseconds
+        OnPropertyChanged(NameOf(HasAnhaenge))
+
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
+        Debug.WriteLine($"[Session]   GetProjektVerzeichnisse:{sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
-        ' SuggestionEngine Instanz erstellen (lädt Historie und Embedding-Service einmalig)
-        SuggestionEngineInstance = New SuggestionEngine()
+        ' Shared SuggestionEngine nutzen (Historie wird pro Outlook-Start lazy geladen und gecacht).
+        SuggestionEngineInstance = SuggestionEngine.GetSharedInstance()
+        Debug.WriteLine($"[Session]   GetSharedInstance:     {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
+        Debug.WriteLine($"[Session]   CalculateInitialFeatureDistances: {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+
+        ' Schema-Standardwerte direkt in Backing-Fields schreiben, um keinen Cascade auszulösen.
+        ' DatumFormatiert und Absender sind zu diesem Zeitpunkt bereits gesetzt, sodass
+        ' [Datum (formatiert)] sofort aufgelöst wird; Titel und AbsenderKurz werden durch
+        ' den nachfolgenden Cascade-Lauf nachgefüllt.
+        _ablageordnerSchema = DefaultAblageSchema
+        OnPropertyChanged(NameOf(AblageordnerSchema))
+        UpdateAblageordnerAufgeloest()
+        AblageordnerFeld = AblageordnerAufgeloest
+        _msgDateinameSchema = DefaultAblageSchema
+        OnPropertyChanged(NameOf(MsgDateinameSchema))
+        UpdateMsgDateinameAufgeloest()
+        MsgDateinameFeld = MsgDateinameAufgeloest
+        Debug.WriteLine($"[Session]   Schema-Defaults:        {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
+        Debug.WriteLine($"[Session]   SuggestProjektPfad:    {sw.ElapsedMilliseconds - t} ms → '{suggestedProjektPfad}'") : t = sw.ElapsedMilliseconds
 
         ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
-        If Not String.IsNullOrWhiteSpace(suggestedProjektPfad) AndAlso Directory.Exists(suggestedProjektPfad) Then
+        ' SuggestProjektPfad garantiert bereits, dass der Pfad existiert.
+        If String.IsNullOrWhiteSpace(suggestedProjektPfad) Then
+            Debug.WriteLine("[Session]   ProjektPfad: kein Vorschlag vom Engine")
+        Else
             If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
                 ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
             End If
             SuggestProjektPfad(suggestedProjektPfad)
         End If
 
-        Debug.WriteLine("[Session] PrepareSession ausgef�hrt")
+        ' Sicherheitsnetz: Mails ohne Anhänge immer mit deaktivierter Checkbox abschließen,
+        ' unabhängig davon ob der Cascade einen Vorschlag gesetzt hat.
+        If Not HasAnhaenge Then
+            AnhaengeAblegen = False
+            IsSuggestedAnhaengeAblegen = False
+        End If
+        Debug.WriteLine($"[Session]   Cascade+Suggest:       {sw.ElapsedMilliseconds - t} ms")
+
+        Debug.WriteLine($"[Session] PrepareSession END – total: {sw.ElapsedMilliseconds} ms")
     End Sub
 
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank
     Public Sub GetProjektVerzeichnisse()
         Dim verzeichnisse = ThisAddIn.CurrentDatabaseManager.GetLastProjektVerzeichnisseForUser(Me.AusfueBenutzer)
-        ' Maximal 3 aus der DB, letzter Eintrag immer "anderes..."
-        Dim list As New List(Of String)(verzeichnisse.Take(3))
+        ' Maximal 10 aus der DB, letzter Eintrag immer "anderes..."
+        Dim list As New List(Of String)(verzeichnisse.Take(10))
         list.Add("anderes...")
         ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
         Debug.WriteLine($"[Session] ProjektVerzeichnisse f�r Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
@@ -420,11 +463,11 @@ Public Class Session
     End Sub
 
     Public Sub CancelSession()
+        Reset()
         Debug.WriteLine("[Session] CancelSession ausgef�hrt")
-        ' TODO: Implementiere die Logik f�r das Abbrechen der Session
     End Sub
 
-    Public Sub HandleProjektSelection(selectedValue As String, uiContext As System.Windows.Window)
+    Public Sub HandleProjektSelection(selectedValue As String)
         If selectedValue = "anderes..." Then
             Dim dialog As New System.Windows.Forms.FolderBrowserDialog()
             dialog.Description = "Bitte Projektordner ausw�hlen"
@@ -491,13 +534,24 @@ Public Class Session
     End Sub
 
     Public Function ProcessSession() As String
+        LastDuplicateWarning = String.Empty
+        LastOverwriteWarning = String.Empty
         Dim checkedInput = InputChecker.CheckInput(Me)
         If checkedInput.ErrorMessage <> String.Empty Then
             Return checkedInput.ErrorMessage
         End If
+        LastDuplicateWarning = checkedInput.DuplicateWarning
         Dim ablageResult = Me.CreateAblageordner(checkedInput.CheckedAblageOrdner)
         If ablageResult <> String.Empty Then
             Return ablageResult
+        End If
+        ' Prüfen ob Dateien bereits existieren; Überschreiben wird durchgeführt.
+        Dim msgPfad = checkedInput.CheckedMsgZielpfad
+        If Not msgPfad.ToLower().EndsWith(".msg") Then msgPfad &= ".msg"
+        Dim overwriteFound = File.Exists(msgPfad) OrElse
+                             checkedInput.CheckedAnhZielpfade.Any(Function(p) File.Exists(p))
+        If overwriteFound Then
+            LastOverwriteWarning = "Erfolgreich abgelegt. Existierende Dateien überschrieben."
         End If
         Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
         If mailResult <> String.Empty Then
@@ -509,9 +563,19 @@ Public Class Session
                 Return anhangResult
             End If
         End If
-        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(Me.ToSessionRecord())
-        ' PredictionEngine.TrainDecisionTreeModels()
+        Dim newRecord = Me.ToSessionRecord()
+        ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
+        SuggestionEngine.GetSharedInstance().AppendHistoricalRecord(newRecord)
+        Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
+        If recordCount Mod 50 = 0 Then
+            Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
+        End If
+        ' Warnungswerte vor Reset() sichern, da Reset() sie löscht.
+        Dim savedDuplicate = LastDuplicateWarning
+        Dim savedOverwrite = LastOverwriteWarning
         Me.Reset()
+        LastDuplicateWarning = savedDuplicate
+        LastOverwriteWarning = savedOverwrite
         Return String.Empty
     End Function
 
@@ -586,10 +650,7 @@ Public Class Session
                 _absenderKurz = value
                 OnPropertyChanged(NameOf(AbsenderKurz))
                 UpdateResolvedAfterTitelChange()
-                Dim suggestedAbl = SuggestionEngineInstance?.SuggestAblageordnerSchema(Me)
-                If Not String.IsNullOrWhiteSpace(suggestedAbl) Then
-                    SuggestAblageordnerSchema(suggestedAbl)
-                End If
+                SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.AblageordnerSchema)
             End If
         End Set
     End Property

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr create --base development --title 'Fix AblageordnerSchema/MsgDateiname suggestion fallback, tune Titel weights, improve InfoPopup' --body ' *)",
+      "Read(//c/Program Files/**)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit --amend -m ' *)",
+      "Bash(git commit -m 'Add missing Imports System.IO to SuggestionEngine *)"
+    ]
+  }
+}
