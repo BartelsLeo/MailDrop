@@ -4,25 +4,25 @@ This project follows a two-branch delivery model for safe releases.
 
 ## Branch model
 
-- productive: Production-ready branch
-- development: Integration branch for daily work
-- feature/*: New features and refactors
-- fix/*: Non-critical bug fixes
-- hotfix/*: Urgent production fixes
+- `released`: Production-ready branch
+- `development`: Integration branch for daily work
+- `feature/*`: New features and refactors
+- `fix/*`: Non-critical bug fixes
+- `hotfix/*`: Urgent production fixes
 
 ## Pull request flow
 
-1. Create your branch from development (or from productive for hotfixes).
+1. Create your branch from development (or from `released` for hotfixes).
 2. Keep changes focused and small.
 3. Open a pull request:
    - feature/* or fix/* -> development
-   - hotfix/* -> productive
-4. After hotfix merge into productive, create a follow-up PR from productive (or hotfix branch) back to development.
-5. For release promotion, open PR from development -> productive.
+   - hotfix/* -> `released`
+4. After hotfix merge into `released`, create a follow-up PR from `released` (or hotfix branch) back to development.
+5. For release promotion, open PR from development -> `released`.
 
 ## Review and quality gates
 
-- No direct pushes to productive or development
+- No direct pushes to `released` or development
 - Merge via pull request only
 - At least one review before merge
 - Resolve discussions before merge
@@ -37,16 +37,16 @@ This project follows a two-branch delivery model for safe releases.
 ## Release guideline
 
 1. Stabilize in development.
-2. Open PR development -> productive.
-3. Tag release on productive (for example v1.2.0).
-4. If needed, cherry-pick or hotfix from productive.
+2. Open PR development -> `released`.
+3. Tag release on `released`, matching the ClickOnce `ApplicationVersion` (for example `v1.0.1.0`).
+4. If needed, cherry-pick or hotfix from `released`.
 
 ## Repository settings (one-time)
 
 Configure these in GitHub repository settings:
 
-- Set default branch to productive
-- Protect productive:
+- Set default branch to `released`
+- Protect `released`:
   - Require pull request before merge
   - Require at least 1 approval
   - Dismiss stale approvals when new commits are pushed

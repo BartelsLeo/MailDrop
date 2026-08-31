@@ -111,22 +111,25 @@ MailDrop/
 - ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
 - The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
 
-## Distribution (ClickOnce / Publish folder)
+## Distribution (ClickOnce / GitHub Releases zip + network drive)
 
-- The GitHub-hosted `Publish/` folder contains the ClickOnce deployment (`setup.exe`, `MailDrop.vsto`, `Application Files/`) used for end-user installs (separate from local F5 debugging).
+- Distribution channel: the ClickOnce `Publish` output (`setup.exe`, `MailDrop.vsto`, `Application Files/`, `Install-Certificate.ps1`) is zipped and attached to a GitHub Release; the same extracted zip is also copied onto a network drive. Anyone who wants to install runs `setup.exe` from either location. The `Publish/` folder itself is **no longer committed to git** (build output, `.gitignore`d) except `Publish/Install-Certificate.ps1`, which is hand-written source and stays tracked.
+- Auto-update: `UpdateEnabled=true` and `UpdateMode=Background` in `MailDrop.vbproj`, with no hard-coded `UpdateUrl`/`InstallUrl`. ClickOnce then defaults to using the location an install ran *from* as its update source. Installing directly from the network drive means that path becomes the client's update source (checked in the background on every Outlook start, applied on next restart). Installing from a locally extracted GitHub Releases zip gets no auto-update; updating means reinstalling from a newer zip. `IsWebBootstrapper=False` since the network-drive/offline install still shouldn't assume internet access for .NET/VSTO prerequisites.
+- `PublisherName` is set to `MailDrop` (affects the text shown in the ClickOnce trust/install dialog).
 - VSTO add-ins require signed ClickOnce manifests: MSBuild's `Microsoft.VisualStudio.Tools.Office.targets` hard-fails (`Cannot build because the ClickOnce manifest signing option is not selected`) if `SignManifests` is false, unlike plain ClickOnce (non-Office) projects where unsigned manifests are allowed. `SignManifests=false` was tried and confirmed to break the Release publish build; it is not a viable option for this project.
 - MailDrop.vsto/.dll.manifest are therefore signed with a self-created, self-signed certificate (`MailDrop_1_TemporaryKey.pfx`, subject `CN=MailDrop`, deliberately generated with a 30-year validity via `New-SelfSignedCertificate -NotAfter (Get-Date).AddYears(30)` rather than VS's default 1-year "temporary key", so client trust never needs to be redone due to expiry). This certificate is not issued by a trusted CA, so installation on any machine other than the signing machine fails with a certificate/publisher-verification error.
-- `Publish/Install-Certificate.ps1` fixes this: it embeds the public certificate (extracted right after certificate generation, no private key involved) and imports it into the current user's `Root` and `TrustedPublisher` certificate stores. This uses the `CurrentUser` store scope, which requires **no administrator rights** (chain building consults both `CurrentUser` and `LocalMachine` Root stores, so `CurrentUser\Root` alone is sufficient for that user's trust decisions). Supports `-Uninstall` to remove it again. End users run this once before running `setup.exe`.
+- `Publish/Install-Certificate.ps1` fixes this: it embeds the public certificate (extracted right after certificate generation, no private key involved) and imports it into the current user's `Root` and `TrustedPublisher` certificate stores. This uses the `CurrentUser` store scope, which requires **no administrator rights** (chain building consults both `CurrentUser` and `LocalMachine` Root stores, so `CurrentUser\Root` alone is sufficient for that user's trust decisions). Supports `-Uninstall` to remove it again. End users run this once before running `setup.exe`; the script ships alongside `setup.exe` in the zip/network-drive folder.
 - The embedded certificate expires 2056-07-01. It only needs regenerating if the private key is ever compromised or replaced; in that case `Install-Certificate.ps1`'s embedded `$certBase64` block, `MailDrop_1_TemporaryKey.pfx`, and the `ManifestCertificateThumbprint` in `MailDrop.vbproj` must all be regenerated together, and every already-installed user must re-run the script for the new thumbprint (this is the one structural downside of self-signing vs. a CA-issued cert: cert rotation is not transparent to already-trusted clients).
-- README.md / README.en.md document the end-user install flow (run `Install-Certificate.ps1`, then `setup.exe`).
+- README.md / README.en.md document the end-user install flow (run `Install-Certificate.ps1`, then `setup.exe`) and the auto-update behavior above.
+- No GitHub Actions workflow exists yet for building the Release build, zipping `Publish/`, or creating the GitHub Release — this is currently a manual process (publish in Visual Studio, zip the `Publish/` folder, `gh release create` or the GitHub UI, then manually copy the extracted zip to the network drive).
 
 ## Branching model
 
-- `productive`: stable branch intended for production-ready releases.
+- `released`: stable branch intended for production-ready releases.
 - `development`: integration branch for ongoing development changes.
-- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `productive`.
+- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `released`.
 - Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
-- GitHub default branch should be `productive` (if still `master`, switch it in repository settings).
+- GitHub default branch should be `released` (currently `development` is the default on the remote — switch it in repository settings).
 
 ## Architecture and control flow
 

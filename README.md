@@ -54,19 +54,19 @@ MailDrop ist ein VSTO-Add-in fuer Microsoft Outlook. Es hilft dabei, E-Mails und
 
 ## Branching-Strategie
 
-- productive: Stabiler Branch fuer produktive Releases
+- released: Stabiler Branch fuer produktive Releases
 - development: Integrations-Branch fuer laufende Entwicklung
 - feature/*: Kurzlebige Arbeits-Branches, die in development zusammengefuehrt werden
-- Freigabe: Reife Staende aus development werden nach productive uebernommen
+- Freigabe: Reife Staende aus development werden nach released uebernommen
 
 ## Repository-Governance (Best Practice)
 
-- Default-Branch in GitHub: productive
+- Default-Branch in GitHub: released
 - Pull Request Ziel:
   - Normalfall: feature/* -> development
-  - Release-Freigabe: development -> productive
-  - Hotfix: hotfix/* -> productive und danach Rueckmerge nach development
-- Schutzregeln fuer productive:
+  - Release-Freigabe: development -> released
+  - Hotfix: hotfix/* -> released und danach Rueckmerge nach development
+- Schutzregeln fuer released:
   - Keine direkten Pushes
   - Merge nur via Pull Request
   - Mindestens 1 Review erforderlich
@@ -97,21 +97,25 @@ Hinweis: Die eigentliche Default-Branch-Umstellung und Branch-Protection werden 
 
 ### Installation ueber ClickOnce (Endanwender)
 
-Im Ordner `Publish/` liegen `setup.exe` und das ClickOnce-Manifest `MailDrop.vsto`. VSTO-Add-ins
-verlangen zwingend signierte ClickOnce-Manifeste (MSBuild bricht sonst mit
+Die Distribution erfolgt als entpackbare ZIP-Datei ueber GitHub Releases; dieselbe entpackte ZIP
+(`setup.exe`, `MailDrop.vsto`, `Application Files/`) wird zusaetzlich auf ein Netzlaufwerk gelegt.
+Wer MailDrop installieren will, kann `setup.exe` entweder aus der lokal entpackten ZIP oder direkt
+vom Netzlaufwerk heraus starten.
+
+VSTO-Add-ins verlangen zwingend signierte ClickOnce-Manifeste (MSBuild bricht sonst mit
 `Cannot build because the ClickOnce manifest signing option is not selected` ab); MailDrop wird
 daher mit einem selbstsignierten Zertifikat signiert (kein Zertifikat einer offiziellen
 Zertifizierungsstelle). Auf dem Entwicklungsrechner ist dieses Zertifikat bereits vertrauenswuerdig,
 auf jedem anderen Rechner schlaegt die Installation daher mit einer Zertifikatswarnung fehl oder
 bricht ab.
 
-Abhilfe: Vor der ersten Installation `Publish/Install-Certificate.ps1` ausfuehren. Das Skript vertraut
-dem (oeffentlichen) MailDrop-Zertifikat fuer den aktuellen Benutzer, ohne einen privaten Schluessel zu
-benoetigen oder zu enthalten, und **ohne Administratorrechte** (Zertifikatsspeicher des aktuellen
-Benutzers):
+Abhilfe: Vor der ersten Installation `Install-Certificate.ps1` ausfuehren (liegt neben `setup.exe`
+in der ZIP bzw. auf dem Netzlaufwerk). Das Skript vertraut dem (oeffentlichen) MailDrop-Zertifikat
+fuer den aktuellen Benutzer, ohne einen privaten Schluessel zu benoetigen oder zu enthalten, und
+**ohne Administratorrechte** (Zertifikatsspeicher des aktuellen Benutzers):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Publish\Install-Certificate.ps1
+powershell -ExecutionPolicy Bypass -File .\Install-Certificate.ps1
 ```
 
 Danach `setup.exe` ausfuehren. Das Zertifikat ist bewusst 30 Jahre gueltig (bis 01.07.2056), damit
@@ -119,6 +123,18 @@ dieser Trust-Schritt nicht periodisch fuer bereits installierte Benutzer wiederh
 falls das Zertifikat jemals neu erzeugt wird (z.B. Kompromittierung des privaten Schluessels), muss
 das Skript neu aus `MailDrop.vsto` erzeugt werden (siehe Kommentar im Skript) und alle Benutzer muessen
 es erneut ausfuehren.
+
+#### Auto-Update
+
+ClickOnce ist mit `UpdateEnabled=true` und ohne fest eingetragene Update-Adresse konfiguriert. Dadurch
+gilt: Der Ort, von dem aus installiert wurde, wird automatisch als Update-Quelle uebernommen.
+
+- **Installation direkt vom Netzlaufwerk aus**: MailDrop prueft danach bei jedem Outlook-Start im
+  Hintergrund (`UpdateMode=Background`) automatisch, ob auf dem Netzlaufwerk eine neuere Version
+  liegt, und uebernimmt sie beim naechsten Neustart. Kein zusaetzlicher Schritt noetig.
+- **Installation aus einer lokal entpackten ZIP** (z.B. nach Download von GitHub Releases): Es gibt
+  keine automatische Update-Pruefung. Ein Update erfordert eine erneute manuelle Installation aus
+  einer neueren ZIP.
 
 ## Verwendung
 
