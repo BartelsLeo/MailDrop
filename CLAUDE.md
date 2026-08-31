@@ -125,11 +125,11 @@ MailDrop/
 
 ## Branching model
 
-- `productive`: stable branch intended for production-ready releases.
+- `released`: stable branch intended for production-ready releases.
 - `development`: integration branch for ongoing development changes.
-- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `productive`.
+- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `released`.
 - Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
-- GitHub default branch should be `productive` (if still `master`, switch it in repository settings).
+- GitHub default branch should be `released` (currently `development` is the default on the remote — switch it in repository settings).
 
 ## Architecture and control flow
 

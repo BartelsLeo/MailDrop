@@ -54,19 +54,19 @@ MailDrop is a VSTO add-in for Microsoft Outlook. It helps users file emails and 
 
 ## Branching Strategy
 
-- productive: Stable branch for production-ready releases
+- released: Stable branch for production-ready releases
 - development: Integration branch for ongoing development
 - feature/*: Short-lived working branches merged into development
-- Release flow: Mature states from development are promoted to productive
+- Release flow: Mature states from development are promoted to released
 
 ## Repository Governance (Best Practice)
 
-- Default branch in GitHub: productive
+- Default branch in GitHub: released
 - Pull request targets:
   - Normal flow: feature/* -> development
-  - Release promotion: development -> productive
-  - Hotfix flow: hotfix/* -> productive, then back-merge into development
-- Protection rules for productive:
+  - Release promotion: development -> released
+  - Hotfix flow: hotfix/* -> released, then back-merge into development
+- Protection rules for released:
   - No direct pushes
   - Pull request merge only
   - At least 1 required review
