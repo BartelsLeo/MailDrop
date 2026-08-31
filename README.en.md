@@ -97,25 +97,41 @@ Note: The actual default-branch switch and branch protection are configured in G
 
 ### ClickOnce installation (end users)
 
-The `Publish/` folder contains `setup.exe` and the ClickOnce manifest `MailDrop.vsto`. VSTO add-ins
-require signed ClickOnce manifests (MSBuild refuses to build otherwise, with
+MailDrop is distributed as a downloadable zip via GitHub Releases; the same extracted zip
+(`setup.exe`, `MailDrop.vsto`, `Application Files/`) is also placed on a network drive. Anyone who
+wants to install MailDrop can run `setup.exe` either from the locally extracted zip or directly from
+the network drive.
+
+VSTO add-ins require signed ClickOnce manifests (MSBuild refuses to build otherwise, with
 `Cannot build because the ClickOnce manifest signing option is not selected`); MailDrop is therefore
 signed with a self-signed certificate (not one from a public certificate authority). On the
 development machine that certificate is already trusted, but on any other machine the installation
 fails or aborts with a certificate warning.
 
-Fix: run `Publish/Install-Certificate.ps1` before installing. The script trusts the (public) MailDrop
-certificate for the current user; it needs no private key and contains none, and requires
-**no administrator rights** (it only touches the current user's certificate stores):
+Fix: run `Install-Certificate.ps1` before installing (it ships next to `setup.exe` in the zip / on
+the network drive). The script trusts the (public) MailDrop certificate for the current user; it
+needs no private key and contains none, and requires **no administrator rights** (it only touches
+the current user's certificate stores):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Publish\Install-Certificate.ps1
+powershell -ExecutionPolicy Bypass -File .\Install-Certificate.ps1
 ```
 
 Then run `setup.exe`. The certificate is deliberately valid for 30 years (until 2056-07-01) so this
 trust step never has to be repeated for already-installed users. Only if the certificate is ever
 regenerated (e.g. private key compromise) does the script need to be regenerated from `MailDrop.vsto`
 (see the comment in the script) and re-run by every user.
+
+#### Auto-update
+
+ClickOnce is configured with `UpdateEnabled=true` and no hard-coded update address. As a result, the
+location an install ran from automatically becomes its update source:
+
+- **Installed directly from the network drive**: MailDrop then checks that network drive in the
+  background on every Outlook start (`UpdateMode=Background`) and picks up a newer version on the
+  next restart. No extra step needed.
+- **Installed from a locally extracted zip** (e.g. downloaded from GitHub Releases): there is no
+  automatic update check. Updating requires manually installing again from a newer zip.
 
 ## Usage
 

@@ -177,11 +177,13 @@ DocProject/Help/Html2
 DocProject/Help/html
 
 # Click-Once directory
+# Publish/ build output is no longer committed: it is distributed as a GitHub Release zip
+# and a copy on the network drive (see README.md / CLAUDE.md, "Distribution").
 publish/
-# ...except the top-level Publish/ folder, which is the intentionally committed, GitHub-hosted
-# ClickOnce deployment (setup.exe, MailDrop.vsto, Application Files/, Install-Certificate.ps1).
 !/Publish/
-!/Publish/**
+/Publish/*
+# ...except the hand-written certificate-trust script, which is source, not build output.
+!/Publish/Install-Certificate.ps1
 
 # Publish Web Output
 *.[Pp]ublish.xml
