@@ -301,6 +301,7 @@
     </Compile>
     <Compile Include="Helpers\DatabaseUtils.vb" />
     <Compile Include="Helpers\DirectoryTreeHelper.vb" />
+    <Compile Include="Helpers\Logger.vb" />
     <Compile Include="UI\InfoPopup.xaml.vb">
       <DependentUpon>InfoPopup.xaml</DependentUpon>
     </Compile>

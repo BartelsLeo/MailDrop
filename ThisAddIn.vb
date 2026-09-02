@@ -3,6 +3,7 @@ Imports System.Runtime.InteropServices
 Imports Microsoft.Office.Core
 Imports System.IO
 Imports System.Diagnostics
+Imports System.Windows.Forms
 
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
@@ -65,6 +66,7 @@ Public Class ThisAddIn
                 Debug.WriteLine($"[ThisAddIn] PreloadTaskPane: done in {sw.ElapsedMilliseconds} ms — task pane ready.")
             Catch ex As Exception
                 Debug.WriteLine($"[ThisAddIn] PreloadTaskPane failed: {ex.Message}")
+                Logger.LogError("PreloadTaskPaneInBackground", ex)
             End Try
         End Sub
         timer.Start()
@@ -87,7 +89,12 @@ Public Class ThisAddIn
 
     Private Sub _currentExplorer_SelectionChange() Handles _currentExplorer.SelectionChange
         Debug.WriteLine("[ThisAddIn] Explorer_SelectionChange fired.")
-        MailSelected()
+        Try
+            MailSelected()
+        Catch ex As Exception
+            Debug.WriteLine($"[ThisAddIn] SelectionChange: MailSelected failed: {ex.Message}")
+            Logger.LogError("SelectionChange: MailSelected", ex)
+        End Try
     End Sub
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
@@ -132,15 +139,32 @@ Public Class ThisAddIn
 
     ' Callback for Ribbon button
     Public Sub MailAblegen_Click(control As Object)
-        If taskPane Is Nothing Then
-            ' Preload hasn't fired yet (clicked within first 4 s) — create synchronously.
-            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: preload not done, creating task pane now…")
-            CreateAndRegisterTaskPane()
-        Else
-            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: task pane was preloaded — showing immediately.")
-        End If
+        Try
+            If taskPane Is Nothing Then
+                ' Preload hasn't fired yet (clicked within first 4 s) — create synchronously.
+                Debug.WriteLine("[ThisAddIn] MailAblegen_Click: preload not done, creating task pane now…")
+                CreateAndRegisterTaskPane()
+            Else
+                Debug.WriteLine("[ThisAddIn] MailAblegen_Click: task pane was preloaded — showing immediately.")
+            End If
+        Catch ex As Exception
+            ' Task pane could not be created at all — nothing to show, so surface the error directly.
+            Debug.WriteLine($"[ThisAddIn] MailAblegen_Click: CreateAndRegisterTaskPane failed: {ex.Message}")
+            Logger.LogError("MailAblegen_Click: CreateAndRegisterTaskPane", ex)
+            MessageBox.Show($"MailDrop konnte nicht geoeffnet werden:{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}Details in: {Path.Combine(DbDirectory, "error.log")}",
+                             "MailDrop", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return
+        End Try
 
-        MailSelected()
+        Try
+            MailSelected()
+        Catch ex As Exception
+            ' Task pane exists but couldn't be populated (e.g. DB/SQLite init failed) —
+            ' still show it instead of silently doing nothing, and log the cause.
+            Debug.WriteLine($"[ThisAddIn] MailAblegen_Click: MailSelected failed: {ex.Message}")
+            Logger.LogError("MailAblegen_Click: MailSelected", ex)
+        End Try
+
         taskPane.Visible = True
     End Sub
 

@@ -106,6 +106,7 @@ MailDrop/
 ## Runtime data and paths
 
 - Session history database: %APPDATA%/MailDrop/sessions.db
+- Error log (Release-safe): %APPDATA%/MailDrop/error.log, written by Helpers/Logger.vb's LogError(context, ex). Release builds compile out Debug.WriteLine entirely (DefineDebug=false in MailDrop.vbproj), so this file is currently the only diagnostic trail available on an end-user machine; check it first when "the MailDrop button does nothing" is reported. Logger.LogError never throws itself (wrapped in Try/Catch) so logging failures cannot mask the original error or crash the caller.
 - SQLite schema versioning uses `PRAGMA user_version`; `SessionDatabaseManager.CurrentSchemaVersion` defines the expected schema and `ApplyMigrations(...)` upgrades older databases.
 - Database manager initialization is lazy: ThisAddIn.CurrentDatabaseManager creates SessionDatabaseManager on first access (not in ThisAddIn_Startup).
 - ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
@@ -197,6 +198,7 @@ Note:
 - GetEmbeddingService() returns Nothing if EmbeddingService construction fails (model files missing); all callers use null-conditional access so embedding gracefully degrades to zero similarity.
 - MailUtils and InputChecker now release Outlook COM objects (Explorer, MailItem, Attachment) via Marshal.FinalReleaseComObject in Finally blocks to reduce long-running COM reference buildup.
 - Dispatcher.BeginInvoke calls in MailDropWpfTaskPane guard against Dispatcher.HasShutdownStarted before posting.
+- ThisAddIn.MailAblegen_Click, the Explorer.SelectionChange handler, and PreloadTaskPaneInBackground each wrap their work in Try/Catch and call Logger.LogError on failure, instead of letting exceptions propagate to the VSTO ribbon/event boundary. This matters because Outlook/VSTO silently swallows unhandled exceptions thrown from ribbon callbacks and COM event handlers (no dialog, no visible effect) unless the user has enabled Outlook's "Show add-in user interface errors" option — without the Try/Catch, a failure anywhere in MailSelected() -> Session.PrepareSession() (e.g. first-time SQLite/ThisAddIn.CurrentDatabaseManager init failing) meant the button click did nothing observable and left no trace. taskPane.Visible = True in MailAblegen_Click now always runs as long as the task pane itself was created, even if populating it (MailSelected) failed, so the pane is shown (possibly not fully populated) rather than the click appearing to do nothing; if task pane creation itself fails, a MessageBox is shown pointing at error.log since there is nothing else to display.
 - DirectoryTreeHelper.CreateDirectoryNodeWithExpand accepts an optional maxDepth parameter (default 20) to prevent StackOverflow from deep or cyclic directory structures.
 - Session.HandleProjektSelection no longer takes a uiContext parameter (was unused).
 - Session.CancelSession is implemented as Reset().
