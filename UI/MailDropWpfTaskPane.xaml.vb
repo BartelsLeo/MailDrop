@@ -248,16 +248,25 @@ Public Class MailDropWpfTaskPane
 
     ' Setzt die Editierbarkeit der TaskPane
     Public Sub SetEditMode(isEditable As Boolean)
+        ' Try/Catch pro Control statt um die gesamte Schleife: FindVisualChildren rekursiert lazy in
+        ' den Teilbaum jedes Controls (z.B. ListBox1/TreeView1 Itemcontainer). Eine Exception dort wuerde
+        ' sonst die komplette Schleife abbrechen und alle danach verarbeiteten Controls faelschlich
+        ' deaktiviert lassen, ohne jede Spur.
         For Each ctrl In Me.FindVisualChildren(Of Control)(Me)
-            If ctrl.Name <> "ButtonInfo" Then
-                If ctrl.Name = "CheckBoxAnhaenge" Then
-                    ctrl.IsEnabled = isEditable AndAlso Session.HasAnhaenge
-                ElseIf ctrl.Name = "AttachmentScrollViewer" Then
-                    ctrl.IsEnabled = isEditable AndAlso Session.AnhaengeAblegen
-                Else
-                    ctrl.IsEnabled = isEditable
+            Try
+                If ctrl.Name <> "ButtonInfo" Then
+                    If ctrl.Name = "CheckBoxAnhaenge" Then
+                        ctrl.IsEnabled = isEditable AndAlso Session.HasAnhaenge
+                    ElseIf ctrl.Name = "AttachmentScrollViewer" Then
+                        ctrl.IsEnabled = isEditable AndAlso Session.AnhaengeAblegen
+                    Else
+                        ctrl.IsEnabled = isEditable
+                    End If
                 End If
-            End If
+            Catch ex As Exception
+                Debug.WriteLine($"[MailDropWpfTaskPane] SetEditMode: failed for control '{ctrl.Name}': {ex.Message}")
+                Logger.LogError($"SetEditMode: control '{ctrl.Name}'", ex)
+            End Try
         Next
     End Sub
 
@@ -269,19 +278,41 @@ Public Class MailDropWpfTaskPane
         Return selection.Count = 1 AndAlso TypeOf selection.Item(1) Is Outlook.MailItem
     End Function
 
-    ' Hilfsmethode: Findet alle Controls eines Typs rekursiv
+    ' Hilfsmethode: Findet alle Controls eines Typs rekursiv.
+    ' VisualTreeHelper-Aufrufe sind einzeln try/catch-abgesichert (Yield ist in VB innerhalb eines
+    ' Try-Blocks mit Catch nicht erlaubt): scheitert das Durchlaufen eines Teilbaums (z.B. weil
+    ' ListBox1/TreeView1 ihre Itemcontainer noch nicht generiert haben), wird nur dieser Teilbaum
+    ' uebersprungen und geloggt, statt die komplette Aufzaehlung fuer SetEditMode abzubrechen.
     Private Iterator Function FindVisualChildren(Of T As DependencyObject)(depObj As DependencyObject) As IEnumerable(Of T)
-        If depObj IsNot Nothing Then
-            For i As Integer = 0 To VisualTreeHelper.GetChildrenCount(depObj) - 1
-                Dim child = VisualTreeHelper.GetChild(depObj, i)
+        If depObj Is Nothing Then Return
+
+        Dim childCount As Integer
+        Try
+            childCount = VisualTreeHelper.GetChildrenCount(depObj)
+        Catch ex As Exception
+            Logger.LogError($"FindVisualChildren: GetChildrenCount failed for {depObj.GetType().Name}", ex)
+            Return
+        End Try
+
+        For i As Integer = 0 To childCount - 1
+            Dim child As DependencyObject = Nothing
+            Dim gotChild As Boolean = False
+            Try
+                child = VisualTreeHelper.GetChild(depObj, i)
+                gotChild = True
+            Catch ex As Exception
+                Logger.LogError($"FindVisualChildren: GetChild({i}) failed for {depObj.GetType().Name}", ex)
+            End Try
+
+            If gotChild Then
                 If TypeOf child Is T Then
                     Yield CType(child, T)
                 End If
                 For Each childOfChild In FindVisualChildren(Of T)(child)
                     Yield childOfChild
                 Next
-            Next
-        End If
+            End If
+        Next
     End Function
 
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
