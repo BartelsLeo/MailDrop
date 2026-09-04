@@ -37,7 +37,7 @@
     <PublishUrl>publish\</PublishUrl>
     <InstallUrl />
     <TargetCulture>de</TargetCulture>
-    <ApplicationVersion>1.0.1.6</ApplicationVersion>
+    <ApplicationVersion>1.0.1.7</ApplicationVersion>
     <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
     <UpdateEnabled>true</UpdateEnabled>
     <UpdateInterval>0</UpdateInterval>
@@ -48,6 +48,17 @@
     <FriendlyName>MailDrop</FriendlyName>
     <OfficeApplicationDescription />
     <LoadBehavior>3</LoadBehavior>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+      SQLite.Interop.dll is committed directly at x86\/x64\ (see Content items below) and
+      published via those, not via the Stub.System.Data.SQLite.Core.NetFramework package's own
+      CollectSQLiteInteropFiles target. That target feeds the packages\...\build\net46\x86\
+      source path into the VSTO publish pipeline as a Link'd file, which Visual Studio's own
+      Publish command rejects with "kann kein Link hinzugefuegt werden, da sie sich im
+      Projektverzeichnisbaum befindet" (source is inside the project directory tree).
+    -->
+    <CollectSQLiteInteropFiles>false</CollectSQLiteInteropFiles>
   </PropertyGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
@@ -427,6 +438,19 @@
     </VisualStudio>
   </ProjectExtensions>
   <Import Project="packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
+  <!--
+    The imported .targets file above defines an SQLiteInteropFiles item (globbed from its own
+    packages\...\build\net46\ directory) that VSTO's Office publish pipeline (CopyPublishItems in
+    Microsoft.VisualStudio.Tools.Office.targets) picks up regardless of the package's own
+    ContentSQLiteInteropFiles/CollectSQLiteInteropFiles switches (those only gate the generic
+    Web/ClickOnce PipelineCollectFilesPhaseDependsOn hook, which is a no-op for VSTO projects).
+    Clearing the item here stops VS's Publish command from trying to Link a file that is inside
+    the project directory tree (which it refuses, dropping the file from the publish output).
+    SQLite.Interop.dll is published instead via the plain Content items at x86\/x64\ below.
+  -->
+  <ItemGroup>
+    <SQLiteInteropFiles Remove="@(SQLiteInteropFiles)" />
+  </ItemGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>Dieses Projekt verweist auf mindestens ein NuGet-Paket, das auf diesem Computer fehlt. Verwenden Sie die Wiederherstellung von NuGet-Paketen, um die fehlenden Dateien herunterzuladen. Weitere Informationen finden Sie unter "http://go.microsoft.com/fwlink/?LinkID=322105". Die fehlende Datei ist "{0}".</ErrorText>
