@@ -23,6 +23,12 @@ mono_crash.*
 [Rr]eleases/
 x64/
 x86/
+# ...except the SQLite native interop DLLs, which are physically committed at this exact
+# path so ClickOnce publishes them correctly (see CLAUDE.md, "Distribution").
+!/x64/
+!/x64/SQLite.Interop.dll
+!/x86/
+!/x86/SQLite.Interop.dll
 [Ww][Ii][Nn]32/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
