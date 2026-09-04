@@ -37,7 +37,7 @@
     <PublishUrl>publish\</PublishUrl>
     <InstallUrl />
     <TargetCulture>de</TargetCulture>
-    <ApplicationVersion>1.0.1.1</ApplicationVersion>
+    <ApplicationVersion>1.0.1.6</ApplicationVersion>
     <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
     <UpdateEnabled>true</UpdateEnabled>
     <UpdateInterval>0</UpdateInterval>
@@ -320,6 +320,14 @@
     <Compile Include="ThisAddIn.vb">
       <SubType>Code</SubType>
     </Compile>
+    <Content Include="packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\x64\SQLite.Interop.dll">
+      <Link>x64\SQLite.Interop.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\x86\SQLite.Interop.dll">
+      <Link>x86\SQLite.Interop.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <None Include="app.config" />
     <None Include="MailDrop_TemporaryKey.pfx" />
     <Content Include="Models\model.onnx">
@@ -368,7 +376,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Folder Include="x64\" />
+    <Folder Include="x86\" />
+  </ItemGroup>
   <ItemGroup>
     <Content Include="Models\vocab.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
