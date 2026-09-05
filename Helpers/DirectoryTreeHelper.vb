@@ -36,43 +36,53 @@ Public Module DirectoryTreeHelper
         Return node
     End Function
 
-    ' Fuegt einen neu angelegten, leeren Ordner als einzelnen Knoten in einen bestehenden
-    ' TreeView-Baum ein, statt den kompletten Baum per BuildDirectoryTree() neu vom
-    ' Dateisystem einzulesen. Das vermeidet sowohl die Laufzeit eines vollstaendigen
-    ' Neuaufbaus als auch den Verlust des vom User manuell auf-/zugeklappten Zustands
-    ' (BuildDirectoryTree setzt IsExpanded pauschal fuer die ersten zwei Ebenen neu).
+    ' Laedt nur die direkten Kinder von parentFullPath neu vom Dateisystem und ersetzt sie im
+    ' uebergebenen Baum - statt (wie BuildDirectoryTree) den kompletten Baum neu einzulesen.
+    ' Alles ausserhalb dieses Teilbaums (Geschwister von parentFullPath, dessen Vorfahren,
+    ' andere Zweige) wird nicht angefasst und behaelt daher seinen Auf-/Zugeklappt-Zustand.
+    ' Dieser eine Mechanismus deckt Erstellen, Loeschen und Umbenennen ab: alle drei Aktionen
+    ' rufen nach der Dateisystem-Aenderung einfach RefreshChildren mit dem betroffenen
+    ' Elternordner auf, statt selbst zu wissen, wie sich der Baum konkret veraendert hat -
+    ' das ist robuster als eine Aktion-spezifische manuelle Node-Manipulation (z.B. bei
+    ' Rename muesste man sonst Name/FullPath/RelativePath des Knotens und aller Nachfahren
+    ' konsistent aktualisieren) und macht das TreeView nach der Aenderung wieder exakt
+    ' konsistent mit dem tatsaechlichen Dateisystemzustand.
+    ' Einziger Nachteil: Knoten UNTERHALB von parentFullPath (dessen (Enkel-)Kinder) werden
+    ' komplett neu aufgebaut und verlieren dabei ihren eigenen Auf-/Zugeklappt-Zustand
+    ' (Level<=2 relativ zu parentFullPath wird per CreateDirectoryNodeWithExpand neu gesetzt) -
+    ' das betrifft aber nur den direkt bearbeiteten Ordner, nicht den Rest des Baums.
     ' parentFullPath ist entweder projektPfad selbst (Root-Ebene) oder der FullPath eines
-    ' bereits vorhandenen Knotens.
-    Public Function InsertDirectoryNode(rootChildren As ObservableCollection(Of DirectoryNode), projektPfad As String, parentFullPath As String, newFolderPath As String) As DirectoryNode
-        Dim newNode As New DirectoryNode With {
-            .Name = Path.GetFileName(newFolderPath),
-            .FullPath = newFolderPath,
-            .RelativePath = If(newFolderPath.StartsWith(projektPfad), newFolderPath.Substring(projektPfad.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), newFolderPath),
-            .Children = New ObservableCollection(Of DirectoryNode)(),
-            .IsExpanded = False
-        }
-
+    ' bereits vorhandenen Knotens. Gibt False zurueck, wenn der Elternknoten nicht gefunden
+    ' wurde (Baum bleibt dann unveraendert - Aufrufer sollte auf BuildDirectoryTree() zurueckfallen).
+    Public Function RefreshChildren(rootChildren As ObservableCollection(Of DirectoryNode), projektPfad As String, parentFullPath As String) As Boolean
         Dim normalizedParent = parentFullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
         Dim normalizedProjekt = projektPfad.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
 
-        Dim targetChildren = rootChildren
-        If Not String.Equals(normalizedParent, normalizedProjekt, StringComparison.OrdinalIgnoreCase) Then
+        Dim targetChildren As ObservableCollection(Of DirectoryNode)
+        Dim parentLevel As Integer
+
+        If String.Equals(normalizedParent, normalizedProjekt, StringComparison.OrdinalIgnoreCase) Then
+            targetChildren = rootChildren
+            parentLevel = 0
+        Else
             Dim parentNode = FindNodeByFullPath(rootChildren, normalizedParent)
             If parentNode Is Nothing Then
                 ' Elternknoten nicht gefunden (sollte nicht vorkommen) - Baum unveraendert lassen.
-                Return Nothing
+                Return False
             End If
             parentNode.IsExpanded = True
             targetChildren = parentNode.Children
+            parentLevel = parentNode.RelativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Length
         End If
 
-        Dim insertIndex = 0
-        While insertIndex < targetChildren.Count AndAlso String.Compare(targetChildren(insertIndex).Name, newNode.Name, StringComparison.OrdinalIgnoreCase) < 0
-            insertIndex += 1
-        End While
-        targetChildren.Insert(insertIndex, newNode)
+        targetChildren.Clear()
+        If Directory.Exists(normalizedParent) Then
+            For Each dir As String In Directory.GetDirectories(normalizedParent)
+                targetChildren.Add(CreateDirectoryNodeWithExpand(dir, parentLevel + 1, projektPfad))
+            Next
+        End If
 
-        Return newNode
+        Return True
     End Function
 
     Private Function FindNodeByFullPath(children As ObservableCollection(Of DirectoryNode), fullPath As String) As DirectoryNode

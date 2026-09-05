@@ -358,6 +358,16 @@ Public Class MailDropWpfTaskPane
         Return folderName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
     End Function
 
+    ' Laedt nach einer Aenderung (Erstellen/Loeschen/Umbenennen) nur die Kinder des
+    ' betroffenen Elternordners neu, statt den gesamten Baum vom Dateisystem einzulesen.
+    ' Faellt auf einen vollen Rebuild zurueck, falls der Elternordner im aktuellen Baum
+    ' (noch) nicht gefunden wird.
+    Private Sub RefreshTreeChildren(parentPath As String)
+        If Not Session.RefreshTreeViewChildren(parentPath) Then
+            Session.BuildDirectoryTree()
+        End If
+    End Sub
+
     Private Sub CreateFolderUnderSelection()
         If Not EnsureValidProjektPfad() Then
             Return
@@ -377,10 +387,9 @@ Public Class MailDropWpfTaskPane
         End If
 
         Dim newFolderPath = Path.Combine(parentPath, folderName)
-        Dim folderAlreadyExisted = Directory.Exists(newFolderPath)
 
         Try
-            If folderAlreadyExisted Then
+            If Directory.Exists(newFolderPath) Then
                 MessageBox.Show("Der Ordner existiert bereits.", "Neuen Ordner erstellen", MessageBoxButton.OK, MessageBoxImage.Information)
             Else
                 Directory.CreateDirectory(newFolderPath)
@@ -390,13 +399,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        ' Nur den neuen Ordner als Knoten ergaenzen statt den gesamten Baum neu vom
-        ' Dateisystem einzulesen - das ist deutlich schneller und erhaelt den vom User
-        ' manuell auf-/zugeklappten Zustand der uebrigen Knoten. Existierte der Ordner
-        ' schon vorher, steckt er bereits im Baum - dann nicht erneut einfuegen.
-        If Not folderAlreadyExisted AndAlso Session.InsertDirectoryTreeNode(parentPath, newFolderPath) Is Nothing Then
-            Session.BuildDirectoryTree()
-        End If
+        RefreshTreeChildren(parentPath)
         Dim relativePath = GetRelativePath(Session.ProjektPfad, newFolderPath)
         Session.ProjektstrukturPfad = relativePath
         Session.IsSuggestedProjektstrukturPfad = False
@@ -435,7 +438,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        RefreshTreeChildren(parentPath)
         Dim parentRelativePath = GetRelativePath(Session.ProjektPfad, parentPath)
         Session.ProjektstrukturPfad = parentRelativePath
         Session.IsSuggestedProjektstrukturPfad = False
@@ -487,7 +490,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        RefreshTreeChildren(parentPath)
         Dim relativePath = GetRelativePath(Session.ProjektPfad, renamedPath)
         Session.ProjektstrukturPfad = relativePath
         Session.IsSuggestedProjektstrukturPfad = False

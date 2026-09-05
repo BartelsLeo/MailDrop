@@ -248,19 +248,40 @@ Public Class Session
             isEmptyPlaceholder.Add(Nothing)
         Next
 
-        ' Ein Trennzeichen, das der User im Schema direkt zwischen zwei Platzhaltern platziert
-        ' hat (z.B. "_"), wird entfernt, wenn einer der beiden angrenzenden Platzhalter leer
-        ' aufgeloest wurde - sonst bliebe z.B. bei leerem letzten Platzhalter ein "_" am Ende
-        ' des Ergebnisses stehen (oder ein doppeltes "_", wenn ein Platzhalter in der Mitte leer ist).
-        For i = 1 To parts.Count - 2
-            If isEmptyPlaceholder(i) Is Nothing AndAlso isEmptyPlaceholder(i - 1).HasValue AndAlso isEmptyPlaceholder(i + 1).HasValue Then
-                If isEmptyPlaceholder(i - 1).Value OrElse isEmptyPlaceholder(i + 1).Value Then
-                    parts(i) = String.Empty
+        ' "Skip-empty-join": ein literales Segment, das direkt zwischen zwei Platzhaltern liegt
+        ' (ein "Connector", z.B. das vom User getippte "_"), wird nicht sofort ausgegeben,
+        ' sondern zwischengespeichert (pendingConnector) und erst unmittelbar vor dem naechsten
+        ' NICHT leeren Platzhalter ausgegeben - und auch nur, wenn diesem bereits ein anderer,
+        ' nicht leerer Platzhalter vorausging. Ein leerer Platzhalter selbst wird uebersprungen,
+        ' ohne den zwischengespeicherten Connector zu verwerfen (der naechste Connector
+        ' ueberschreibt ihn einfach). Dadurch bleibt genau EIN Trennzeichen zwischen zwei
+        ' tatsaechlich befuellten Platzhaltern erhalten, egal wie viele leere Platzhalter dazwischen
+        ' liegen, und es entsteht nie ein fuehrendes/abschliessendes Trennzeichen. Literaler Text,
+        ' der nur an einen Platzhalter grenzt (z.B. ein fixes Prefix vor dem ersten Platzhalter),
+        ' ist kein Connector und wird immer unveraendert uebernommen, auch wenn dieser Platzhalter leer ist.
+        Dim result As New Text.StringBuilder()
+        Dim pendingConnector As String = Nothing
+        Dim emittedAny = False
+
+        For i = 0 To parts.Count - 1
+            If isEmptyPlaceholder(i) Is Nothing Then
+                Dim isConnector = i > 0 AndAlso i < parts.Count - 1 AndAlso isEmptyPlaceholder(i - 1).HasValue AndAlso isEmptyPlaceholder(i + 1).HasValue
+                If isConnector Then
+                    pendingConnector = parts(i)
+                Else
+                    result.Append(parts(i))
                 End If
+            ElseIf Not String.IsNullOrEmpty(parts(i)) Then
+                If emittedAny AndAlso pendingConnector IsNot Nothing Then
+                    result.Append(pendingConnector)
+                End If
+                result.Append(parts(i))
+                emittedAny = True
+                pendingConnector = Nothing
             End If
         Next
 
-        Return String.Join(String.Empty, parts)
+        Return result.ToString()
     End Function
 
     Public Sub UpdateResolvedAfterTitelChange()
@@ -500,10 +521,12 @@ Public Class Session
         TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(ProjektPfad)
     End Sub
 
-    ' Fuegt einen einzelnen, neu angelegten Ordner in den bestehenden TreeViewData-Baum ein,
-    ' statt den kompletten Baum neu vom Dateisystem einzulesen (siehe DirectoryTreeHelper.InsertDirectoryNode).
-    Public Function InsertDirectoryTreeNode(parentFullPath As String, newFolderPath As String) As DirectoryNode
-        Return DirectoryTreeHelper.InsertDirectoryNode(TreeViewData, ProjektPfad, parentFullPath, newFolderPath)
+    ' Laedt nur die Kinder von parentFullPath (Root-Ebene = ProjektPfad, oder ein bestehender
+    ' Knoten) neu vom Dateisystem, statt den kompletten TreeViewData-Baum neu aufzubauen
+    ' (siehe DirectoryTreeHelper.RefreshChildren). Gibt False zurueck, wenn parentFullPath im
+    ' aktuellen Baum nicht gefunden wurde - der Aufrufer sollte dann auf BuildDirectoryTree() zurueckfallen.
+    Public Function RefreshTreeViewChildren(parentFullPath As String) As Boolean
+        Return DirectoryTreeHelper.RefreshChildren(TreeViewData, ProjektPfad, parentFullPath)
     End Function
 
     Public Sub CancelSession()
