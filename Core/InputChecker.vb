@@ -58,21 +58,6 @@ Public Module InputChecker
         End If
     End Function
 
-    ' Setzt Projektstruktur-Pfad (bereits absolut) und aufgeloesten Ablageordner-Namen zum
-    ' Ablageordner-Zielpfad zusammen. Einzige Stelle, die diese beiden Segmente kombiniert -
-    ' wird sowohl von CheckInput als auch von Session.GesamtPfad (Vorschau im Taskpane) genutzt,
-    ' damit beide immer denselben Pfad berechnen (siehe Caveats zu einem frueheren Bug, bei dem
-    ' projektPfad hier faelschlich ein zweites Mal vorangestellt wurde).
-    Public Function ComposeAblageOrdnerPfad(projektstrukturPfad As String, ablageordnerAufgeloest As String) As String
-        Return Path.Combine(projektstrukturPfad, If(ablageordnerAufgeloest, String.Empty))
-    End Function
-
-    ' Setzt Ablageordner-Zielpfad und aufgeloesten msg-Dateinamen zum vollstaendigen
-    ' Ziel-Dateipfad der E-Mail zusammen. Ebenfalls von CheckInput und Session.GesamtPfad genutzt.
-    Public Function ComposeMsgZielpfad(ablageOrdnerPfad As String, msgDateinameAufgeloest As String) As String
-        Return Path.Combine(ablageOrdnerPfad, If(msgDateinameAufgeloest, String.Empty))
-    End Function
-
     ' Prüft alle Eingaben (Projektpfad, Projektstruktur, Ablageordner, msg-Dateiname)
     Public Function CheckInput(session As Session) As CheckedInputResult
         Dim result As New CheckedInputResult()
@@ -91,7 +76,7 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If
-        Dim ablageOrdnerPfad As String = ComposeAblageOrdnerPfad(projektstrukturPfad, session.AblageordnerAufgeloest)
+        Dim ablageOrdnerPfad As String = Path.Combine(projektstrukturPfad, session.AblageordnerAufgeloest)
         Dim ablageOrdnerCheck = CheckFolderNameAndPath(ablageOrdnerPfad)
         If ablageOrdnerCheck <> String.Empty Then
             result.ErrorMessage = ablageOrdnerCheck
@@ -102,7 +87,7 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte geben Sie einen gültigen Dateinamen für die E-Mail an."
             Return result
         End If
-        Dim msgZielPfad As String = ComposeMsgZielpfad(ablageOrdnerPfad, session.MsgDateinameAufgeloest)
+        Dim msgZielPfad As String = Path.Combine(ablageOrdnerPfad, session.MsgDateinameAufgeloest)
         Dim msgDateinameCheck = CheckFileNameAndPath(msgZielPfad)
         If msgDateinameCheck <> String.Empty Then
             result.ErrorMessage = msgDateinameCheck
