@@ -10,9 +10,11 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <TextBlock FontWeight="Bold" FontSize="14" Margin="0,0,0,10">Hinweise</TextBlock>
+
+                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Ablageordner und msg Dateiname</TextBlock>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
-                           Text="In den Feldern 'Ablageordner' und 'msg Dateiname' können folgende Platzhalter verwendet werden."/>
-                <ItemsControl>
+                           Text="Die Felder 'Ablageordner' und 'msg Dateiname' werden dynamisch aus einem Schema zusammengesetzt. Das erlaubt eine Vereinheitlichung der Ordner- und Dateinamen. Es ist daher ratsam, ein Schema festzulegen und nicht mehr zu ändern. Im Schema können folgende Variablen verwendet werden:"/>
+                <ItemsControl Margin="0,0,0,10">
                     <TextBlock Text="[Titel]" />
                     <TextBlock Text="[Absender]" />
                     <TextBlock Text="[Absender-Domain]" />
@@ -23,29 +25,32 @@
                     <TextBlock Text="[Datum (formatiert)]" />
                     <TextBlock Text="[Absender (kurz)]" />
                 </ItemsControl>
-                <TextBlock TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="Somit werden die Felder dynamisch ausgefüllt."/>
-                <TextBlock TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="Fest stehender Text muss in doppelte Anführungszeichen gesetzt werden, z. B. [Titel]&quot; (Entwurf)&quot;. Dieser Text bleibt immer erhalten, auch wenn ein benachbarter Platzhalter leer ist."/>
-                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
-                           Text="Text ohne Anführungszeichen zwischen zwei Platzhaltern (z. B. das &quot;_&quot; im Standardschema) gilt als Trennzeichen: Ist einer der beiden Platzhalter leer, wird dieses Trennzeichen automatisch weggelassen - so entstehen keine überflüssigen Trenner am Anfang, Ende oder in der Mitte des Ergebnisses."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
+                           Text="Feste, undynamische Textteile im Schema erfordern Anführungszeichen, z. B. &quot;gelesen&quot;."/>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Trennzeichen zwischen Variablen erfordern keine Einfassung, z. B. [Datum]_[Titel]. Ist eine Variable leer, wird das Trennzeichen _ nicht eingefügt."/>
+
                 <Separator Margin="0,10,0,10"/>
-                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">SuggestionRecords übertragen</TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Vorschläge</TextBlock>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Für die ausgewählte E-Mail werden für alle Felder Vorschläge erzeugt und mit ✦ markiert. Die Vorschläge basieren auf den bisherigen Mail-Ablagen."/>
+
+                <Separator Margin="0,10,0,10"/>
+                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Vorschlagsdaten exportieren</TextBlock>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,4"
-                           Text="Die Vorschlagsdaten (SuggestionRecords) liegen in der SQLite-Datei:"/>
+                           Text="Die Vorschlagsdaten des Benutzers werden in folgender Datei gespeichert:"/>
                 <TextBox x:Name="TxtDbPath" IsReadOnly="True" TextWrapping="Wrap"
                          Margin="0,0,0,8" Padding="4"
                          Background="#F5F5F5" BorderBrush="#CCCCCC"
                          FontFamily="Consolas" FontSize="11"
                          VerticalScrollBarVisibility="Disabled"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
-                           Text="Export: Diese Datei an einen sicheren Ort kopieren (z. B. Netzlaufwerk oder USB-Stick)."/>
                 <TextBlock TextWrapping="Wrap"
-                           Text="Import: Auf dem anderen PC die Datei wieder unter exakt demselben Pfad ablegen und vorhandene Datei ersetzen."/>
+                           Text="Diese Datei kann kopiert und auf einem anderen Computer oder für einen anderen Nutzer an gleicher Stelle eingefügt werden."/>
+
                 <Separator Margin="0,10,0,10"/>
-                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Vorschlagsgewichte</TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">Vorschläge verbessern</TextBlock>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
-                           Text="Die Gewichte für die Vorschlagsberechnung werden alle 50 Ablagen automatisch neu berechnet. Hier können sie manuell aktualisiert werden – sinnvoll nach dem Import von SuggestionRecords oder wenn Vorschläge unpassend wirken."/>
+                           Text="Alle 50 Ablagen wird die Gewichtung des Vorschlagsalgorithmus automatisch aktualisiert. Erscheinen die Vorschläge unpassend oder wurden Vorschlagsdaten importiert, kann die Gewichtung auch manuell aktualisiert werden."/>
                 <Button x:Name="ButtonGewichteNeuBerechnen" Content="Gewichte neu berechnen"
                         HorizontalAlignment="Left" Padding="12,6" FontSize="12"
                         Click="ButtonGewichteNeuBerechnen_Click"/>
