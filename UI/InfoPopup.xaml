@@ -25,6 +25,10 @@
                 </ItemsControl>
                 <TextBlock TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="Somit werden die Felder dynamisch ausgefüllt."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="Fest stehender Text muss in doppelte Anführungszeichen gesetzt werden, z. B. [Titel]&quot; (Entwurf)&quot;. Dieser Text bleibt immer erhalten, auch wenn ein benachbarter Platzhalter leer ist."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                           Text="Text ohne Anführungszeichen zwischen zwei Platzhaltern (z. B. das &quot;_&quot; im Standardschema) gilt als Trennzeichen: Ist einer der beiden Platzhalter leer, wird dieses Trennzeichen automatisch weggelassen - so entstehen keine überflüssigen Trenner am Anfang, Ende oder in der Mitte des Ergebnisses."/>
                 <Separator Margin="0,10,0,10"/>
                 <TextBlock FontWeight="Bold" FontSize="13" Margin="0,0,0,6">SuggestionRecords übertragen</TextBlock>
                 <TextBlock TextWrapping="Wrap" Margin="0,0,0,4"

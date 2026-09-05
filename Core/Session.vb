@@ -210,6 +210,31 @@ Public Class Session
         OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
     End Sub
 
+    Private Enum SchemaSegmentKind
+        Literal        ' immer unveraendert ausgegeben (Text in "..." oder Text, der nicht zwischen zwei Platzhaltern liegt)
+        Connector      ' Text ohne Anfuehrungszeichen direkt zwischen zwei Platzhaltern - siehe Skip-empty-join unten
+        Placeholder    ' ein aufgeloester Platzhalterwert (kann leer sein)
+    End Enum
+
+    Private Structure SchemaSegment
+        Public ReadOnly Text As String
+        Public ReadOnly Kind As SchemaSegmentKind
+        Public Sub New(text As String, kind As SchemaSegmentKind)
+            Me.Text = text
+            Me.Kind = kind
+        End Sub
+    End Structure
+
+    ' Loest ein Ablageordner-/msg-Dateiname-Schema auf. Syntax:
+    '   - [Platzhalter] wird durch den jeweiligen Wert ersetzt.
+    '   - "fester Text" (in doppelten Anfuehrungszeichen) wird IMMER unveraendert uebernommen,
+    '     unabhaengig davon, ob benachbarte Platzhalter leer sind - damit kann der User bewusst
+    '     Text erzwingen, der auch bei einem leeren Nachbar-Platzhalter stehen bleiben soll.
+    '   - Jeglicher andere (nicht in Anfuehrungszeichen stehender) Text, der direkt zwischen zwei
+    '     Platzhaltern steht (z.B. das "_" im Standardschema), gilt als Trennelement und wird nur
+    '     eingefuegt, wenn er tatsaechlich zwei befuellte Platzhalter verbindet (siehe Skip-empty-join
+    '     unten). Text, der nicht zwischen zwei Platzhaltern liegt (z.B. ein fixes Prefix vor dem
+    '     ersten Platzhalter), ist ohnehin kein Trennelement und wird immer ausgegeben wie fester Text.
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
 
@@ -225,60 +250,70 @@ Public Class Session
             {"[Absender (kurz)]", If(AbsenderKurz, String.Empty)}
         }
 
-        Dim pattern = String.Join("|", placeholderValues.Keys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
-        Dim tokenRegex As New Text.RegularExpressions.Regex(pattern)
+        Dim placeholderPattern = String.Join("|", placeholderValues.Keys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
+        Dim tokenRegex As New Text.RegularExpressions.Regex("""([^""]*)""|" & placeholderPattern)
 
-        ' Vorlage in wechselnde literale/Platzhalter-Segmente zerlegen: literals(0), Wert(0),
-        ' literals(1), Wert(1), ..., literals(n). isEmptyPlaceholder(i) = Nothing markiert ein
-        ' literales Segment (z.B. ein vom User frei gewaehltes Trennzeichen wie "_"), sonst
-        ' True/False je nachdem ob der Platzhalter an dieser Stelle leer aufgeloest wurde.
-        Dim literals = tokenRegex.Split(template)
-        Dim matches = tokenRegex.Matches(template)
+        ' Vorlage anhand von Anfuehrungszeichen-Literalen und Platzhaltern in Segmente zerlegen.
+        ' Text zwischen zwei erkannten Tokens ("Gap") wird vorlaeufig als Literal markiert und im
+        ' zweiten Schritt zu Connector umklassifiziert, falls er tatsaechlich zwischen zwei
+        ' Platzhalter-Segmenten liegt - Anfuehrungszeichen-Literale werden davon nie erfasst,
+        ' da sie direkt als Placeholder-Kind Placeholder bzw. hartkodiert als Literal erzeugt werden,
+        ' nicht als Gap.
+        Dim segments As New List(Of SchemaSegment)
+        Dim gapIndices As New List(Of Integer)
+        Dim lastEnd = 0
 
-        Dim parts As New List(Of String)
-        Dim isEmptyPlaceholder As New List(Of Boolean?)
+        For Each m As Text.RegularExpressions.Match In tokenRegex.Matches(template)
+            If m.Index > lastEnd Then
+                gapIndices.Add(segments.Count)
+                segments.Add(New SchemaSegment(template.Substring(lastEnd, m.Index - lastEnd), SchemaSegmentKind.Literal))
+            End If
+            If m.Groups(1).Success Then
+                segments.Add(New SchemaSegment(m.Groups(1).Value, SchemaSegmentKind.Literal))
+            Else
+                segments.Add(New SchemaSegment(placeholderValues(m.Value), SchemaSegmentKind.Placeholder))
+            End If
+            lastEnd = m.Index + m.Length
+        Next
+        If lastEnd < template.Length Then
+            gapIndices.Add(segments.Count)
+            segments.Add(New SchemaSegment(template.Substring(lastEnd), SchemaSegmentKind.Literal))
+        End If
 
-        parts.Add(literals(0))
-        isEmptyPlaceholder.Add(Nothing)
-        For i = 0 To matches.Count - 1
-            Dim value = placeholderValues(matches(i).Value)
-            parts.Add(value)
-            isEmptyPlaceholder.Add(String.IsNullOrEmpty(value))
-            parts.Add(literals(i + 1))
-            isEmptyPlaceholder.Add(Nothing)
+        For Each i In gapIndices
+            If i > 0 AndAlso i < segments.Count - 1 AndAlso segments(i - 1).Kind = SchemaSegmentKind.Placeholder AndAlso segments(i + 1).Kind = SchemaSegmentKind.Placeholder Then
+                segments(i) = New SchemaSegment(segments(i).Text, SchemaSegmentKind.Connector)
+            End If
         Next
 
-        ' "Skip-empty-join": ein literales Segment, das direkt zwischen zwei Platzhaltern liegt
-        ' (ein "Connector", z.B. das vom User getippte "_"), wird nicht sofort ausgegeben,
-        ' sondern zwischengespeichert (pendingConnector) und erst unmittelbar vor dem naechsten
-        ' NICHT leeren Platzhalter ausgegeben - und auch nur, wenn diesem bereits ein anderer,
-        ' nicht leerer Platzhalter vorausging. Ein leerer Platzhalter selbst wird uebersprungen,
-        ' ohne den zwischengespeicherten Connector zu verwerfen (der naechste Connector
-        ' ueberschreibt ihn einfach). Dadurch bleibt genau EIN Trennzeichen zwischen zwei
-        ' tatsaechlich befuellten Platzhaltern erhalten, egal wie viele leere Platzhalter dazwischen
-        ' liegen, und es entsteht nie ein fuehrendes/abschliessendes Trennzeichen. Literaler Text,
-        ' der nur an einen Platzhalter grenzt (z.B. ein fixes Prefix vor dem ersten Platzhalter),
-        ' ist kein Connector und wird immer unveraendert uebernommen, auch wenn dieser Platzhalter leer ist.
+        ' "Skip-empty-join": ein Connector wird nicht sofort ausgegeben, sondern zwischengespeichert
+        ' (pendingConnector) und erst unmittelbar vor dem naechsten NICHT leeren Platzhalter
+        ' ausgegeben - und auch nur, wenn diesem bereits ein anderer, nicht leerer Platzhalter
+        ' vorausging. Ein leerer Platzhalter wird uebersprungen, ohne den zwischengespeicherten
+        ' Connector zu verwerfen (ein spaeterer Connector ueberschreibt ihn einfach). Dadurch bleibt
+        ' genau EIN Trennzeichen zwischen zwei tatsaechlich befuellten Platzhaltern erhalten, egal
+        ' wie viele leere Platzhalter dazwischen liegen, und es entsteht nie ein fuehrendes/
+        ' abschliessendes Trennzeichen. Literal-Segmente werden davon nie beruehrt.
         Dim result As New Text.StringBuilder()
         Dim pendingConnector As String = Nothing
         Dim emittedAny = False
 
-        For i = 0 To parts.Count - 1
-            If isEmptyPlaceholder(i) Is Nothing Then
-                Dim isConnector = i > 0 AndAlso i < parts.Count - 1 AndAlso isEmptyPlaceholder(i - 1).HasValue AndAlso isEmptyPlaceholder(i + 1).HasValue
-                If isConnector Then
-                    pendingConnector = parts(i)
-                Else
-                    result.Append(parts(i))
-                End If
-            ElseIf Not String.IsNullOrEmpty(parts(i)) Then
-                If emittedAny AndAlso pendingConnector IsNot Nothing Then
-                    result.Append(pendingConnector)
-                End If
-                result.Append(parts(i))
-                emittedAny = True
-                pendingConnector = Nothing
-            End If
+        For Each seg In segments
+            Select Case seg.Kind
+                Case SchemaSegmentKind.Literal
+                    result.Append(seg.Text)
+                Case SchemaSegmentKind.Connector
+                    pendingConnector = seg.Text
+                Case SchemaSegmentKind.Placeholder
+                    If Not String.IsNullOrEmpty(seg.Text) Then
+                        If emittedAny AndAlso pendingConnector IsNot Nothing Then
+                            result.Append(pendingConnector)
+                        End If
+                        result.Append(seg.Text)
+                        emittedAny = True
+                        pendingConnector = Nothing
+                    End If
+            End Select
         Next
 
         Return result.ToString()
