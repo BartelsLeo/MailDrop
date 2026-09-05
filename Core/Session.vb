@@ -212,17 +212,55 @@ Public Class Session
 
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
-        Dim result = template
-        result = result.Replace("[Titel]", If(Titel, String.Empty))
-        result = result.Replace("[Absender]", If(Absender, String.Empty))
-        result = result.Replace("[Absender-Domain]", If(AbsenderDomain, String.Empty))
-        result = result.Replace("[Empf�nger]", If(Empfaenger, String.Empty))
-        result = result.Replace("[Empf�nger (kurz)]", If(Empfaenger, String.Empty))
-        result = result.Replace("[Betreff]", If(Betreff, String.Empty))
-        result = result.Replace("[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty))
-        result = result.Replace("[Datum (formatiert)]", If(DatumFormatiert, String.Empty))
-        result = result.Replace("[Absender (kurz)]", If(AbsenderKurz, String.Empty))
-        Return result
+
+        Dim placeholderValues As New Dictionary(Of String, String) From {
+            {"[Titel]", If(Titel, String.Empty)},
+            {"[Absender]", If(Absender, String.Empty)},
+            {"[Absender-Domain]", If(AbsenderDomain, String.Empty)},
+            {"[Empf�nger]", If(Empfaenger, String.Empty)},
+            {"[Empf�nger (kurz)]", If(Empfaenger, String.Empty)},
+            {"[Betreff]", If(Betreff, String.Empty)},
+            {"[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty)},
+            {"[Datum (formatiert)]", If(DatumFormatiert, String.Empty)},
+            {"[Absender (kurz)]", If(AbsenderKurz, String.Empty)}
+        }
+
+        Dim pattern = String.Join("|", placeholderValues.Keys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
+        Dim tokenRegex As New Text.RegularExpressions.Regex(pattern)
+
+        ' Vorlage in wechselnde literale/Platzhalter-Segmente zerlegen: literals(0), Wert(0),
+        ' literals(1), Wert(1), ..., literals(n). isEmptyPlaceholder(i) = Nothing markiert ein
+        ' literales Segment (z.B. ein vom User frei gewaehltes Trennzeichen wie "_"), sonst
+        ' True/False je nachdem ob der Platzhalter an dieser Stelle leer aufgeloest wurde.
+        Dim literals = tokenRegex.Split(template)
+        Dim matches = tokenRegex.Matches(template)
+
+        Dim parts As New List(Of String)
+        Dim isEmptyPlaceholder As New List(Of Boolean?)
+
+        parts.Add(literals(0))
+        isEmptyPlaceholder.Add(Nothing)
+        For i = 0 To matches.Count - 1
+            Dim value = placeholderValues(matches(i).Value)
+            parts.Add(value)
+            isEmptyPlaceholder.Add(String.IsNullOrEmpty(value))
+            parts.Add(literals(i + 1))
+            isEmptyPlaceholder.Add(Nothing)
+        Next
+
+        ' Ein Trennzeichen, das der User im Schema direkt zwischen zwei Platzhaltern platziert
+        ' hat (z.B. "_"), wird entfernt, wenn einer der beiden angrenzenden Platzhalter leer
+        ' aufgeloest wurde - sonst bliebe z.B. bei leerem letzten Platzhalter ein "_" am Ende
+        ' des Ergebnisses stehen (oder ein doppeltes "_", wenn ein Platzhalter in der Mitte leer ist).
+        For i = 1 To parts.Count - 2
+            If isEmptyPlaceholder(i) Is Nothing AndAlso isEmptyPlaceholder(i - 1).HasValue AndAlso isEmptyPlaceholder(i + 1).HasValue Then
+                If isEmptyPlaceholder(i - 1).Value OrElse isEmptyPlaceholder(i + 1).Value Then
+                    parts(i) = String.Empty
+                End If
+            End If
+        Next
+
+        Return String.Join(String.Empty, parts)
     End Function
 
     Public Sub UpdateResolvedAfterTitelChange()
@@ -461,6 +499,12 @@ Public Class Session
     Public Sub BuildDirectoryTree()
         TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(ProjektPfad)
     End Sub
+
+    ' Fuegt einen einzelnen, neu angelegten Ordner in den bestehenden TreeViewData-Baum ein,
+    ' statt den kompletten Baum neu vom Dateisystem einzulesen (siehe DirectoryTreeHelper.InsertDirectoryNode).
+    Public Function InsertDirectoryTreeNode(parentFullPath As String, newFolderPath As String) As DirectoryNode
+        Return DirectoryTreeHelper.InsertDirectoryNode(TreeViewData, ProjektPfad, parentFullPath, newFolderPath)
+    End Function
 
     Public Sub CancelSession()
         Reset()

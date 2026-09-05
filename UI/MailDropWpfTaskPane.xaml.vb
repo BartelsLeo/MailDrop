@@ -377,9 +377,10 @@ Public Class MailDropWpfTaskPane
         End If
 
         Dim newFolderPath = Path.Combine(parentPath, folderName)
+        Dim folderAlreadyExisted = Directory.Exists(newFolderPath)
 
         Try
-            If Directory.Exists(newFolderPath) Then
+            If folderAlreadyExisted Then
                 MessageBox.Show("Der Ordner existiert bereits.", "Neuen Ordner erstellen", MessageBoxButton.OK, MessageBoxImage.Information)
             Else
                 Directory.CreateDirectory(newFolderPath)
@@ -389,7 +390,13 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        ' Nur den neuen Ordner als Knoten ergaenzen statt den gesamten Baum neu vom
+        ' Dateisystem einzulesen - das ist deutlich schneller und erhaelt den vom User
+        ' manuell auf-/zugeklappten Zustand der uebrigen Knoten. Existierte der Ordner
+        ' schon vorher, steckt er bereits im Baum - dann nicht erneut einfuegen.
+        If Not folderAlreadyExisted AndAlso Session.InsertDirectoryTreeNode(parentPath, newFolderPath) Is Nothing Then
+            Session.BuildDirectoryTree()
+        End If
         Dim relativePath = GetRelativePath(Session.ProjektPfad, newFolderPath)
         Session.ProjektstrukturPfad = relativePath
         Session.IsSuggestedProjektstrukturPfad = False
