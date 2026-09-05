@@ -210,19 +210,113 @@ Public Class Session
         OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
     End Sub
 
+    Private Enum SchemaSegmentKind
+        Literal        ' immer unveraendert ausgegeben (Text in "..." oder Text, der nicht zwischen zwei Platzhaltern liegt)
+        Connector      ' Text ohne Anfuehrungszeichen direkt zwischen zwei Platzhaltern - siehe Skip-empty-join unten
+        Placeholder    ' ein aufgeloester Platzhalterwert (kann leer sein)
+    End Enum
+
+    Private Structure SchemaSegment
+        Public ReadOnly Text As String
+        Public ReadOnly Kind As SchemaSegmentKind
+        Public Sub New(text As String, kind As SchemaSegmentKind)
+            Me.Text = text
+            Me.Kind = kind
+        End Sub
+    End Structure
+
+    ' Loest ein Ablageordner-/msg-Dateiname-Schema auf. Syntax:
+    '   - [Platzhalter] wird durch den jeweiligen Wert ersetzt.
+    '   - "fester Text" (in doppelten Anfuehrungszeichen) wird IMMER unveraendert uebernommen,
+    '     unabhaengig davon, ob benachbarte Platzhalter leer sind - damit kann der User bewusst
+    '     Text erzwingen, der auch bei einem leeren Nachbar-Platzhalter stehen bleiben soll.
+    '   - Jeglicher andere (nicht in Anfuehrungszeichen stehender) Text, der direkt zwischen zwei
+    '     Platzhaltern steht (z.B. das "_" im Standardschema), gilt als Trennelement und wird nur
+    '     eingefuegt, wenn er tatsaechlich zwei befuellte Platzhalter verbindet (siehe Skip-empty-join
+    '     unten). Text, der nicht zwischen zwei Platzhaltern liegt (z.B. ein fixes Prefix vor dem
+    '     ersten Platzhalter), ist ohnehin kein Trennelement und wird immer ausgegeben wie fester Text.
     Private Function ReplacePlaceholders(template As String) As String
         If String.IsNullOrEmpty(template) Then Return String.Empty
-        Dim result = template
-        result = result.Replace("[Titel]", If(Titel, String.Empty))
-        result = result.Replace("[Absender]", If(Absender, String.Empty))
-        result = result.Replace("[Absender-Domain]", If(AbsenderDomain, String.Empty))
-        result = result.Replace("[Empf�nger]", If(Empfaenger, String.Empty))
-        result = result.Replace("[Empf�nger (kurz)]", If(Empfaenger, String.Empty))
-        result = result.Replace("[Betreff]", If(Betreff, String.Empty))
-        result = result.Replace("[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty))
-        result = result.Replace("[Datum (formatiert)]", If(DatumFormatiert, String.Empty))
-        result = result.Replace("[Absender (kurz)]", If(AbsenderKurz, String.Empty))
-        Return result
+
+        Dim placeholderValues As New Dictionary(Of String, String) From {
+            {"[Titel]", If(Titel, String.Empty)},
+            {"[Absender]", If(Absender, String.Empty)},
+            {"[Absender-Domain]", If(AbsenderDomain, String.Empty)},
+            {"[Empf�nger]", If(Empfaenger, String.Empty)},
+            {"[Empf�nger (kurz)]", If(Empfaenger, String.Empty)},
+            {"[Betreff]", If(Betreff, String.Empty)},
+            {"[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty)},
+            {"[Datum (formatiert)]", If(DatumFormatiert, String.Empty)},
+            {"[Absender (kurz)]", If(AbsenderKurz, String.Empty)}
+        }
+
+        Dim placeholderPattern = String.Join("|", placeholderValues.Keys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
+        Dim tokenRegex As New Text.RegularExpressions.Regex("""([^""]*)""|" & placeholderPattern)
+
+        ' Vorlage anhand von Anfuehrungszeichen-Literalen und Platzhaltern in Segmente zerlegen.
+        ' Text zwischen zwei erkannten Tokens ("Gap") wird vorlaeufig als Literal markiert und im
+        ' zweiten Schritt zu Connector umklassifiziert, falls er tatsaechlich zwischen zwei
+        ' Platzhalter-Segmenten liegt - Anfuehrungszeichen-Literale werden davon nie erfasst,
+        ' da sie direkt als Placeholder-Kind Placeholder bzw. hartkodiert als Literal erzeugt werden,
+        ' nicht als Gap.
+        Dim segments As New List(Of SchemaSegment)
+        Dim gapIndices As New List(Of Integer)
+        Dim lastEnd = 0
+
+        For Each m As Text.RegularExpressions.Match In tokenRegex.Matches(template)
+            If m.Index > lastEnd Then
+                gapIndices.Add(segments.Count)
+                segments.Add(New SchemaSegment(template.Substring(lastEnd, m.Index - lastEnd), SchemaSegmentKind.Literal))
+            End If
+            If m.Groups(1).Success Then
+                segments.Add(New SchemaSegment(m.Groups(1).Value, SchemaSegmentKind.Literal))
+            Else
+                segments.Add(New SchemaSegment(placeholderValues(m.Value), SchemaSegmentKind.Placeholder))
+            End If
+            lastEnd = m.Index + m.Length
+        Next
+        If lastEnd < template.Length Then
+            gapIndices.Add(segments.Count)
+            segments.Add(New SchemaSegment(template.Substring(lastEnd), SchemaSegmentKind.Literal))
+        End If
+
+        For Each i In gapIndices
+            If i > 0 AndAlso i < segments.Count - 1 AndAlso segments(i - 1).Kind = SchemaSegmentKind.Placeholder AndAlso segments(i + 1).Kind = SchemaSegmentKind.Placeholder Then
+                segments(i) = New SchemaSegment(segments(i).Text, SchemaSegmentKind.Connector)
+            End If
+        Next
+
+        ' "Skip-empty-join": ein Connector wird nicht sofort ausgegeben, sondern zwischengespeichert
+        ' (pendingConnector) und erst unmittelbar vor dem naechsten NICHT leeren Platzhalter
+        ' ausgegeben - und auch nur, wenn diesem bereits ein anderer, nicht leerer Platzhalter
+        ' vorausging. Ein leerer Platzhalter wird uebersprungen, ohne den zwischengespeicherten
+        ' Connector zu verwerfen (ein spaeterer Connector ueberschreibt ihn einfach). Dadurch bleibt
+        ' genau EIN Trennzeichen zwischen zwei tatsaechlich befuellten Platzhaltern erhalten, egal
+        ' wie viele leere Platzhalter dazwischen liegen, und es entsteht nie ein fuehrendes/
+        ' abschliessendes Trennzeichen. Literal-Segmente werden davon nie beruehrt.
+        Dim result As New Text.StringBuilder()
+        Dim pendingConnector As String = Nothing
+        Dim emittedAny = False
+
+        For Each seg In segments
+            Select Case seg.Kind
+                Case SchemaSegmentKind.Literal
+                    result.Append(seg.Text)
+                Case SchemaSegmentKind.Connector
+                    pendingConnector = seg.Text
+                Case SchemaSegmentKind.Placeholder
+                    If Not String.IsNullOrEmpty(seg.Text) Then
+                        If emittedAny AndAlso pendingConnector IsNot Nothing Then
+                            result.Append(pendingConnector)
+                        End If
+                        result.Append(seg.Text)
+                        emittedAny = True
+                        pendingConnector = Nothing
+                    End If
+            End Select
+        Next
+
+        Return result.ToString()
     End Function
 
     Public Sub UpdateResolvedAfterTitelChange()
@@ -461,6 +555,14 @@ Public Class Session
     Public Sub BuildDirectoryTree()
         TreeViewData = DirectoryTreeHelper.BuildDirectoryTree(ProjektPfad)
     End Sub
+
+    ' Laedt nur die Kinder von parentFullPath (Root-Ebene = ProjektPfad, oder ein bestehender
+    ' Knoten) neu vom Dateisystem, statt den kompletten TreeViewData-Baum neu aufzubauen
+    ' (siehe DirectoryTreeHelper.RefreshChildren). Gibt False zurueck, wenn parentFullPath im
+    ' aktuellen Baum nicht gefunden wurde - der Aufrufer sollte dann auf BuildDirectoryTree() zurueckfallen.
+    Public Function RefreshTreeViewChildren(parentFullPath As String) As Boolean
+        Return DirectoryTreeHelper.RefreshChildren(TreeViewData, ProjektPfad, parentFullPath)
+    End Function
 
     Public Sub CancelSession()
         Reset()
