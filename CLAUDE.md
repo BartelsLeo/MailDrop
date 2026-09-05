@@ -134,8 +134,8 @@ MailDrop/
 ## Branching model
 
 - `released`: stable branch intended for production-ready releases.
-- `development`: integration branch for ongoing development changes.
-- Feature branches (for example `feature/...`) should merge into `development`; release-ready states can then be promoted into `released`.
+- `development`: integration branch for ongoing development changes. Routine changes are committed directly to `development` (no per-change feature branch/PR required); an isolated `feature/...`/`fix/...` branch is only used when a change is large/risky enough to want it reviewed in isolation before landing.
+- Release-ready states on `development` are promoted into `released` via pull request (this is the one gate that stays PR-only, since `released` is what end users install from).
 - Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
 - GitHub default branch should be `released` (currently `development` is the default on the remote — switch it in repository settings).
 
