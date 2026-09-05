@@ -134,6 +134,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- ── Header: subject · date · sender ── -->
@@ -401,8 +402,25 @@
                     </ItemsControl>
                 </ScrollViewer>
 
+                <!-- ── Gesamtpfad (schreibgeschützte Vorschau des Ziel-Dateipfads) ── -->
+                <Grid Grid.Row="11" Margin="14,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="LabelGesamtpfad" Grid.Column="0" Text="Gesamtpfad"
+                               Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                    <TextBox x:Name="TextBoxGesamtpfad" Grid.Column="1"
+                             Text="{Binding GesamtPfad, Mode=OneWay}"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             TextWrapping="NoWrap" TextAlignment="Right"
+                             TextChanged="TextBoxGesamtpfad_TextChanged"
+                             Background="#F5F5F5" BorderBrush="#CCCCCC"
+                             FontFamily="Consolas" FontSize="11"/>
+                </Grid>
+
                 <!-- ── Buttons ── -->
-                <StackPanel Orientation="Horizontal" Grid.Row="11"
+                <StackPanel Orientation="Horizontal" Grid.Row="12"
                             Margin="14,16,0,0" HorizontalAlignment="Left">
                     <Button x:Name="ButtonOk" Content="OK"
                             Style="{StaticResource PrimaryButton}"
@@ -418,7 +436,7 @@
                 </StackPanel>
 
                 <!-- ── Success notification (fades in, then out) ── -->
-                <Border x:Name="SuccessNotification" Grid.Row="12"
+                <Border x:Name="SuccessNotification" Grid.Row="13"
                         Background="#ECFDF5" BorderBrush="#6EE7B7" BorderThickness="1"
                         CornerRadius="4" Margin="14,8,0,0" Padding="12,8"
                         Opacity="0">
