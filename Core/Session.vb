@@ -78,11 +78,30 @@ Public Class Session
             If _projektPfad <> value Then
                 _projektPfad = value
                 OnPropertyChanged(NameOf(ProjektPfad))
+                OnPropertyChanged(NameOf(GesamtPfad))
                 BuildDirectoryTree()
                 SuggestionEngineInstance?.RecalculateProjektPfadDistances(Me)
                 SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.ProjektstrukturPfad)
             End If
         End Set
+    End Property
+
+    ' Schreibgeschuetzte Vorschau des vollstaendigen Ziel-Dateipfads der E-Mail (Projektstruktur +
+    ' aufgeloester Ablageordner + aufgeloester msg-Dateiname), wie er beim Klick auf OK tatsaechlich
+    ' verwendet wuerde. Nutzt dieselben Compose-Funktionen wie InputChecker.CheckInput (siehe dort),
+    ' damit Vorschau und tatsaechliches Speicherziel nie auseinanderlaufen. Berechnet immer frisch aus
+    ' den aktuellen Feldern statt zwischengespeichert zu werden; OnPropertyChanged(GesamtPfad) wird an
+    ' den Stellen ausgeloest, an denen sich eine der vier zugrunde liegenden Eigenschaften aendert
+    ' (ProjektPfad- und ProjektstrukturPfad-Setter, UpdateAblageordnerAufgeloest, UpdateMsgDateinameAufgeloest).
+    Public ReadOnly Property GesamtPfad As String
+        Get
+            If String.IsNullOrWhiteSpace(ProjektPfad) OrElse String.IsNullOrWhiteSpace(ProjektstrukturPfad) Then
+                Return String.Empty
+            End If
+            Dim projektstrukturAbsolut = Path.Combine(ProjektPfad, ProjektstrukturPfad)
+            Dim ablageOrdnerPfad = InputChecker.ComposeAblageOrdnerPfad(projektstrukturAbsolut, AblageordnerAufgeloest)
+            Return InputChecker.ComposeMsgZielpfad(ablageOrdnerPfad, MsgDateinameAufgeloest)
+        End Get
     End Property
 
     Public Property Titel As String
@@ -126,6 +145,7 @@ Public Class Session
             If _projektstrukturPfad <> value Then
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
+                OnPropertyChanged(NameOf(GesamtPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
                 SuggestionEngineInstance?.RunSuggestionCascade(Me, SuggestionEngine.CascadeStep.Titel)
             End If
@@ -202,12 +222,14 @@ Public Class Session
     Private Sub UpdateAblageordnerAufgeloest()
         _ablageordnerAufgeloest = ReplacePlaceholders(_ablageordnerSchema)
         OnPropertyChanged(NameOf(AblageordnerAufgeloest))
+        OnPropertyChanged(NameOf(GesamtPfad))
         SuggestionEngineInstance?.RecalculateAblageordnerDistances(Me)
     End Sub
 
     Private Sub UpdateMsgDateinameAufgeloest()
         _msgDateinameAufgeloest = ReplacePlaceholders(_msgDateinameSchema)
         OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
+        OnPropertyChanged(NameOf(GesamtPfad))
     End Sub
 
     Private Enum SchemaSegmentKind

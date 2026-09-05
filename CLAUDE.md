@@ -45,6 +45,7 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - The info popup (help button `i`) documents placeholder usage - including the schema quoting syntax for fixed text (`"..."`) and how an unquoted separator between two placeholders is dropped when a neighboring placeholder is empty (see Placeholder reference below) - SuggestionRecord transfer (copy `%APPDATA%/MailDrop/sessions.db`), and contains the "Gewichte neu berechnen" button with explanation. The button is disabled while recalculation runs and re-enabled on completion via Dispatcher.Invoke.
 - TextBoxAblageordner and TextBoxMsgDateiname each carry a short static WPF ToolTip (hover) summarizing the schema syntax in generic terms (`[Variable]` wird durch den Wert ersetzt; `"Text"` in Anfuehrungszeichen bleibt immer erhalten; ein Trennzeichen ohne Anfuehrungszeichen zwischen zwei `[Variable]` entfaellt, wenn eines leer ist) plus a pointer to the info popup for the full explanation and examples. Deliberately kept to 3-4 lines rather than duplicating the full info-popup text, since a hover tooltip disappears on focus/interaction and isn't meant for reading at length.
 - Task pane button order (left to right): OK → Abbrechen → i.
+- A read-only "Gesamtpfad" field is shown directly above the OK/Abbrechen/i button row, previewing the full target file path of the .msg that OK would create (ProjektstrukturPfad absolute + AblageordnerAufgeloest + MsgDateinameAufgeloest). Bound one-way to the new Session.GesamtPfad ReadOnly property, which computes fresh on every access (no caching) via InputChecker.ComposeAblageOrdnerPfad and InputChecker.ComposeMsgZielpfad - the same two functions InputChecker.CheckInput itself now calls (extracted from what was previously inlined Path.Combine logic there), so the preview and the actual save-time path composition can never drift apart. Session raises PropertyChanged(GesamtPfad) from the ProjektPfad and ProjektstrukturPfad setters and from UpdateAblageordnerAufgeloest/UpdateMsgDateinameAufgeloest, i.e. everywhere one of the four underlying values can change. The field itself is a styled read-only TextBox (grey background, monospace, like the SuggestionRecord path box in the info popup) rather than a plain TextBlock, so a long path can still be selected/copied by the user.
 
 ## Current workspace layout:
 
@@ -241,6 +242,7 @@ Note:
 - Context menu actions (`Neuer Ordner`, `Loeschen`, `Umbenennen`) work on the expected TreeView node and keep selection in sync.
 - `Neuen Ordner` button creates a folder in the expected TreeView location and auto-selects it.
 - Placeholder fields resolve correctly on focus loss.
+- Gesamtpfad preview above the buttons matches the path OK actually saves to, and updates live when ProjektPfad, ProjektstrukturPfad, Ablageordner, or msg Dateiname change.
 - OK saves .msg to expected folder.
 - Optional attachment save works and handles long names.
 - Session row is written to SQLite database.
