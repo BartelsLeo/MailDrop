@@ -413,7 +413,8 @@
                     <TextBox x:Name="TextBoxGesamtpfad" Grid.Column="1"
                              Text="{Binding GesamtPfad, Mode=OneWay}"
                              IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                             TextWrapping="Wrap"
+                             TextWrapping="NoWrap" TextAlignment="Right"
+                             TextChanged="TextBoxGesamtpfad_TextChanged"
                              Background="#F5F5F5" BorderBrush="#CCCCCC"
                              FontFamily="Consolas" FontSize="11"/>
                 </Grid>

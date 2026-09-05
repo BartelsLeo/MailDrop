@@ -68,6 +68,14 @@ Public Class MailDropWpfTaskPane
         End If
     End Sub
 
+    ' TextWrapping="NoWrap" allein zeigt bei zu langem Text den ANFANG an (der Rest laeuft rechts
+    ' ueber den sichtbaren Bereich hinaus). Da hier das Ende des Pfads wichtiger ist als der Anfang,
+    ' wird bei jeder Textaenderung an das rechte Ende gescrollt, sodass ein zu langer Pfad am Anfang
+    ' abgeschnitten erscheint statt am Ende.
+    Private Sub TextBoxGesamtpfad_TextChanged(sender As Object, e As TextChangedEventArgs)
+        TextBoxGesamtpfad.ScrollToHorizontalOffset(Double.MaxValue)
+    End Sub
+
     Private Sub ShowSparkle(sparkle As TextBlock)
         sparkle.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(300))))
