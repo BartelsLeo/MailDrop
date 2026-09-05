@@ -320,7 +320,19 @@
                              Text="{Binding AblageordnerFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              GotFocus="TextBoxAblageordner_GotFocus"
                              LostFocus="TextBoxAblageordner_LostFocus"
-                             Grid.Column="1"/>
+                             Grid.Column="1">
+                        <TextBox.ToolTip>
+                            <TextBlock MaxWidth="320" TextWrapping="Wrap">
+                                <Run Text="[Variable] wird durch den Wert ersetzt."/>
+                                <LineBreak/>
+                                <Run Text="&quot;Text&quot; in Anführungszeichen bleibt immer erhalten."/>
+                                <LineBreak/>
+                                <Run Text="Ein Trennzeichen ohne Anführungszeichen zwischen zwei [Variable] entfällt, wenn eines der beiden leer ist."/>
+                                <LineBreak/>
+                                <Run Text="Details und Beispiele siehe Hilfe (i)." FontStyle="Italic"/>
+                            </TextBlock>
+                        </TextBox.ToolTip>
+                    </TextBox>
                     <TextBlock x:Name="SparkleAblageordner" Text="&#x2726;" Grid.Column="2"
                                Opacity="0" Foreground="#FFB300" FontSize="14"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -339,7 +351,19 @@
                              Text="{Binding MsgDateinameFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              GotFocus="TextBoxMsgDateiname_GotFocus"
                              LostFocus="TextBoxMsgDateiname_LostFocus"
-                             Grid.Column="1"/>
+                             Grid.Column="1">
+                        <TextBox.ToolTip>
+                            <TextBlock MaxWidth="320" TextWrapping="Wrap">
+                                <Run Text="[Variable] wird durch den Wert ersetzt."/>
+                                <LineBreak/>
+                                <Run Text="&quot;Text&quot; in Anführungszeichen bleibt immer erhalten."/>
+                                <LineBreak/>
+                                <Run Text="Ein Trennzeichen ohne Anführungszeichen zwischen zwei [Variable] entfällt, wenn eines der beiden leer ist."/>
+                                <LineBreak/>
+                                <Run Text="Details und Beispiele siehe Hilfe (i)." FontStyle="Italic"/>
+                            </TextBlock>
+                        </TextBox.ToolTip>
+                    </TextBox>
                     <TextBlock x:Name="SparkleMsgDateiname" Text="&#x2726;" Grid.Column="2"
                                Opacity="0" Foreground="#FFB300" FontSize="14"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
