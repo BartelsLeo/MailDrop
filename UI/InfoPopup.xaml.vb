@@ -1,5 +1,8 @@
+Imports System.Deployment.Application
+Imports System.Diagnostics
 Imports System.Threading.Tasks
 Imports System.Windows
+Imports System.Windows.Navigation
 
 Public Class InfoPopup
     Inherits Window
@@ -8,6 +11,24 @@ Public Class InfoPopup
         TxtDbPath.Text = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "MailDrop", "sessions.db")
+        TxtVersion.Text = $"Version {GetDisplayVersion()}"
+    End Sub
+
+    ' ClickOnce-ApplicationVersion bei Netzwerkbereitstellung, sonst statische AssemblyVersion (lokaler Debug-Start).
+    Private Function GetDisplayVersion() As String
+        If ApplicationDeployment.IsNetworkDeployed Then
+            Return ApplicationDeployment.CurrentDeployment.CurrentVersion.ToString()
+        End If
+        Return Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString()
+    End Function
+
+    Private Sub Hyperlink_RequestNavigate(sender As Object, e As RequestNavigateEventArgs)
+        Try
+            Process.Start(New ProcessStartInfo(e.Uri.AbsoluteUri) With {.UseShellExecute = True})
+        Catch ex As Exception
+            Logger.LogError("InfoPopup.Hyperlink_RequestNavigate", ex)
+        End Try
+        e.Handled = True
     End Sub
 
     Private Sub ButtonGewichteNeuBerechnen_Click(sender As Object, e As RoutedEventArgs)

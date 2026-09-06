@@ -131,6 +131,19 @@
                     Style="{StaticResource SecondaryButton}"
                     HorizontalAlignment="Left"
                     Click="ButtonGewichteNeuBerechnen_Click"/>
+
+            <Border Style="{StaticResource Divider}"/>
+            <TextBlock Style="{StaticResource SectionHeader}" Text="FEHLERMELDUNG"/>
+            <TextBlock Style="{StaticResource BodyText}">
+                <Run Text="Bitte Fehler per E-Mail an"/>
+                <Hyperlink NavigateUri="mailto:leonard.bartels@posteo.de" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#4F46E5">
+                    <Run Text="leonard.bartels@posteo.de"/>
+                </Hyperlink>
+                <Run Text="melden."/>
+            </TextBlock>
+
+            <TextBlock x:Name="TxtVersion" HorizontalAlignment="Center"
+                       FontSize="10" Foreground="#9CA3AF" Margin="0,20,0,0"/>
         </StackPanel>
     </ScrollViewer>
 </Window>
