@@ -23,19 +23,39 @@ Public Class MailDropWpfTaskPane
         AddHandler TreeView1.SelectedItemChanged, AddressOf TreeView1_SelectedItemChanged
     End Sub
 
+    ' Sucht gezielt entlang des Astes zu relativePath und klappt dabei nur dessen Vorfahren auf -
+    ' nicht jeden Geschwister-Knoten, den die Suche unterwegs betritt. Vorher wurde jeder besuchte
+    ' Knoten vor dem Pfadvergleich blind expandiert, wodurch beim Anwenden eines
+    ' ProjektstrukturPfad-Vorschlags effektiv der gesamte durchsuchte Teilbaum aufklappte statt
+    ' nur der Pfad zum vorgeschlagenen Knoten.
     Private Function FindTreeViewItem(container As ItemsControl, relativePath As String) As TreeViewItem
         For Each item In container.Items
             Dim node = TryCast(item, DirectoryNode)
-            Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
-            If node IsNot Nothing AndAlso tvi IsNot Nothing Then
-                If node.RelativePath = relativePath Then Return tvi
+            If node Is Nothing Then Continue For
+
+            If node.RelativePath = relativePath Then
+                Return TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+            End If
+
+            If IsAncestorRelativePath(node.RelativePath, relativePath) Then
+                Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+                If tvi Is Nothing Then Return Nothing
                 tvi.IsExpanded = True
                 tvi.UpdateLayout()
-                Dim found = FindTreeViewItem(tvi, relativePath)
-                If found IsNot Nothing Then Return found
+                Return FindTreeViewItem(tvi, relativePath)
             End If
         Next
         Return Nothing
+    End Function
+
+    ' Prueft, ob candidateRelativePath ein Vorfahre (echtes Praefix, getrennt durch Pfadtrenner) von
+    ' targetRelativePath ist.
+    Private Function IsAncestorRelativePath(candidateRelativePath As String, targetRelativePath As String) As Boolean
+        If String.IsNullOrEmpty(candidateRelativePath) Then Return False
+        If Not targetRelativePath.StartsWith(candidateRelativePath, StringComparison.OrdinalIgnoreCase) Then Return False
+        If targetRelativePath.Length = candidateRelativePath.Length Then Return False
+        Dim nextChar = targetRelativePath(candidateRelativePath.Length)
+        Return nextChar = Path.DirectorySeparatorChar OrElse nextChar = Path.AltDirectorySeparatorChar
     End Function
 
     Private Function GetRelativePath(basePath As String, fullPath As String) As String

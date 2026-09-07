@@ -9,26 +9,32 @@ Public Module DirectoryTreeHelper
         End If
         Dim rootChildren As New ObservableCollection(Of DirectoryNode)()
         For Each dir As String In Directory.GetDirectories(projektPfad)
-            Dim childNode As DirectoryNode = CreateDirectoryNodeWithExpand(dir, 1, projektPfad)
+            Dim childNode As DirectoryNode = CreateDirectoryNodeWithExpand(dir, 1, projektPfad, expandByDefault:=False)
             rootChildren.Add(childNode)
         Next
         Return rootChildren
     End Function
 
     ' level: 1 = erste Ebene unter ProjektPfad
-    Public Function CreateDirectoryNodeWithExpand(dirPath As String, level As Integer, basePath As String, Optional maxDepth As Integer = 20) As DirectoryNode
+    ' expandByDefault steuert, ob Level<=2 initial aufgeklappt dargestellt werden: True fuer
+    ' RefreshChildren nach Ordner-Aktionen (Neuer Ordner/Loeschen/Umbenennen - unveraendertes,
+    ' dokumentiertes Verhalten), False fuer den initialen BuildDirectoryTree-Aufbau bei
+    ' Mailauswahl/ProjektPfad-Wechsel, damit dort nicht pauschal die ersten zwei Ebenen
+    ' aufklappen, bevor ein etwaiger ProjektstrukturPfad-Vorschlag gezielt nur seinen eigenen
+    ' Ast aufklappt (siehe MailDropWpfTaskPane.FindTreeViewItem).
+    Public Function CreateDirectoryNodeWithExpand(dirPath As String, level As Integer, basePath As String, Optional maxDepth As Integer = 20, Optional expandByDefault As Boolean = True) As DirectoryNode
         Dim relPath = If(dirPath.StartsWith(basePath), dirPath.Substring(basePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), dirPath)
         Dim node As New DirectoryNode With {
             .Name = Path.GetFileName(dirPath),
             .FullPath = dirPath,
             .RelativePath = relPath,
             .Children = New ObservableCollection(Of DirectoryNode)(),
-            .IsExpanded = (level <= 2)
+            .IsExpanded = (expandByDefault AndAlso level <= 2)
         }
         If level > maxDepth Then Return node
         Try
             For Each dir As String In Directory.GetDirectories(dirPath)
-                node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1, basePath, maxDepth))
+                node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1, basePath, maxDepth, expandByDefault))
             Next
         Catch ex As Exception
             ' Fehlerausgabe entfernt, da Debug nicht verf�gbar ist
