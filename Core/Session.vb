@@ -31,6 +31,7 @@ Public Class Session
 
     Public Property LastDuplicateWarning As String
     Public Property LastOverwriteWarning As String
+    Public Property LastSuccessfulAblageordner As String
     Public Property Anhaenge As New ObservableCollection(Of AttachmentItem)()
 
     Private _projektPfad As String
@@ -672,12 +673,14 @@ Public Class Session
         If recordCount Mod 50 = 0 Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
         End If
-        ' Warnungswerte vor Reset() sichern, da Reset() sie löscht.
+        ' Warnungswerte und Zielordner vor Reset() sichern, da Reset() sie löscht.
         Dim savedDuplicate = LastDuplicateWarning
         Dim savedOverwrite = LastOverwriteWarning
+        Dim savedAblageordner = checkedInput.CheckedAblageOrdner
         Me.Reset()
         LastDuplicateWarning = savedDuplicate
         LastOverwriteWarning = savedOverwrite
+        LastSuccessfulAblageordner = savedAblageordner
         Return String.Empty
     End Function
 

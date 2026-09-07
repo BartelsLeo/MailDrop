@@ -427,6 +427,18 @@
                                    FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Erfolgreich abgelegt." Foreground="#065F46"
                                    FontSize="12" VerticalAlignment="Center"/>
+                        <Button x:Name="ButtonOpenAblageordner" Content="Öffnen"
+                                Margin="10,0,0,0" Padding="0" Background="Transparent"
+                                BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"
+                                Click="ButtonOpenAblageordner_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <TextBlock Text="{TemplateBinding Content}"
+                                               Foreground="#059669" FontSize="12"
+                                               FontWeight="Bold" TextDecorations="Underline"/>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                     </StackPanel>
                 </Border>
 

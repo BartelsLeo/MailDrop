@@ -27,6 +27,7 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 - Input validation checks required values, invalid path/file characters, and path length limits.
 - Optional attachment filing saves all attachments; long attachment names can be adjusted via rename dialog.
 - On OK, the add-in creates the target folder, saves the mail as .msg, optionally saves attachments, and stores the session in SQLite.
+- The success toast (SuccessNotification) includes an "Öffnen" link-style button that opens the just-filed Ablageordner (Session.LastSuccessfulAblageordner, set from checkedInput.CheckedAblageOrdner in ProcessSession right before Reset() clears the cascade state, and preserved across Reset() the same way LastDuplicateWarning/LastOverwriteWarning are) via Process.Start. It uses the same 2.5s show-then-fade timing as the rest of the toast (ShowSuccessNotification's DispatcherTimer). The overwrite-warning toast (also a successful filing) does not currently get this button - only the plain success case does.
 - A shared SuggestionEngine with ONNX embeddings is used for project path suggestion.
 - The shared SuggestionEngine is lazy-loaded and preloaded in the background shortly after Outlook startup to reduce first task pane open latency.
 - During session preparation, the engine precomputes feature distance lists between current mail/session and historical records, then scores a suggested ProjektPfad.

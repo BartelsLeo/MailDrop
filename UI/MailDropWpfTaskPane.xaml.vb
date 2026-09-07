@@ -197,6 +197,17 @@ Public Class MailDropWpfTaskPane
         End If
     End Sub
 
+    Private Sub ButtonOpenAblageordner_Click(sender As Object, e As RoutedEventArgs)
+        Dim pfad = Session.LastSuccessfulAblageordner
+        If String.IsNullOrWhiteSpace(pfad) OrElse Not Directory.Exists(pfad) Then Return
+        Try
+            Process.Start(pfad)
+        Catch ex As Exception
+            Logger.LogError("ButtonOpenAblageordner_Click", ex)
+            MessageBox.Show("Ordner konnte nicht geoeffnet werden: " & ex.Message, "Oeffnen", MessageBoxButton.OK, MessageBoxImage.Error)
+        End Try
+    End Sub
+
     Private Sub ShowSuccessNotification()
         SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
