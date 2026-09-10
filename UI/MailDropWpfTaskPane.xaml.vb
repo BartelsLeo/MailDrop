@@ -1,5 +1,6 @@
 Imports System.Windows.Controls
 Imports System.IO
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows
 Imports System.Windows.Media
@@ -15,12 +16,71 @@ Public Class MailDropWpfTaskPane
     Private infoPopup As InfoPopup = Nothing
     Private _applyingTreeViewSuggestion As Boolean = False
 
+    ' Serialisiert den rechenintensiven Teil von PrepareSession (SuggestionEngine.ComputeSuggestions)
+    ' ueber alle Hintergrund-Berechnungen hinweg: SuggestionEngine ist ein Shared-Singleton mit
+    ' mutable Instance-State (Distanzlisten), zwei gleichzeitig laufende Berechnungen wuerden sich
+    ' diesen State gegenseitig ueberschreiben. Shared, da die SuggestionEngine ebenfalls Shared ist.
+    Private Shared ReadOnly _suggestionSerializer As New SemaphoreSlim(1, 1)
+    Private _suggestionCts As CancellationTokenSource
+
     Public Sub New()
         InitializeComponent()
         Me.DataContext = Session
         AddHandler ListBox1.SelectionChanged, AddressOf ListBox1_SelectionChanged
         AddHandler Session.PropertyChanged, AddressOf Session_PropertyChanged
         AddHandler TreeView1.SelectedItemChanged, AddressOf TreeView1_SelectedItemChanged
+    End Sub
+
+    ' Startet die Mail-Selektionsverarbeitung: der schnelle, COM-gebundene Teil (Metadaten/Anhaenge
+    ' lesen) laeuft synchron auf dem aufrufenden (Outlook-STA-)Thread, die rechenintensive
+    ' Vorschlagsberechnung laeuft danach asynchron auf einem Hintergrund-Thread gegen eine
+    ' losgeloeste Snapshot-Session, damit der UI-/COM-Thread nicht blockiert wird ("smooth" bleibt).
+    ' Jeder neue Aufruf (= neue Mail-Selektion) storniert zuerst eine noch laufende vorherige
+    ' Berechnung, damit deren (fuer die neue Auswahl bereits veraltetes) Ergebnis nie angewendet wird.
+    Public Sub BeginPrepareSession()
+        _suggestionCts?.Cancel()
+        Dim cts As New CancellationTokenSource()
+        _suggestionCts = cts
+
+        Session.PrepareSession()
+
+        Dim snapshot = Session.CreateSuggestionSnapshot()
+        Dim token = cts.Token
+        Task.Run(Sub() RunSuggestionComputation(snapshot, token))
+    End Sub
+
+    ' Bricht eine ggf. noch laufende Vorschlagsberechnung ab, ohne eine neue zu starten - z.B. wenn
+    ' die Pane geschlossen wird, die Selektion auf "kein/mehrere Mails" wechselt, oder OK geklickt wird.
+    Public Sub CancelPendingSuggestions()
+        _suggestionCts?.Cancel()
+    End Sub
+
+    ' Laeuft auf einem ThreadPool-Thread. _suggestionSerializer stellt sicher, dass nie zwei
+    ' Berechnungen gleichzeitig auf die (Shared) SuggestionEngine-Instanz zugreifen. token wird vor
+    ' und nach der eigentlichen Berechnung sowie beim Anwenden des Ergebnisses geprueft, damit eine
+    ' durch eine neuere Selektion ueberholte Berechnung ihr Ergebnis nie mehr auf die UI anwendet.
+    Private Sub RunSuggestionComputation(snapshot As Session, token As CancellationToken)
+        Try
+            _suggestionSerializer.Wait(token)
+        Catch ex As OperationCanceledException
+            Return
+        End Try
+        Try
+            If token.IsCancellationRequested Then Return
+            snapshot.ComputeSuggestions(token)
+            If token.IsCancellationRequested Then Return
+            If Dispatcher.HasShutdownStarted Then Return
+            Dispatcher.BeginInvoke(New Action(Sub()
+                If token.IsCancellationRequested Then Return
+                Session.ApplyComputedSuggestions(snapshot)
+            End Sub))
+        Catch ex As OperationCanceledException
+            Debug.WriteLine("[MailDropWpfTaskPane] Vorschlagsberechnung abgebrochen (neue Selektion).")
+        Catch ex As Exception
+            Logger.LogError("RunSuggestionComputation", ex)
+        Finally
+            _suggestionSerializer.Release()
+        End Try
     End Sub
 
     ' Sucht gezielt entlang des Astes zu relativePath und klappt dabei nur dessen Vorfahren auf -
@@ -185,6 +245,10 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonOk_Click(sender As Object, e As RoutedEventArgs)
+        ' Verhindert, dass eine noch laufende Hintergrund-Vorschlagsberechnung fuer die soeben
+        ' abgelegte Mail nach Session.Reset() (in ProcessSession) verspaetet Werte auf das dann
+        ' bereits leere Formular anwendet.
+        CancelPendingSuggestions()
         Dim result As String = Session.ProcessSession()
         If Not String.IsNullOrEmpty(result) Then
             ShowErrorNotification(result)
@@ -263,6 +327,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
+        CancelPendingSuggestions()
         ' Schlie�e InfoPopup, falls offen
         If infoPopup IsNot Nothing AndAlso infoPopup.IsLoaded Then
             infoPopup.Close()

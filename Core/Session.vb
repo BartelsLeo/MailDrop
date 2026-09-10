@@ -2,6 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
+Imports System.Threading
 Imports System.Threading.Tasks
 
 Public Class AttachmentItem
@@ -327,20 +328,36 @@ Public Class Session
         MsgDateinameFeld = MsgDateinameAufgeloest
     End Sub
 
+    ' Setzt alle Feldwerte direkt ueber die Backing-Fields zurueck statt ueber die Property-Setter.
+    ' Grund: die Value-Setter (ProjektPfad, Titel, ProjektstrukturPfad, AblageordnerSchema,
+    ' MsgDateinameSchema) loesen jeweils SuggestionEngineInstance.RunSuggestionCascade() aus. Wuerde
+    ' Reset() die normalen Setter benutzen, liefe bei jedem PrepareSession()-Aufruf VOR der eigentlichen
+    ' Neuberechnung ein mehrfacher, redundanter Cascade-Durchlauf gegen die noch von der vorherigen
+    ' Mail stammenden (also veralteten) Distanzlisten - synchron auf dem aufrufenden Thread. Reset()
+    ' soll nur Startwerte setzen, keine Vorschlaege ableiten, daher der Bypass.
     Public Sub Reset()
         LastDuplicateWarning = String.Empty
         Anhaenge.Clear()
         OnPropertyChanged(NameOf(HasAnhaenge))
-        ProjektPfad = Nothing
-        Titel = String.Empty
-        AblageordnerSchema = String.Empty
+
+        _projektPfad = Nothing
+        OnPropertyChanged(NameOf(ProjektPfad))
+        TreeViewData = New ObservableCollection(Of DirectoryNode)()
+        _titel = String.Empty
+        OnPropertyChanged(NameOf(Titel))
+        _ablageordnerSchema = String.Empty
+        OnPropertyChanged(NameOf(AblageordnerSchema))
         _ablageordnerAufgeloest = String.Empty
+        OnPropertyChanged(NameOf(AblageordnerAufgeloest))
         AblageordnerFeld = String.Empty
-        MsgDateinameSchema = String.Empty
+        _msgDateinameSchema = String.Empty
+        OnPropertyChanged(NameOf(MsgDateinameSchema))
         _msgDateinameAufgeloest = String.Empty
+        OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
         MsgDateinameFeld = String.Empty
         AnhaengeAblegen = True
-        ProjektstrukturPfad = Nothing
+        _projektstrukturPfad = Nothing
+        OnPropertyChanged(NameOf(ProjektstrukturPfad))
         IsSuggestedProjektPfad = False
         IsSuggestedProjektstrukturPfad = False
         IsSuggestedTitel = False
@@ -476,6 +493,11 @@ Public Class Session
         IsSuggestedAnhaengeAblegen = True
     End Sub
 
+    ' Schneller, COM-gebundener Teil der Mail-Selektion: muss synchron auf dem Outlook-STA-Thread
+    ' laufen (Explorer/MailItem-COM-Zugriff), ist aber selbst nur im Millisekundenbereich teuer.
+    ' Die rechenintensive Vorschlagsberechnung (SuggestionEngine, ONNX) läuft NICHT mehr hier,
+    ' sondern wird vom Aufrufer (MailDropWpfTaskPane.BeginPrepareSession) auf einem Hintergrund-
+    ' Thread über ComputeSuggestions() an einer Snapshot-Session ausgeführt, siehe dort.
     Public Sub PrepareSession()
         Dim sw As Stopwatch = Stopwatch.StartNew()
         Dim t As Long
@@ -493,15 +515,51 @@ Public Class Session
 
         ' Nach dem Einlesen der Mail: Projektverzeichnisse aktualisieren
         GetProjektVerzeichnisse()
-        Debug.WriteLine($"[Session]   GetProjektVerzeichnisse:{sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+        Debug.WriteLine($"[Session]   GetProjektVerzeichnisse:{sw.ElapsedMilliseconds - t} ms")
+
+        Debug.WriteLine($"[Session] PrepareSession END (schneller Teil) – total: {sw.ElapsedMilliseconds} ms")
+    End Sub
+
+    ' Erstellt eine von der UI losgeloeste Kopie der bereits gelesenen (COM-freien) Basisdaten.
+    ' Die Kopie ist an keinerlei WPF-Bindings/DataContext gebunden, daher duerfen ihre Property-
+    ' Setter (inkl. der darin ausgeloesten SuggestionEngine-Kaskade in ComputeSuggestions) gefahrlos
+    ' auf einem Hintergrund-Thread laufen - anders als bei der echten, UI-gebundenen Session, deren
+    ' PropertyChanged-Ereignisse WPF-Bindings aktualisieren und daher den Dispatcher-Thread brauchen.
+    Public Function CreateSuggestionSnapshot() As Session
+        Dim snap As New Session()
+        snap.Betreff = Betreff
+        snap.Absender = Absender
+        snap.AbsenderDomain = AbsenderDomain
+        snap.Empfaenger = Empfaenger
+        snap.Datum = Datum
+        snap.DatumFormatiert = DatumFormatiert
+        snap.AusfueBenutzer = AusfueBenutzer
+        snap.AusfueDatum = AusfueDatum
+        For Each item In Anhaenge
+            snap.Anhaenge.Add(New AttachmentItem() With {
+                .Name = item.Name,
+                .OutlookIndex = item.OutlookIndex,
+                .IsSelected = item.IsSelected
+            })
+        Next
+        Return snap
+    End Function
+
+    ' Rechenintensiver Teil von PrepareSession (SuggestionEngine-Zugriff, Distanzberechnung,
+    ' vollstaendige Vorschlags-Kaskade). Enthaelt keine Outlook-COM-Zugriffe, daher sicher auf einem
+    ' Hintergrund-Thread ausfuehrbar - vorausgesetzt, Me ist eine Snapshot-Session (siehe
+    ' CreateSuggestionSnapshot), nicht die UI-gebundene Session selbst. token wird an den in dieser
+    ' Methode natuerlichen Zwischenschritten geprueft, damit eine durch eine neue Mail-Selektion
+    ' ueberholte Berechnung nicht unnoetig zu Ende laeuft.
+    Public Sub ComputeSuggestions(token As CancellationToken)
+        token.ThrowIfCancellationRequested()
 
         ' Shared SuggestionEngine nutzen (Historie wird pro Outlook-Start lazy geladen und gecacht).
         SuggestionEngineInstance = SuggestionEngine.GetSharedInstance()
-        Debug.WriteLine($"[Session]   GetSharedInstance:     {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Alle Feature-Distanzlisten initialisieren: fixe Features berechnen, mutable Features auf 0 setzen.
         SuggestionEngineInstance.CalculateInitialFeatureDistances(Me)
-        Debug.WriteLine($"[Session]   CalculateInitialFeatureDistances: {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
+        token.ThrowIfCancellationRequested()
 
         ' Schema-Standardwerte direkt in Backing-Fields schreiben, um keinen Cascade auszulösen.
         ' DatumFormatiert und Absender sind zu diesem Zeitpunkt bereits gesetzt, sodass
@@ -515,20 +573,16 @@ Public Class Session
         OnPropertyChanged(NameOf(MsgDateinameSchema))
         UpdateMsgDateinameAufgeloest()
         MsgDateinameFeld = MsgDateinameAufgeloest
-        Debug.WriteLine($"[Session]   Schema-Defaults:        {sw.ElapsedMilliseconds - t} ms") : t = sw.ElapsedMilliseconds
 
         ' Vorhersage für Projektpfad aus den vorberechneten Distanzlisten berechnen.
         Dim suggestedProjektPfad = SuggestionEngineInstance.SuggestProjektPfad(Me)
-        Debug.WriteLine($"[Session]   SuggestProjektPfad:    {sw.ElapsedMilliseconds - t} ms → '{suggestedProjektPfad}'") : t = sw.ElapsedMilliseconds
+        token.ThrowIfCancellationRequested()
 
         ' Gültige Vorschläge übernehmen und Cascade-Vorschläge auslösen.
         ' SuggestProjektPfad garantiert bereits, dass der Pfad existiert.
         If String.IsNullOrWhiteSpace(suggestedProjektPfad) Then
             Debug.WriteLine("[Session]   ProjektPfad: kein Vorschlag vom Engine")
         Else
-            If ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(suggestedProjektPfad) Then
-                ProjektVerzeichnisse.Insert(0, suggestedProjektPfad)
-            End If
             SuggestProjektPfad(suggestedProjektPfad)
         End If
 
@@ -538,9 +592,59 @@ Public Class Session
             AnhaengeAblegen = False
             IsSuggestedAnhaengeAblegen = False
         End If
-        Debug.WriteLine($"[Session]   Cascade+Suggest:       {sw.ElapsedMilliseconds - t} ms")
+    End Sub
 
-        Debug.WriteLine($"[Session] PrepareSession END – total: {sw.ElapsedMilliseconds} ms")
+    ' Uebernimmt die von ComputeSuggestions auf snapshot berechneten Endwerte direkt in die
+    ' Backing-Fields dieser (UI-gebundenen) Session, OHNE die SuggestionEngine-Kaskade erneut
+    ' auszuloesen - die Werte stehen bereits fest, ein erneuter Cascade-Lauf waere nur doppelte,
+    ' synchron auf dem UI-Thread ausgefuehrte Arbeit. Muss auf dem UI-/Dispatcher-Thread aufgerufen
+    ' werden, da OnPropertyChanged hier WPF-Bindings aktualisiert.
+    Public Sub ApplyComputedSuggestions(snapshot As Session)
+        SuggestionEngineInstance = snapshot.SuggestionEngineInstance
+
+        _projektPfad = snapshot.ProjektPfad
+        OnPropertyChanged(NameOf(ProjektPfad))
+        ' snapshot.TreeViewData bleibt Nothing, wenn ComputeSuggestions keinen ProjektPfad-Vorschlag
+        ' gefunden hat (BuildDirectoryTree wurde dann nie auf snapshot aufgerufen) - in diesem Fall
+        ' die bereits von Reset() gesetzte leere Collection auf der echten Session unangetastet lassen,
+        ' statt sie mit Nothing zu ueberschreiben.
+        If snapshot.TreeViewData IsNot Nothing Then
+            TreeViewData = snapshot.TreeViewData
+        End If
+        IsSuggestedProjektPfad = snapshot.IsSuggestedProjektPfad
+        If IsSuggestedProjektPfad AndAlso Not String.IsNullOrWhiteSpace(snapshot.ProjektPfad) AndAlso
+           ProjektVerzeichnisse IsNot Nothing AndAlso Not ProjektVerzeichnisse.Contains(snapshot.ProjektPfad) Then
+            ProjektVerzeichnisse.Insert(0, snapshot.ProjektPfad)
+        End If
+
+        _projektstrukturPfad = snapshot.ProjektstrukturPfad
+        OnPropertyChanged(NameOf(ProjektstrukturPfad))
+        IsSuggestedProjektstrukturPfad = snapshot.IsSuggestedProjektstrukturPfad
+
+        _titel = snapshot.Titel
+        OnPropertyChanged(NameOf(Titel))
+        IsSuggestedTitel = snapshot.IsSuggestedTitel
+
+        _absenderKurz = snapshot.AbsenderKurz
+        OnPropertyChanged(NameOf(AbsenderKurz))
+        IsSuggestedAbsenderKurz = snapshot.IsSuggestedAbsenderKurz
+
+        _ablageordnerSchema = snapshot.AblageordnerSchema
+        OnPropertyChanged(NameOf(AblageordnerSchema))
+        _ablageordnerAufgeloest = snapshot.AblageordnerAufgeloest
+        OnPropertyChanged(NameOf(AblageordnerAufgeloest))
+        AblageordnerFeld = snapshot.AblageordnerFeld
+        IsSuggestedAblageordnerSchema = snapshot.IsSuggestedAblageordnerSchema
+
+        _msgDateinameSchema = snapshot.MsgDateinameSchema
+        OnPropertyChanged(NameOf(MsgDateinameSchema))
+        _msgDateinameAufgeloest = snapshot.MsgDateinameAufgeloest
+        OnPropertyChanged(NameOf(MsgDateinameAufgeloest))
+        MsgDateinameFeld = snapshot.MsgDateinameFeld
+        IsSuggestedMsgDateinameSchema = snapshot.IsSuggestedMsgDateinameSchema
+
+        AnhaengeAblegen = snapshot.AnhaengeAblegen
+        IsSuggestedAnhaengeAblegen = snapshot.IsSuggestedAnhaengeAblegen
     End Sub
 
     ' Holt die letzten vier eindeutigen Projektverzeichnisse des aktuellen Benutzers aus der Datenbank

@@ -105,17 +105,27 @@ Public Class ThisAddIn
         End Try
     End Sub
 
-    ' Kapselt die Logik für die TaskPane-Initialisierung und Editierbarkeit
+    ' Kapselt die Logik für die TaskPane-Initialisierung und Editierbarkeit.
+    ' Reagiert bewusst NICHT, wenn die Pane nicht sichtbar ist: SelectionChange feuert bei jedem
+    ' Mail-Wechsel, unabhaengig davon, ob die Pane offen ist. Ohne diese Wache wuerde MailDrop bei
+    ' jedem Durchklicken durch den Posteingang die volle (wenn auch inzwischen asynchrone)
+    ' Vorschlagsberechnung anstossen, obwohl der Nutzer die Mail moeglicherweise gar nicht ablegen
+    ' will und die Pane geschlossen hat.
     Private Sub MailSelected()
+        If taskPane Is Nothing OrElse Not taskPane.Visible Then
+            Debug.WriteLine("[ThisAddIn] MailSelected: taskPane nicht sichtbar - SelectionChange ignoriert.")
+            Return
+        End If
         Dim wpfTaskPane As MailDropWpfTaskPane = GetWpfTaskPane()
         Debug.WriteLine($"[ThisAddIn] MailSelected: taskPane={If(taskPane IsNot Nothing, "open", "null")}, wpfTaskPane={If(wpfTaskPane IsNot Nothing, "ok", "null")}")
         If wpfTaskPane IsNot Nothing Then
             Dim singleMail = wpfTaskPane.SingleMailSelected()
             Debug.WriteLine($"[ThisAddIn] MailSelected: SingleMailSelected={singleMail}")
             If singleMail Then
-                wpfTaskPane.Session.PrepareSession()
+                wpfTaskPane.BeginPrepareSession()
                 wpfTaskPane.SetEditMode(True)
             Else
+                wpfTaskPane.CancelPendingSuggestions()
                 wpfTaskPane.Session.Reset()
                 wpfTaskPane.SetEditMode(False)
             End If
@@ -156,6 +166,12 @@ Public Class ThisAddIn
             Return
         End Try
 
+        ' Visible zuerst setzen: MailSelected() reagiert jetzt nur noch, wenn die Pane sichtbar ist
+        ' (siehe MailSelected-Wache), daher muss Visible bereits True sein, bevor MailSelected()
+        ' aufgerufen wird - sonst wuerde der Ribbon-Klick selbst ignoriert. Läuft unconditional vor
+        ' dem Try/Catch, damit die Pane so oder so sichtbar wird, selbst wenn MailSelected() fehlschlägt.
+        taskPane.Visible = True
+
         Try
             MailSelected()
         Catch ex As Exception
@@ -164,13 +180,12 @@ Public Class ThisAddIn
             Debug.WriteLine($"[ThisAddIn] MailAblegen_Click: MailSelected failed: {ex.Message}")
             Logger.LogError("MailAblegen_Click: MailSelected", ex)
         End Try
-
-        taskPane.Visible = True
     End Sub
 
     Public Sub HideTaskPane()
         If taskPane IsNot Nothing Then
             taskPane.Visible = False
+            GetWpfTaskPane()?.CancelPendingSuggestions()
         End If
     End Sub
 
