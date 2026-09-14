@@ -133,6 +133,10 @@ location an install ran from automatically becomes its update source:
 - **Installed from a locally extracted zip** (e.g. downloaded from GitHub Releases): there is no
   automatic update check. Updating requires manually installing again from a newer zip.
 
+**Important:** Do not install from a OneDrive-synced folder (e.g. `...\OneDrive - <Org>\...\MailDrop\`).
+That is not a supported third option alongside the network drive/zip and reliably causes failures on
+both first install and auto-update (see Troubleshooting below).
+
 ## Usage
 
 1. Select exactly one email in Outlook.
@@ -236,6 +240,25 @@ Supported placeholders in Ablageordner and msg Dateiname:
   - Ensure Outlook was closed on both PCs during file copy.
   - Use exact path: %APPDATA%/MailDrop/sessions.db.
   - Confirm existing target file was actually replaced.
+- Update fails ("update not possible") even though a fresh install from the same location works,
+  and/or the add-in gets auto-disabled right after install due to a timeout, possibly with this
+  error: `DeploymentDownloadException` / `UnauthorizedAccessException: Der Zugriff auf den Pfad
+  "...\AppData\Local\Temp\Deployment\...\MailDrop.dll" wurde verweigert`:
+  - The cause is almost always installing from a **OneDrive-synced folder** (e.g.
+    `...\OneDrive - <Org>\...\MailDrop\`) instead of the network drive or a locally extracted zip.
+    ClickOnce automatically uses the install location as its update source (see Auto-update above);
+    files downloaded during that step are first staged under `%LOCALAPPDATA%\Temp\Deployment\`
+    before being verified/copied. An access error there is a well-known ClickOnce failure mode,
+    usually caused by antivirus real-time scanning briefly locking newly written DLL/EXE files,
+    compounded by OneDrive source files not being fully hydrated (Files On-Demand placeholders).
+  - This happens inside Outlook's own ClickOnce/VSTO loader, before this project's own add-in code
+    even starts — it is **not** fixable via a code change in this repository.
+  - Fix: install/update only from the network drive or a locally extracted zip that is **outside**
+    any OneDrive-synced folder. If it already failed: add an antivirus exclusion for
+    `%LOCALAPPDATA%\Temp\Deployment\`, clear the ClickOnce cache
+    (`rundll32.exe dfshim.dll CleanOnlineAppCache`), remove the stale `DisabledItems` registry value
+    for MailDrop under `HKCU:\Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems`, then
+    reinstall from a supported location.
 
 ## Verification Checklist
 
