@@ -133,9 +133,10 @@ location an install ran from automatically becomes its update source:
 - **Installed from a locally extracted zip** (e.g. downloaded from GitHub Releases): there is no
   automatic update check. Updating requires manually installing again from a newer zip.
 
-**Important:** Do not install from a OneDrive-synced folder (e.g. `...\OneDrive - <Org>\...\MailDrop\`).
-That is not a supported third option alongside the network drive/zip and reliably causes failures on
-both first install and auto-update (see Troubleshooting below).
+**Note:** Installing from a OneDrive-synced folder (e.g. `...\OneDrive - <Org>\...\MailDrop\`) is not a
+tested/supported third option alongside the network drive/zip. Whether that's actually a contributing
+cause of the failures described below is unconfirmed (see Troubleshooting) — avoided as a precaution
+regardless.
 
 ## Usage
 
@@ -244,21 +245,26 @@ Supported placeholders in Ablageordner and msg Dateiname:
   and/or the add-in gets auto-disabled right after install due to a timeout, possibly with this
   error: `DeploymentDownloadException` / `UnauthorizedAccessException: Der Zugriff auf den Pfad
   "...\AppData\Local\Temp\Deployment\...\MailDrop.dll" wurde verweigert`:
-  - The cause is almost always installing from a **OneDrive-synced folder** (e.g.
-    `...\OneDrive - <Org>\...\MailDrop\`) instead of the network drive or a locally extracted zip.
-    ClickOnce automatically uses the install location as its update source (see Auto-update above);
-    files downloaded during that step are first staged under `%LOCALAPPDATA%\Temp\Deployment\`
-    before being verified/copied. An access error there is a well-known ClickOnce failure mode,
-    usually caused by antivirus real-time scanning briefly locking newly written DLL/EXE files,
-    compounded by OneDrive source files not being fully hydrated (Files On-Demand placeholders).
+  - Confirmed cause (readable directly from the stack trace): ClickOnce first writes downloaded
+    files into a randomly-named, purely local folder under `%LOCALAPPDATA%\Temp\Deployment\`, then
+    reopens that file to verify the manifest/signature. An access error at exactly that moment is a
+    well-known, generic ClickOnce failure mode, usually caused by antivirus/EDR real-time scanning
+    briefly locking newly written DLL/EXE files (the deployment stack does not retry). This can
+    happen regardless of the install source, since the failing file is local.
+  - One observed case had an install source inside a **OneDrive-synced folder** (e.g.
+    `...\OneDrive - <Org>\...\MailDrop\`), which is neither of the two tested/supported install
+    locations (network drive, or a zip extracted elsewhere). Whether OneDrive as the source actually
+    contributes to triggering the antivirus lock race is **not confirmed** — the failing file itself
+    is local and outside any OneDrive folder — so this is more a risk factor / reason to stick to
+    the supported locations than a proven root cause.
   - This happens inside Outlook's own ClickOnce/VSTO loader, before this project's own add-in code
     even starts — it is **not** fixable via a code change in this repository.
-  - Fix: install/update only from the network drive or a locally extracted zip that is **outside**
-    any OneDrive-synced folder. If it already failed: add an antivirus exclusion for
-    `%LOCALAPPDATA%\Temp\Deployment\`, clear the ClickOnce cache
+  - Fix, in order of evidence: add an antivirus/EDR exclusion for `%LOCALAPPDATA%\Temp\Deployment\`
+    (the best-evidenced fix for this exact exception), clear the ClickOnce cache
     (`rundll32.exe dfshim.dll CleanOnlineAppCache`), remove the stale `DisabledItems` registry value
     for MailDrop under `HKCU:\Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems`, then
-    reinstall from a supported location.
+    reinstall. Also install/update only from the network drive or a zip outside OneDrive as a
+    precaution, since that combination is untested.
 
 ## Verification Checklist
 

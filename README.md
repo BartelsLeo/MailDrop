@@ -136,10 +136,10 @@ gilt: Der Ort, von dem aus installiert wurde, wird automatisch als Update-Quelle
   keine automatische Update-Pruefung. Ein Update erfordert eine erneute manuelle Installation aus
   einer neueren ZIP.
 
-**Wichtig:** Nicht aus einem OneDrive-synchronisierten Ordner installieren (z.B.
-`...\OneDrive - <Firma>\...\MailDrop\`). Das ist keine unterstuetzte dritte Variante neben
-Netzlaufwerk/ZIP und fuehrt zuverlaessig zu Fehlern sowohl bei der Erstinstallation als auch beim
-automatischen Update (siehe Troubleshooting unten).
+**Hinweis:** Installation aus einem OneDrive-synchronisierten Ordner (z.B.
+`...\OneDrive - <Firma>\...\MailDrop\`) ist keine getestete/unterstuetzte dritte Variante neben
+Netzlaufwerk/ZIP. Ob das tatsaechlich (mit-)ursaechlich fuer die unten beschriebenen Fehler ist, ist
+nicht belegt (siehe Troubleshooting) - als Vorsichtsmassnahme dennoch vermeiden.
 
 ## Verwendung
 
@@ -270,22 +270,29 @@ Unterstuetzte Platzhalter in Ablageordner und msg Dateiname:
   das Add-in wird direkt nach der Installation wegen Zeitueberschreitung deaktiviert, ggf. mit dieser
   Fehlermeldung: `DeploymentDownloadException` / `UnauthorizedAccessException: Der Zugriff auf den
   Pfad "...\AppData\Local\Temp\Deployment\...\MailDrop.dll" wurde verweigert`:
-  - Ursache ist praktisch immer eine Installation aus einem **OneDrive-synchronisierten Ordner**
-    (z.B. `...\OneDrive - <Firma>\...\MailDrop\`) statt vom Netzlaufwerk oder einer lokal entpackten
-    ZIP. ClickOnce verwendet den Installationsort automatisch als Update-Quelle (siehe Auto-Update
-    oben); die dabei heruntergeladenen Dateien werden zunaechst in einen temporaeren Ordner unter
-    `%LOCALAPPDATA%\Temp\Deployment\` geschrieben, bevor sie geprueft/uebernommen werden. Ein
-    Zugriffsfehler dort ist ein bekanntes ClickOnce-Problem, meist verursacht durch Virenschutz-
-    Software (Echtzeitscan), der neu geschriebene DLL/EXE-Dateien kurzzeitig sperrt, verstaerkt durch
-    ggf. nicht vollstaendig heruntergeladene OneDrive-Platzhalterdateien der Quelldateien.
+  - Belegte Ursache (direkt aus dem Stacktrace ablesbar): ClickOnce schreibt heruntergeladene Dateien
+    zunaechst in einen zufaellig benannten, rein lokalen Ordner unter
+    `%LOCALAPPDATA%\Temp\Deployment\` und oeffnet die Datei danach erneut, um Manifest/Signatur zu
+    pruefen. Ein Zugriffsfehler genau in diesem Moment ist ein bekanntes, generisches ClickOnce-
+    Problem, meist verursacht durch Virenschutz-/EDR-Software (Echtzeitscan), der neu geschriebene
+    DLL/EXE-Dateien kurzzeitig sperrt (der Deployment-Stack wiederholt den Zugriff dabei nicht). Das
+    kann unabhaengig vom Installationsort auftreten, da die betroffene Datei lokal liegt.
+  - Ein beobachteter Fall stammte von einer Installation aus einem **OneDrive-synchronisierten
+    Ordner** (z.B. `...\OneDrive - <Firma>\...\MailDrop\`), keiner der beiden getesteten/
+    unterstuetzten Installationsorte (Netzlaufwerk oder woanders entpackte ZIP, siehe oben). Ob
+    OneDrive als Quelle tatsaechlich zum Ausloesen des Virenschutz-Zugriffskonflikts beitraegt, ist
+    **nicht belegt** - die betroffene Datei liegt lokal und ausserhalb jedes OneDrive-Ordners. Es ist
+    daher eher ein Risikofaktor/Grund, bei den unterstuetzten Orten zu bleiben, als eine bewiesene
+    Ursache.
   - Dieser Fehler tritt im ClickOnce-/VSTO-Ladevorgang von Outlook auf, bevor der eigene Add-in-Code
     ueberhaupt startet - er ist **nicht** durch eine Codeaenderung in diesem Projekt behebbar.
-  - Abhilfe: Ausschliesslich vom Netzlaufwerk oder aus einer lokal entpackten ZIP **ausserhalb** eines
-    OneDrive-synchronisierten Ordners installieren/aktualisieren. Bei bereits aufgetretenem Fehler:
-    Virenschutz-Ausnahme fuer `%LOCALAPPDATA%\Temp\Deployment\` einrichten, ClickOnce-Cache leeren
-    (`rundll32.exe dfshim.dll CleanOnlineAppCache`), den veralteten `DisabledItems`-Registry-Wert fuer
-    MailDrop unter `HKCU:\Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems` entfernen,
-    dann von einem unterstuetzten Ort neu installieren.
+  - Abhilfe, nach Beleglage geordnet: Virenschutz-/EDR-Ausnahme fuer
+    `%LOCALAPPDATA%\Temp\Deployment\` einrichten (die am besten belegte Abhilfe fuer genau diesen
+    Fehler), ClickOnce-Cache leeren (`rundll32.exe dfshim.dll CleanOnlineAppCache`), den veralteten
+    `DisabledItems`-Registry-Wert fuer MailDrop unter
+    `HKCU:\Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems` entfernen, dann neu
+    installieren. Zusaetzlich vorsorglich nur vom Netzlaufwerk oder aus einer ZIP ausserhalb von
+    OneDrive installieren/aktualisieren, da diese Kombination ungetestet ist.
 
 ## Lizenz
 
