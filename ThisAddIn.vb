@@ -30,13 +30,31 @@ Public Class ThisAddIn
         Dim sw As Stopwatch = Stopwatch.StartNew()
         Debug.WriteLine("[ThisAddIn] Startup BEGIN")
 
-        _explorers = Application.Explorers
-        If _explorers.Count > 0 Then
-            _currentExplorer = TryCast(_explorers.Item(1), Outlook.Explorer)
-            Debug.WriteLine($"[ThisAddIn] Startup: _currentExplorer set. ({sw.ElapsedMilliseconds} ms)")
-        Else
-            Debug.WriteLine($"[ThisAddIn] Startup: no explorer available yet, waiting for NewExplorer. ({sw.ElapsedMilliseconds} ms)")
-        End If
+        ' Application.Explorers is a synchronous COM call that can block on Outlook's own
+        ' mail-store/session init (Exchange cached-mode sync, PST/OST mounting) - observed
+        ' taking 1.7-2s and tripping Outlook's slow-add-in watchdog (threshold 1000 ms),
+        ' which then auto-disables MailDrop. Deferred to a short UI-thread timer tick (COM-safe,
+        ' Explorer objects need STA affinity so Task.Run is not an option here) so Startup itself
+        ' returns near-instantly, same pattern as PreloadTaskPaneInBackground below.
+        Dim explorerTimer As New System.Windows.Forms.Timer()
+        explorerTimer.Interval = 100
+        AddHandler explorerTimer.Tick, Sub(s, e)
+            explorerTimer.Stop()
+            explorerTimer.Dispose()
+            Try
+                _explorers = Application.Explorers
+                If _explorers.Count > 0 Then
+                    _currentExplorer = TryCast(_explorers.Item(1), Outlook.Explorer)
+                    Debug.WriteLine($"[ThisAddIn] Deferred explorer wiring: _currentExplorer set. ({sw.ElapsedMilliseconds} ms)")
+                Else
+                    Debug.WriteLine($"[ThisAddIn] Deferred explorer wiring: no explorer available yet, waiting for NewExplorer. ({sw.ElapsedMilliseconds} ms)")
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"[ThisAddIn] Deferred explorer wiring failed: {ex.Message}")
+                Logger.LogError("ThisAddIn_Startup: deferred explorer wiring", ex)
+            End Try
+        End Sub
+        explorerTimer.Start()
 
         ' Engine im Hintergrund vorladen (inkl. EmbeddingService-Warmup).
         SuggestionEngine.PreloadSharedInstanceInBackground(1500)
