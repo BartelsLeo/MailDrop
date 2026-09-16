@@ -42,6 +42,7 @@ Public Class ThisAddIn
             explorerTimer.Stop()
             explorerTimer.Dispose()
             Try
+                Dim explorerSw As Stopwatch = Stopwatch.StartNew()
                 _explorers = Application.Explorers
                 If _explorers.Count > 0 Then
                     _currentExplorer = TryCast(_explorers.Item(1), Outlook.Explorer)
@@ -49,6 +50,10 @@ Public Class ThisAddIn
                 Else
                     Debug.WriteLine($"[ThisAddIn] Deferred explorer wiring: no explorer available yet, waiting for NewExplorer. ({sw.ElapsedMilliseconds} ms)")
                 End If
+                ' Release-safe (survives DefineDebug=false): how long the deferred Application.Explorers
+                ' COM call itself took, to confirm/refute it as a bottleneck in the field - see
+                ' CLAUDE.md "Startup timing instrumentation".
+                Logger.LogInfo("Startup timing", $"Deferred Application.Explorers call took {explorerSw.ElapsedMilliseconds} ms (fired {sw.ElapsedMilliseconds} ms after Startup returned).")
             Catch ex As Exception
                 Debug.WriteLine($"[ThisAddIn] Deferred explorer wiring failed: {ex.Message}")
                 Logger.LogError("ThisAddIn_Startup: deferred explorer wiring", ex)
@@ -64,6 +69,13 @@ Public Class ThisAddIn
         PreloadTaskPaneInBackground(delayMs:=4000)
 
         Debug.WriteLine($"[ThisAddIn] Startup END – preloads queued. Total={sw.ElapsedMilliseconds} ms")
+        ' Release-safe: Outlook's own slow-add-in watchdog (threshold 1000 ms, see CLAUDE.md) has
+        ' been observed disabling MailDrop with "Benötigte Zeit" around 1.7-2s even after deferring
+        ' Application.Explorers out of this Sub's body, meaning that fix alone was not sufficient -
+        ' this trace tells us whether Startup's OWN synchronous body is actually fast now (pointing
+        ' the remaining cost at CLR/ClickOnce/assembly-load time before Startup even runs, which is
+        ' outside this Sub's control) or still slow (meaning something else in here still blocks).
+        Logger.LogInfo("Startup timing", $"ThisAddIn_Startup Sub body returned after {sw.ElapsedMilliseconds} ms.")
     End Sub
 
     Private Sub PreloadTaskPaneInBackground(delayMs As Integer)
