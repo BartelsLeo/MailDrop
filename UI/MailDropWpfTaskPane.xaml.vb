@@ -23,19 +23,39 @@ Public Class MailDropWpfTaskPane
         AddHandler TreeView1.SelectedItemChanged, AddressOf TreeView1_SelectedItemChanged
     End Sub
 
+    ' Sucht gezielt entlang des Astes zu relativePath und klappt dabei nur dessen Vorfahren auf -
+    ' nicht jeden Geschwister-Knoten, den die Suche unterwegs betritt. Vorher wurde jeder besuchte
+    ' Knoten vor dem Pfadvergleich blind expandiert, wodurch beim Anwenden eines
+    ' ProjektstrukturPfad-Vorschlags effektiv der gesamte durchsuchte Teilbaum aufklappte statt
+    ' nur der Pfad zum vorgeschlagenen Knoten.
     Private Function FindTreeViewItem(container As ItemsControl, relativePath As String) As TreeViewItem
         For Each item In container.Items
             Dim node = TryCast(item, DirectoryNode)
-            Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
-            If node IsNot Nothing AndAlso tvi IsNot Nothing Then
-                If node.RelativePath = relativePath Then Return tvi
+            If node Is Nothing Then Continue For
+
+            If node.RelativePath = relativePath Then
+                Return TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+            End If
+
+            If IsAncestorRelativePath(node.RelativePath, relativePath) Then
+                Dim tvi = TryCast(container.ItemContainerGenerator.ContainerFromItem(item), TreeViewItem)
+                If tvi Is Nothing Then Return Nothing
                 tvi.IsExpanded = True
                 tvi.UpdateLayout()
-                Dim found = FindTreeViewItem(tvi, relativePath)
-                If found IsNot Nothing Then Return found
+                Return FindTreeViewItem(tvi, relativePath)
             End If
         Next
         Return Nothing
+    End Function
+
+    ' Prueft, ob candidateRelativePath ein Vorfahre (echtes Praefix, getrennt durch Pfadtrenner) von
+    ' targetRelativePath ist.
+    Private Function IsAncestorRelativePath(candidateRelativePath As String, targetRelativePath As String) As Boolean
+        If String.IsNullOrEmpty(candidateRelativePath) Then Return False
+        If Not targetRelativePath.StartsWith(candidateRelativePath, StringComparison.OrdinalIgnoreCase) Then Return False
+        If targetRelativePath.Length = candidateRelativePath.Length Then Return False
+        Dim nextChar = targetRelativePath(candidateRelativePath.Length)
+        Return nextChar = Path.DirectorySeparatorChar OrElse nextChar = Path.AltDirectorySeparatorChar
     End Function
 
     Private Function GetRelativePath(basePath As String, fullPath As String) As String
@@ -177,6 +197,17 @@ Public Class MailDropWpfTaskPane
         End If
     End Sub
 
+    Private Sub ButtonOpenAblageordner_Click(sender As Object, e As RoutedEventArgs)
+        Dim pfad = Session.LastSuccessfulAblageordner
+        If String.IsNullOrWhiteSpace(pfad) OrElse Not Directory.Exists(pfad) Then Return
+        Try
+            Process.Start(pfad)
+        Catch ex As Exception
+            Logger.LogError("ButtonOpenAblageordner_Click", ex)
+            MessageBox.Show("Ordner konnte nicht geoeffnet werden: " & ex.Message, "Oeffnen", MessageBoxButton.OK, MessageBoxImage.Error)
+        End Try
+    End Sub
+
     Private Sub ShowSuccessNotification()
         SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
@@ -248,16 +279,25 @@ Public Class MailDropWpfTaskPane
 
     ' Setzt die Editierbarkeit der TaskPane
     Public Sub SetEditMode(isEditable As Boolean)
+        ' Try/Catch pro Control statt um die gesamte Schleife: FindVisualChildren rekursiert lazy in
+        ' den Teilbaum jedes Controls (z.B. ListBox1/TreeView1 Itemcontainer). Eine Exception dort wuerde
+        ' sonst die komplette Schleife abbrechen und alle danach verarbeiteten Controls faelschlich
+        ' deaktiviert lassen, ohne jede Spur.
         For Each ctrl In Me.FindVisualChildren(Of Control)(Me)
-            If ctrl.Name <> "ButtonInfo" Then
-                If ctrl.Name = "CheckBoxAnhaenge" Then
-                    ctrl.IsEnabled = isEditable AndAlso Session.HasAnhaenge
-                ElseIf ctrl.Name = "AttachmentScrollViewer" Then
-                    ctrl.IsEnabled = isEditable AndAlso Session.AnhaengeAblegen
-                Else
-                    ctrl.IsEnabled = isEditable
+            Try
+                If ctrl.Name <> "ButtonInfo" Then
+                    If ctrl.Name = "CheckBoxAnhaenge" Then
+                        ctrl.IsEnabled = isEditable AndAlso Session.HasAnhaenge
+                    ElseIf ctrl.Name = "AttachmentScrollViewer" Then
+                        ctrl.IsEnabled = isEditable AndAlso Session.AnhaengeAblegen
+                    Else
+                        ctrl.IsEnabled = isEditable
+                    End If
                 End If
-            End If
+            Catch ex As Exception
+                Debug.WriteLine($"[MailDropWpfTaskPane] SetEditMode: failed for control '{ctrl.Name}': {ex.Message}")
+                Logger.LogError($"SetEditMode: control '{ctrl.Name}'", ex)
+            End Try
         Next
     End Sub
 
@@ -269,19 +309,41 @@ Public Class MailDropWpfTaskPane
         Return selection.Count = 1 AndAlso TypeOf selection.Item(1) Is Outlook.MailItem
     End Function
 
-    ' Hilfsmethode: Findet alle Controls eines Typs rekursiv
+    ' Hilfsmethode: Findet alle Controls eines Typs rekursiv.
+    ' VisualTreeHelper-Aufrufe sind einzeln try/catch-abgesichert (Yield ist in VB innerhalb eines
+    ' Try-Blocks mit Catch nicht erlaubt): scheitert das Durchlaufen eines Teilbaums (z.B. weil
+    ' ListBox1/TreeView1 ihre Itemcontainer noch nicht generiert haben), wird nur dieser Teilbaum
+    ' uebersprungen und geloggt, statt die komplette Aufzaehlung fuer SetEditMode abzubrechen.
     Private Iterator Function FindVisualChildren(Of T As DependencyObject)(depObj As DependencyObject) As IEnumerable(Of T)
-        If depObj IsNot Nothing Then
-            For i As Integer = 0 To VisualTreeHelper.GetChildrenCount(depObj) - 1
-                Dim child = VisualTreeHelper.GetChild(depObj, i)
+        If depObj Is Nothing Then Return
+
+        Dim childCount As Integer
+        Try
+            childCount = VisualTreeHelper.GetChildrenCount(depObj)
+        Catch ex As Exception
+            Logger.LogError($"FindVisualChildren: GetChildrenCount failed for {depObj.GetType().Name}", ex)
+            Return
+        End Try
+
+        For i As Integer = 0 To childCount - 1
+            Dim child As DependencyObject = Nothing
+            Dim gotChild As Boolean = False
+            Try
+                child = VisualTreeHelper.GetChild(depObj, i)
+                gotChild = True
+            Catch ex As Exception
+                Logger.LogError($"FindVisualChildren: GetChild({i}) failed for {depObj.GetType().Name}", ex)
+            End Try
+
+            If gotChild Then
                 If TypeOf child Is T Then
                     Yield CType(child, T)
                 End If
                 For Each childOfChild In FindVisualChildren(Of T)(child)
                     Yield childOfChild
                 Next
-            Next
-        End If
+            End If
+        Next
     End Function
 
     Private Sub TreeView1_SelectedItemChanged(sender As Object, e As RoutedPropertyChangedEventArgs(Of Object))
@@ -327,6 +389,16 @@ Public Class MailDropWpfTaskPane
         Return folderName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
     End Function
 
+    ' Laedt nach einer Aenderung (Erstellen/Loeschen/Umbenennen) nur die Kinder des
+    ' betroffenen Elternordners neu, statt den gesamten Baum vom Dateisystem einzulesen.
+    ' Faellt auf einen vollen Rebuild zurueck, falls der Elternordner im aktuellen Baum
+    ' (noch) nicht gefunden wird.
+    Private Sub RefreshTreeChildren(parentPath As String)
+        If Not Session.RefreshTreeViewChildren(parentPath) Then
+            Session.BuildDirectoryTree()
+        End If
+    End Sub
+
     Private Sub CreateFolderUnderSelection()
         If Not EnsureValidProjektPfad() Then
             Return
@@ -358,7 +430,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        RefreshTreeChildren(parentPath)
         Dim relativePath = GetRelativePath(Session.ProjektPfad, newFolderPath)
         Session.ProjektstrukturPfad = relativePath
         Session.IsSuggestedProjektstrukturPfad = False
@@ -397,7 +469,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        RefreshTreeChildren(parentPath)
         Dim parentRelativePath = GetRelativePath(Session.ProjektPfad, parentPath)
         Session.ProjektstrukturPfad = parentRelativePath
         Session.IsSuggestedProjektstrukturPfad = False
@@ -449,7 +521,7 @@ Public Class MailDropWpfTaskPane
             Return
         End Try
 
-        Session.BuildDirectoryTree()
+        RefreshTreeChildren(parentPath)
         Dim relativePath = GetRelativePath(Session.ProjektPfad, renamedPath)
         Session.ProjektstrukturPfad = relativePath
         Session.IsSuggestedProjektstrukturPfad = False

@@ -320,7 +320,19 @@
                              Text="{Binding AblageordnerFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              GotFocus="TextBoxAblageordner_GotFocus"
                              LostFocus="TextBoxAblageordner_LostFocus"
-                             Grid.Column="1"/>
+                             Grid.Column="1">
+                        <TextBox.ToolTip>
+                            <TextBlock MaxWidth="320" TextWrapping="Wrap">
+                                <Run Text="[Variable] wird durch den Wert ersetzt."/>
+                                <LineBreak/>
+                                <Run Text="&quot;Text&quot; in Anführungszeichen bleibt immer erhalten."/>
+                                <LineBreak/>
+                                <Run Text="Ein Trennzeichen ohne Anführungszeichen zwischen zwei [Variable] entfällt, wenn eines der beiden leer ist."/>
+                                <LineBreak/>
+                                <Run Text="Details und Beispiele siehe Hilfe (i)." FontStyle="Italic"/>
+                            </TextBlock>
+                        </TextBox.ToolTip>
+                    </TextBox>
                     <TextBlock x:Name="SparkleAblageordner" Text="&#x2726;" Grid.Column="2"
                                Opacity="0" Foreground="#FFB300" FontSize="14"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -339,7 +351,19 @@
                              Text="{Binding MsgDateinameFeld, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              GotFocus="TextBoxMsgDateiname_GotFocus"
                              LostFocus="TextBoxMsgDateiname_LostFocus"
-                             Grid.Column="1"/>
+                             Grid.Column="1">
+                        <TextBox.ToolTip>
+                            <TextBlock MaxWidth="320" TextWrapping="Wrap">
+                                <Run Text="[Variable] wird durch den Wert ersetzt."/>
+                                <LineBreak/>
+                                <Run Text="&quot;Text&quot; in Anführungszeichen bleibt immer erhalten."/>
+                                <LineBreak/>
+                                <Run Text="Ein Trennzeichen ohne Anführungszeichen zwischen zwei [Variable] entfällt, wenn eines der beiden leer ist."/>
+                                <LineBreak/>
+                                <Run Text="Details und Beispiele siehe Hilfe (i)." FontStyle="Italic"/>
+                            </TextBlock>
+                        </TextBox.ToolTip>
+                    </TextBox>
                     <TextBlock x:Name="SparkleMsgDateiname" Text="&#x2726;" Grid.Column="2"
                                Opacity="0" Foreground="#FFB300" FontSize="14"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -403,6 +427,18 @@
                                    FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Erfolgreich abgelegt." Foreground="#065F46"
                                    FontSize="12" VerticalAlignment="Center"/>
+                        <Button x:Name="ButtonOpenAblageordner" Content="Öffnen"
+                                Margin="10,0,0,0" Padding="0" Background="Transparent"
+                                BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"
+                                Click="ButtonOpenAblageordner_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <TextBlock Text="{TemplateBinding Content}"
+                                               Foreground="#059669" FontSize="12"
+                                               FontWeight="Bold" TextDecorations="Underline"/>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -427,6 +463,18 @@
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Left" Text="&#x26A0;" Foreground="#B45309" FontWeight="Bold"
                                    FontSize="14" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                        <Button x:Name="ButtonOpenAblageordnerOverwrite" DockPanel.Dock="Right" Content="Öffnen"
+                                Margin="10,0,0,0" Padding="0" Background="Transparent"
+                                BorderThickness="0" Cursor="Hand" VerticalAlignment="Top"
+                                Click="ButtonOpenAblageordner_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <TextBlock Text="{TemplateBinding Content}"
+                                               Foreground="#92400E" FontSize="12"
+                                               FontWeight="Bold" TextDecorations="Underline"/>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <TextBlock Text="Erfolgreich abgelegt. Existierende Dateien überschrieben."
                                    Foreground="#92400E" FontSize="12" TextWrapping="Wrap"/>
                     </DockPanel>

@@ -71,7 +71,9 @@ Public Module MailUtils
             Return $"Fehler beim Speichern der E-Mail: {ex.Message}"
         Finally
             ReleaseComObjectSafe(mail)
-            ReleaseComObjectSafe(explorer)
+            ' Explorer is intentionally NOT released: app.ActiveExplorer() returns the same RCW
+            ' as _currentExplorer in ThisAddIn. FinalReleaseComObject on it would destroy the
+            ' SelectionChange event connection permanently (see ReadMailMeta).
         End Try
     End Function
 
@@ -139,7 +141,9 @@ Public Module MailUtils
             Return $"Fehler beim Speichern der Anh�nge: {ex.Message}"
         Finally
             ReleaseComObjectSafe(mail)
-            ReleaseComObjectSafe(explorer)
+            ' Explorer is intentionally NOT released: app.ActiveExplorer() returns the same RCW
+            ' as _currentExplorer in ThisAddIn. FinalReleaseComObject on it would destroy the
+            ' SelectionChange event connection permanently (see ReadMailMeta).
         End Try
     End Function
 
