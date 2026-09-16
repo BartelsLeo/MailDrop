@@ -40,9 +40,28 @@ Public Class ThisAddIn
         ' Startup failure leaves a record of which build was running and how far it got - this was
         ' previously missing: an exception anywhere in this Sub's body (it was not Try/Catch-wrapped)
         ' meant NO log entry at all, since the only Logger.LogInfo call was the very last line.
+        ' Kept as the one truly synchronous log call (cheap: a single small file write) - proof the
+        ' Sub was entered at all, even if everything after it is deferred or fails.
         Logger.LogInfo("Startup", "ThisAddIn_Startup entered.")
-        LogStartupEnvironmentInfo()
-        LogDependencyFilePresence()
+
+        ' LogStartupEnvironmentInfo/LogDependencyFilePresence were originally called synchronously
+        ' right here, but field data (see CLAUDE.md "Startup timing instrumentation") showed this
+        ' added ~420 ms to Startup's own measured body time on a cold/first run - System.Deployment
+        ' assembly load + reflection + several File.Exists checks are not free, and that cost directly
+        ' eats into Outlook's slow-add-in budget instead of just measuring it. Deferred to a short
+        ' UI-thread timer tick (same COM-safe pattern as explorerTimer/PreloadTaskPaneInBackground)
+        ' so Startup itself returns fast again while the diagnostic data still gets written moments
+        ' later - confirmed safe by the explorer-timer tick already firing reliably even on the run
+        ' that preceded a Shutdown ~2 s after Startup returned.
+        Dim diagnosticsTimer As New System.Windows.Forms.Timer()
+        diagnosticsTimer.Interval = 10
+        AddHandler diagnosticsTimer.Tick, Sub(s, e)
+            diagnosticsTimer.Stop()
+            diagnosticsTimer.Dispose()
+            LogStartupEnvironmentInfo()
+            LogDependencyFilePresence()
+        End Sub
+        diagnosticsTimer.Start()
 
         Try
             ' Application.Explorers is a synchronous COM call that can block on Outlook's own
