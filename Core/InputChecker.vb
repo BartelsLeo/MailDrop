@@ -46,6 +46,23 @@ Public Module InputChecker
         Return String.Empty
     End Function
 
+    ' Stellt sicher, dass ein abgeleiteter Zielpfad seinen Basisordner nicht verlässt.
+    ' Nötig, weil Ablageordner- und Dateinamen aus frei editierbaren Feldern (Schema, Titel)
+    ' entstehen: Path.Combine verwirft sein erstes Argument vollständig, sobald das zweite ein
+    ' Wurzelpfad ist ("C:\..." oder "\..."), und ".." führt aus dem Projektordner heraus. Die Mail
+    ' würde dann ohne jeden Hinweis außerhalb des Projekts abgelegt.
+    Public Function IsInsideBaseFolder(basePath As String, candidatePath As String) As Boolean
+        Try
+            Dim normalizedBase = Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            Dim normalizedCandidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            If String.Equals(normalizedBase, normalizedCandidate, StringComparison.OrdinalIgnoreCase) Then Return True
+            Return normalizedCandidate.StartsWith(normalizedBase & Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+        Catch
+            ' GetFullPath wirft bei syntaktisch unbrauchbaren Pfaden - die sind ohnehin nicht verwendbar.
+            Return False
+        End Try
+    End Function
+
     Public Function ShowAttachmentRenameDialog(currentName As String, basePath As String) As String
         Dim dlg As New AttachmentRenameDialog(currentName, basePath)
         If System.Windows.Application.Current IsNot Nothing AndAlso System.Windows.Application.Current.MainWindow IsNot Nothing Then
@@ -82,6 +99,10 @@ Public Module InputChecker
             result.ErrorMessage = ablageOrdnerCheck
             Return result
         End If
+        If Not IsInsideBaseFolder(projektstrukturPfad, ablageOrdnerPfad) Then
+            result.ErrorMessage = "Der aufgelöste Ablageordner liegt außerhalb der gewählten Projektstruktur. Bitte prüfen Sie das Ablageordner-Schema und den Titel."
+            Return result
+        End If
         result.CheckedAblageOrdner = ablageOrdnerPfad
         If String.IsNullOrWhiteSpace(session.MsgDateinameAufgeloest) Then
             result.ErrorMessage = "Bitte geben Sie einen gültigen Dateinamen für die E-Mail an."
@@ -91,6 +112,10 @@ Public Module InputChecker
         Dim msgDateinameCheck = CheckFileNameAndPath(msgZielPfad)
         If msgDateinameCheck <> String.Empty Then
             result.ErrorMessage = msgDateinameCheck
+            Return result
+        End If
+        If Not IsInsideBaseFolder(ablageOrdnerPfad, msgZielPfad) Then
+            result.ErrorMessage = "Der aufgelöste msg-Dateiname liegt außerhalb des Ablageordners. Bitte prüfen Sie das msg-Dateinamen-Schema."
             Return result
         End If
         result.CheckedMsgZielpfad = msgZielPfad
@@ -108,6 +133,10 @@ Public Module InputChecker
                 Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
                 If anhangNameCheck <> String.Empty Then
                     result.ErrorMessage = anhangNameCheck
+                    Return result
+                End If
+                If Not IsInsideBaseFolder(ablageOrdnerPfad, anhangPfad) Then
+                    result.ErrorMessage = $"Der Anhang '{anhangName}' würde außerhalb des Ablageordners gespeichert werden."
                     Return result
                 End If
                 result.CheckedAnhZielpfade.Add(anhangPfad)

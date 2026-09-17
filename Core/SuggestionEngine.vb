@@ -31,6 +31,7 @@ Public Class SuggestionEngine
     Private Property ProjektPfadDistances As List(Of Double)
     Private Property ProjektstrukturPfadDistances As List(Of Double)
     Private _disposed As Boolean = False
+    Private ReadOnly _embeddingServiceLock As New Object()
     Private _cascadeInProgress As Boolean = False
     Private _computedWeights As Dictionary(Of String, Dictionary(Of String, Double))
 
@@ -69,20 +70,13 @@ Public Class SuggestionEngine
     Private Sub LoadAllComputedWeights()
         Dim sw As Stopwatch = Stopwatch.StartNew()
         Debug.WriteLine("[SuggestionEngine] LoadAllComputedWeights BEGIN")
-        Dim loaded As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
-        Dim targetFields() As String = {
-            "ProjektPfad", "ProjektstrukturPfad", "Titel", "AbsenderKurz",
-            "AblageordnerSchema", "MsgDateinameSchema", "AnhaengeAblegen"
-        }
+        Dim loaded As Dictionary(Of String, Dictionary(Of String, Double))
         Try
-            For Each field In targetFields
-                Dim weights = ThisAddIn.CurrentDatabaseManager.LoadComputedWeights(field)
-                If weights.Count > 0 Then
-                    loaded(field) = weights
-                End If
-            Next
+            ' Eine Query fuer alle TargetFields statt sieben einzelne Verbindungen (Startpfad!).
+            loaded = ThisAddIn.CurrentDatabaseManager.LoadAllComputedWeights()
         Catch ex As Exception
             Debug.WriteLine("[SuggestionEngine] Fehler beim Laden der ComputedWeights: " & ex.Message)
+            loaded = New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
         End Try
         _computedWeights = loaded
         Debug.WriteLine($"[SuggestionEngine] LoadAllComputedWeights END – {loaded.Count} fields loaded: {sw.ElapsedMilliseconds} ms")
@@ -131,8 +125,16 @@ Public Class SuggestionEngine
         End If
     End Sub
 
+    ' Doppelt gepruefte Sperre: PreloadEmbeddingService laeuft per Task.Run auf einem
+    ' Hintergrund-Thread, waehrend PrepareSession auf dem UI-Thread ueber
+    ' GetOrCreateCurrentBetreffEmbedding denselben Weg nimmt. Oeffnet der Benutzer die Task Pane
+    ' innerhalb des Preload-Fensters, konnten bisher beide Threads gleichzeitig Nothing sehen und
+    ' JE eine EmbeddingService-Instanz erzeugen - das ONNX-Modell wurde also doppelt geladen und
+    ' eine der beiden InferenceSessions nie disposed, weil das Feld nur eine davon behaelt.
     Private Function GetEmbeddingService() As EmbeddingService
-        If EnginesEmbeddingService Is Nothing Then
+        If EnginesEmbeddingService IsNot Nothing Then Return EnginesEmbeddingService
+        SyncLock _embeddingServiceLock
+            If EnginesEmbeddingService IsNot Nothing Then Return EnginesEmbeddingService
             Try
                 Debug.WriteLine("[SuggestionEngine] GetEmbeddingService: constructing EmbeddingService (first call)…")
                 Dim sw As Stopwatch = Stopwatch.StartNew()
@@ -142,15 +144,19 @@ Public Class SuggestionEngine
                 Debug.WriteLine("[SuggestionEngine] EmbeddingService konnte nicht erstellt werden: " & ex.Message)
                 Return Nothing
             End Try
-        End If
+        End SyncLock
         Return EnginesEmbeddingService
     End Function
 
     Public Sub Dispose() Implements IDisposable.Dispose
         If _disposed Then Return
-        EnginesEmbeddingService?.Dispose()
-        EnginesEmbeddingService = Nothing
-        _disposed = True
+        ' Gleiche Sperre wie GetEmbeddingService: Shutdown kann waehrend eines noch laufenden
+        ' Hintergrund-Preloads eintreffen.
+        SyncLock _embeddingServiceLock
+            EnginesEmbeddingService?.Dispose()
+            EnginesEmbeddingService = Nothing
+            _disposed = True
+        End SyncLock
     End Sub
 
     ' Berechnet fixe Feature-Distanzen einmalig und initialisiert mutable Features mit 0.
@@ -247,8 +253,9 @@ Public Class SuggestionEngine
     Public Sub RecalculateTitelDistances(session As Session)
         If session Is Nothing Then Return
         Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        Dim currentTokens = TokenizeToSet(session.Titel)
         For Each record In EnginesHistoricalSessionRecords
-            newDistances.Add(CalculateTextSimilarity(session.Titel, record.Titel))
+            newDistances.Add(CalculateTextSimilarityWithTokens(currentTokens, record.Titel))
         Next
         TitelDistances = newDistances
     End Sub
@@ -256,8 +263,9 @@ Public Class SuggestionEngine
     Public Sub RecalculateAblageordnerDistances(session As Session)
         If session Is Nothing Then Return
         Dim newDistances As New List(Of Double)(EnginesHistoricalSessionRecords.Count)
+        Dim currentTokens = TokenizeToSet(session.AblageordnerAufgeloest)
         For Each record In EnginesHistoricalSessionRecords
-            newDistances.Add(CalculateTextSimilarity(session.AblageordnerAufgeloest, record.AblageordnerAufgeloest))
+            newDistances.Add(CalculateTextSimilarityWithTokens(currentTokens, record.AblageordnerAufgeloest))
         Next
         AblageordnerDistances = newDistances
     End Sub
@@ -436,21 +444,33 @@ Public Class SuggestionEngine
         Optional requireNonEmptyField As Boolean = True,
         Optional minScore As Double = 0.0) As IEnumerable(Of SessionRecord)
 
+        ' Gewichte einmal pro Suchlauf aufloesen statt zehn Dictionary-Lookups je Record.
+        Dim wBetreff = FeatureWeight(featureWeights, "Betreff")
+        Dim wDatum = FeatureWeight(featureWeights, "Datum")
+        Dim wAbsenderDomain = FeatureWeight(featureWeights, "AbsenderDomain")
+        Dim wAbsender = FeatureWeight(featureWeights, "Absender")
+        Dim wAusfueBenutzer = FeatureWeight(featureWeights, "AusfueBenutzer")
+        Dim wAusfueDatum = FeatureWeight(featureWeights, "AusfueDatum")
+        Dim wTitel = FeatureWeight(featureWeights, "Titel")
+        Dim wAblageordner = FeatureWeight(featureWeights, "Ablageordner")
+        Dim wProjektPfad = FeatureWeight(featureWeights, "ProjektPfad")
+        Dim wProjektstrukturPfad = FeatureWeight(featureWeights, "ProjektstrukturPfad")
+
         Dim scored As New List(Of KeyValuePair(Of Double, SessionRecord))()
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
             If requireNonEmptyField AndAlso String.IsNullOrWhiteSpace(fieldSelector(record)) Then Continue For
             Dim score =
-                WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Datum", DatumsDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AbsenderDomain", AbsenderDomainDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AusfueDatum", AusfueDatumsDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
+                wBetreff * BetreffDistances(i) +
+                wDatum * DatumsDistances(i) +
+                wAbsenderDomain * AbsenderDomainDistances(i) +
+                wAbsender * AbsenderDistances(i) +
+                wAusfueBenutzer * AusfueBenutzerDistances(i) +
+                wAusfueDatum * AusfueDatumsDistances(i) +
+                wTitel * TitelDistances(i) +
+                wAblageordner * AblageordnerDistances(i) +
+                wProjektPfad * ProjektPfadDistances(i) +
+                wProjektstrukturPfad * ProjektstrukturPfadDistances(i)
             If score >= minScore Then
                 scored.Add(New KeyValuePair(Of Double, SessionRecord)(score, record))
             End If
@@ -468,20 +488,32 @@ Public Class SuggestionEngine
         Dim bestUnconstrainedScore As Double = Double.MinValue
         Dim bestUnconstrainedIndex As Integer = -1
 
+        ' Gewichte einmal pro Suchlauf aufloesen statt zehn Dictionary-Lookups je Record.
+        Dim wBetreff = FeatureWeight(featureWeights, "Betreff")
+        Dim wDatum = FeatureWeight(featureWeights, "Datum")
+        Dim wAbsenderDomain = FeatureWeight(featureWeights, "AbsenderDomain")
+        Dim wAbsender = FeatureWeight(featureWeights, "Absender")
+        Dim wAusfueBenutzer = FeatureWeight(featureWeights, "AusfueBenutzer")
+        Dim wAusfueDatum = FeatureWeight(featureWeights, "AusfueDatum")
+        Dim wTitel = FeatureWeight(featureWeights, "Titel")
+        Dim wAblageordner = FeatureWeight(featureWeights, "Ablageordner")
+        Dim wProjektPfad = FeatureWeight(featureWeights, "ProjektPfad")
+        Dim wProjektstrukturPfad = FeatureWeight(featureWeights, "ProjektstrukturPfad")
+
         For i As Integer = 0 To EnginesHistoricalSessionRecords.Count - 1
             Dim record = EnginesHistoricalSessionRecords(i)
 
             Dim score =
-                WeightedFeatureScore(featureWeights, "Betreff", BetreffDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Datum", DatumsDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AbsenderDomain", AbsenderDomainDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Absender", AbsenderDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AusfueBenutzer", AusfueBenutzerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "AusfueDatum", AusfueDatumsDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Titel", TitelDistances(i)) +
-                WeightedFeatureScore(featureWeights, "Ablageordner", AblageordnerDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektPfad", ProjektPfadDistances(i)) +
-                WeightedFeatureScore(featureWeights, "ProjektstrukturPfad", ProjektstrukturPfadDistances(i))
+                wBetreff * BetreffDistances(i) +
+                wDatum * DatumsDistances(i) +
+                wAbsenderDomain * AbsenderDomainDistances(i) +
+                wAbsender * AbsenderDistances(i) +
+                wAusfueBenutzer * AusfueBenutzerDistances(i) +
+                wAusfueDatum * AusfueDatumsDistances(i) +
+                wTitel * TitelDistances(i) +
+                wAblageordner * AblageordnerDistances(i) +
+                wProjektPfad * ProjektPfadDistances(i) +
+                wProjektstrukturPfad * ProjektstrukturPfadDistances(i)
 
             If score > bestUnconstrainedScore Then
                 bestUnconstrainedScore = score
@@ -683,33 +715,45 @@ Public Class SuggestionEngine
 
     ' Textähnlichkeit auf Basis normalisierter Token-Überlappung (Jaccard), Bereich [0,1].
     Private Function CalculateTextSimilarity(currentValue As String, historicalValue As String) As Double
-        If String.IsNullOrWhiteSpace(currentValue) OrElse String.IsNullOrWhiteSpace(historicalValue) Then
-            Return 0.0
-        End If
+        Return JaccardSimilarity(TokenizeToSet(currentValue), TokenizeToSet(historicalValue))
+    End Function
 
-        Dim currentTokens = New HashSet(Of String)(TokenizeForSimilarity(currentValue), StringComparer.OrdinalIgnoreCase)
-        Dim historicalTokens = New HashSet(Of String)(TokenizeForSimilarity(historicalValue), StringComparer.OrdinalIgnoreCase)
+    ' Variante mit bereits berechneter Tokenmenge fuer die "aktuelle" Seite: in den
+    ' Recalculate*Distances-Schleifen ist diese Seite ueber alle Records konstant, wurde bisher
+    ' aber fuer jeden einzelnen Record erneut tokenisiert und in ein neues HashSet kopiert.
+    Private Function CalculateTextSimilarityWithTokens(currentTokens As HashSet(Of String), historicalValue As String) As Double
+        Return JaccardSimilarity(currentTokens, TokenizeToSet(historicalValue))
+    End Function
 
-        If currentTokens.Count = 0 OrElse historicalTokens.Count = 0 Then
-            Return 0.0
-        End If
+    Private Function TokenizeToSet(value As String) As HashSet(Of String)
+        If String.IsNullOrWhiteSpace(value) Then Return New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Return New HashSet(Of String)(TokenizeForSimilarity(value), StringComparer.OrdinalIgnoreCase)
+    End Function
 
-        Dim intersectionCount = currentTokens.Intersect(historicalTokens, StringComparer.OrdinalIgnoreCase).Count()
-        Dim unionCount = currentTokens.Union(historicalTokens, StringComparer.OrdinalIgnoreCase).Count()
-        If unionCount = 0 Then
-            Return 0.0
-        End If
+    ' Jaccard-Index zweier Tokenmengen. Die Schnittmenge wird direkt gezaehlt und die
+    ' Vereinigungsgroesse ueber |A| + |B| - |A geschnitten B| abgeleitet - das spart die beiden
+    ' LINQ-Zwischensequenzen, die Intersect()/Union() zuvor pro Vergleich aufgebaut haben.
+    Private Function JaccardSimilarity(currentTokens As HashSet(Of String), historicalTokens As HashSet(Of String)) As Double
+        If currentTokens Is Nothing OrElse historicalTokens Is Nothing Then Return 0.0
+        If currentTokens.Count = 0 OrElse historicalTokens.Count = 0 Then Return 0.0
 
+        Dim intersectionCount As Integer = 0
+        For Each token In historicalTokens
+            If currentTokens.Contains(token) Then intersectionCount += 1
+        Next
+
+        Dim unionCount = currentTokens.Count + historicalTokens.Count - intersectionCount
+        If unionCount = 0 Then Return 0.0
         Return intersectionCount / unionCount
     End Function
 
-    ' Liefert den gewichteten Beitrag eines einzelnen Features.
-    Private Function WeightedFeatureScore(featureWeights As IDictionary(Of String, Double), featureName As String, featureDistance As Double) As Double
+    ' Liefert das Gewicht eines einzelnen Features (0.0, wenn im Profil nicht gesetzt).
+    Private Function FeatureWeight(featureWeights As IDictionary(Of String, Double), featureName As String) As Double
         Dim weight As Double = 0.0
         If featureWeights Is Nothing OrElse Not featureWeights.TryGetValue(featureName, weight) Then
             Return 0.0
         End If
-        Return weight * featureDistance
+        Return weight
     End Function
 
     ' Zerlegt Strings in einfache Vergleichstoken und entfernt leere Segmente.
@@ -823,18 +867,22 @@ Public Class SuggestionEngine
 
     Private Function ComputeGlobalMaxDateDistance(records As List(Of SessionRecord),
                                                   dateSelector As Func(Of SessionRecord, DateTime)) As Double
-        Dim maxDist As Double = 1.0
-        For i As Integer = 0 To records.Count - 2
-            Dim di = dateSelector(records(i))
-            If di = Date.MinValue Then Continue For
-            For j As Integer = i + 1 To records.Count - 1
-                Dim dj = dateSelector(records(j))
-                If dj = Date.MinValue Then Continue For
-                Dim dist = Math.Abs((di - dj).TotalDays)
-                If dist > maxDist Then maxDist = dist
-            Next
+        ' Das Maximum von |di - dj| ueber alle Paare ist definitionsgemaess
+        ' (groesstes Datum - kleinstes Datum). Ein O(n)-Durchlauf liefert also exakt dasselbe
+        ' Ergebnis wie die fruehere O(n^2)-Paarschleife (inkl. der Untergrenze 1.0).
+        ' Datensaetze ohne Datum (Date.MinValue) bleiben wie bisher unberuecksichtigt.
+        Dim minDate As DateTime = Date.MaxValue
+        Dim maxDate As DateTime = Date.MinValue
+        Dim validCount As Integer = 0
+        For Each record In records
+            Dim d = dateSelector(record)
+            If d = Date.MinValue Then Continue For
+            validCount += 1
+            If d < minDate Then minDate = d
+            If d > maxDate Then maxDate = d
         Next
-        Return maxDist
+        If validCount < 2 Then Return 1.0
+        Return Math.Max(1.0, (maxDate - minDate).TotalDays)
     End Function
 
     ' featureNames: cascade-aware subset of features to evaluate (from GetCascadeAwareFeaturesForTarget).
@@ -856,11 +904,25 @@ Public Class SuggestionEngine
         If maxDatumUse <= 0 Then maxDatumUse = 1.0
         If maxAusfueUse <= 0 Then maxAusfueUse = 1.0
 
+        Dim targetValues = GetTargetValues(records, targetField)
+
+        ' Tokenmengen je Record EINMAL bilden. Zuvor wurden in der Paarschleife beide Seiten fuer
+        ' jedes der O(n^2) Paare neu tokenisiert und in ein HashSet kopiert - bei 500 Records rund
+        ' 250.000 Tokenisierungen je Textfeature, obwohl es nur 500 verschiedene Texte gibt.
+        Dim titelTokens As HashSet(Of String)() = Nothing
+        If featureVectors.ContainsKey("Titel") Then
+            titelTokens = records.Select(Function(r) TokenizeToSet(r.Titel)).ToArray()
+        End If
+        Dim ablageordnerTokens As HashSet(Of String)() = Nothing
+        If featureVectors.ContainsKey("Ablageordner") Then
+            ablageordnerTokens = records.Select(Function(r) TokenizeToSet(r.AblageordnerAufgeloest)).ToArray()
+        End If
+
         For i As Integer = 0 To records.Count - 2
             Dim ri = records(i)
             For j As Integer = i + 1 To records.Count - 1
                 Dim rj = records(j)
-                labelVector.Add(If(TargetFieldMatch(ri, rj, targetField), 1.0, 0.0))
+                labelVector.Add(If(TargetValuesMatch(targetValues(i), targetValues(j)), 1.0, 0.0))
                 If featureVectors.ContainsKey("Betreff") Then featureVectors("Betreff").Add(CalculateCosineSimilarity(ri.BetreffEmbedded, rj.BetreffEmbedded))
                 If featureVectors.ContainsKey("Datum") Then
                     Dim rawDatum = DateDistanceInDays(ri.Datum, rj.Datum)
@@ -873,8 +935,8 @@ Public Class SuggestionEngine
                     Dim rawAusfue = DateDistanceInDays(ri.AusfueDatum, rj.AusfueDatum)
                     featureVectors("AusfueDatum").Add(If(rawAusfue < 0, 0.0, Math.Max(0.0, 1.0 - rawAusfue / maxAusfueUse)))
                 End If
-                If featureVectors.ContainsKey("Titel") Then featureVectors("Titel").Add(CalculateTextSimilarity(ri.Titel, rj.Titel))
-                If featureVectors.ContainsKey("Ablageordner") Then featureVectors("Ablageordner").Add(CalculateTextSimilarity(ri.AblageordnerAufgeloest, rj.AblageordnerAufgeloest))
+                If titelTokens IsNot Nothing Then featureVectors("Titel").Add(JaccardSimilarity(titelTokens(i), titelTokens(j)))
+                If ablageordnerTokens IsNot Nothing Then featureVectors("Ablageordner").Add(JaccardSimilarity(ablageordnerTokens(i), ablageordnerTokens(j)))
                 If featureVectors.ContainsKey("ProjektPfad") Then featureVectors("ProjektPfad").Add(CalculateCategoricalSimilarity(ri.ProjektPfad, rj.ProjektPfad))
                 If featureVectors.ContainsKey("ProjektstrukturPfad") Then featureVectors("ProjektstrukturPfad").Add(CalculateCategoricalSimilarity(ri.ProjektstrukturPfad, rj.ProjektstrukturPfad))
             Next
@@ -973,16 +1035,31 @@ Public Class SuggestionEngine
         End Select
     End Function
 
-    Private Function TargetFieldMatch(ri As SessionRecord, rj As SessionRecord, targetField As String) As Boolean
+    ' Liest den Zielwert jedes Records EINMAL aus, statt ihn (wie zuvor) per Reflection fuer jedes
+    ' der O(n^2) Record-Paare erneut zu ermitteln: bei 500 Records sind das 124.750 Paare * 2
+    ' GetProperty/GetValue-Aufrufe pro TargetField, also ueber eine Million Reflection-Aufrufe je
+    ' Gewichtsneuberechnung. Nothing bedeutet "leer" und matcht nie - exakt wie die alte
+    ' String.IsNullOrWhiteSpace-Pruefung im vorherigen paarweisen Vergleich.
+    Private Function GetTargetValues(records As List(Of SessionRecord), targetField As String) As String()
+        Dim values(records.Count - 1) As String
         If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
-            Return ri.AnhaengeAblegen = rj.AnhaengeAblegen
+            For i As Integer = 0 To records.Count - 1
+                values(i) = If(records(i).AnhaengeAblegen, "1", "0")
+            Next
+            Return values
         End If
         Dim propInfo = GetType(SessionRecord).GetProperty(targetField)
-        If propInfo Is Nothing Then Return False
-        Dim vi = TryCast(propInfo.GetValue(ri), String)
-        Dim vj = TryCast(propInfo.GetValue(rj), String)
-        If String.IsNullOrWhiteSpace(vi) OrElse String.IsNullOrWhiteSpace(vj) Then Return False
-        Return String.Equals(vi.Trim(), vj.Trim(), StringComparison.OrdinalIgnoreCase)
+        If propInfo Is Nothing Then Return values
+        For i As Integer = 0 To records.Count - 1
+            Dim v = TryCast(propInfo.GetValue(records(i)), String)
+            values(i) = If(String.IsNullOrWhiteSpace(v), Nothing, v.Trim())
+        Next
+        Return values
+    End Function
+
+    Private Function TargetValuesMatch(vi As String, vj As String) As Boolean
+        If vi Is Nothing OrElse vj Is Nothing Then Return False
+        Return String.Equals(vi, vj, StringComparison.OrdinalIgnoreCase)
     End Function
 
     Private Function PearsonCorrelation(x As List(Of Double), y As List(Of Double)) As Double

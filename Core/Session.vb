@@ -65,6 +65,21 @@ Public Class Session
 
     Private Const DefaultAblageSchema As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
 
+    ' Das Token-Muster haengt ausschliesslich von den (konstanten) Platzhalter-Schluesseln ab,
+    ' nicht von deren Werten. Zuvor wurde bei JEDEM ReplacePlaceholders-Aufruf ein neuer Regex
+    ' gebaut und kompiliert - und ReplacePlaceholders laeuft bei jeder Titel-/Schema-Aenderung
+    ' sowie in jedem Cascade-Schritt erneut. Der Regex wird daher einmalig erzeugt und
+    ' wiederverwendet (nur UI-Thread; ein doppelter Aufbau waere ohnehin harmlos).
+    Private Shared _placeholderRegex As Text.RegularExpressions.Regex
+
+    Private Shared Function GetPlaceholderRegex(placeholderKeys As IEnumerable(Of String)) As Text.RegularExpressions.Regex
+        If _placeholderRegex Is Nothing Then
+            Dim placeholderPattern = String.Join("|", placeholderKeys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
+            _placeholderRegex = New Text.RegularExpressions.Regex("""([^""]*)""|" & placeholderPattern)
+        End If
+        Return _placeholderRegex
+    End Function
+
     Public Event PropertyChanged As PropertyChangedEventHandler Implements INotifyPropertyChanged.PropertyChanged
 
     Protected Sub OnPropertyChanged(propertyName As String)
@@ -251,8 +266,7 @@ Public Class Session
             {"[Absender (kurz)]", If(AbsenderKurz, String.Empty)}
         }
 
-        Dim placeholderPattern = String.Join("|", placeholderValues.Keys.Select(Function(k) Text.RegularExpressions.Regex.Escape(k)))
-        Dim tokenRegex As New Text.RegularExpressions.Regex("""([^""]*)""|" & placeholderPattern)
+        Dim tokenRegex = GetPlaceholderRegex(placeholderValues.Keys)
 
         ' Vorlage anhand von Anfuehrungszeichen-Literalen und Platzhaltern in Segmente zerlegen.
         ' Text zwischen zwei erkannten Tokens ("Gap") wird vorlaeufig als Literal markiert und im
