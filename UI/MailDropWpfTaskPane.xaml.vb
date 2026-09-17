@@ -209,12 +209,14 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ShowSuccessNotification()
+        SuccessNotification.IsHitTestVisible = True
         SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
         Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(2.5)
+        timer.Interval = TimeSpan.FromSeconds(3.75)
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
+            SuccessNotification.IsHitTestVisible = False
             SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
@@ -223,12 +225,14 @@ Public Class MailDropWpfTaskPane
 
     Private Sub ShowErrorNotification(message As String)
         ErrorNotificationText.Text = message
+        ErrorNotification.IsHitTestVisible = True
         ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
         Dim timer As New System.Windows.Threading.DispatcherTimer()
         timer.Interval = TimeSpan.FromSeconds(8)
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
+            ErrorNotification.IsHitTestVisible = False
             ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
@@ -236,12 +240,14 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ShowOverwriteWarningNotification()
+        OverwriteWarningNotification.IsHitTestVisible = True
         OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
         Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(4)
+        timer.Interval = TimeSpan.FromSeconds(6)
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
+            OverwriteWarningNotification.IsHitTestVisible = False
             OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
@@ -250,12 +256,14 @@ Public Class MailDropWpfTaskPane
 
     Private Sub ShowDuplicateWarningNotification(message As String)
         DuplicateWarningText.Text = message
+        DuplicateWarningNotification.IsHitTestVisible = True
         DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
         Dim timer As New System.Windows.Threading.DispatcherTimer()
         timer.Interval = TimeSpan.FromSeconds(5)
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
+            DuplicateWarningNotification.IsHitTestVisible = False
             DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
                 New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
         End Sub
