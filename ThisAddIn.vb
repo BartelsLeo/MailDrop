@@ -263,11 +263,57 @@ Public Class ThisAddIn
 
     Private Sub _currentExplorer_SelectionChange() Handles _currentExplorer.SelectionChange
         Debug.WriteLine("[ThisAddIn] Explorer_SelectionChange fired.")
+        ' While the pane is hidden, nobody can see PrepareSession()'s work (mail metadata read,
+        ' recent-project-path DB query, feature-distance/embedding computation against the shared
+        ' SuggestionEngine's full history), so skip it entirely instead of recomputing it on every
+        ' click through the inbox. This is intentionally just an early Return, not touching the
+        ' Explorer/_currentExplorer COM object in any way - the event subscription itself stays
+        ' fully intact (unlike the FinalReleaseComObject pitfall documented in CLAUDE.md, which
+        ' permanently killed this event). MailAblegen_Click always calls MailSelected() itself,
+        ' *before* setting taskPane.Visible = True, so the pane is guaranteed freshly prepared the
+        ' moment it becomes visible again regardless of how many selection changes were skipped
+        ' while it was hidden.
+        If taskPane Is Nothing OrElse Not taskPane.Visible Then
+            Debug.WriteLine("[ThisAddIn] SelectionChange: task pane not visible - skipping MailSelected().")
+            Return
+        End If
         Try
             MailSelected()
         Catch ex As Exception
             Debug.WriteLine($"[ThisAddIn] SelectionChange: MailSelected failed: {ex.Message}")
             Logger.LogError("SelectionChange: MailSelected", ex)
+        End Try
+    End Sub
+
+    ' Fires on every folder change in the explorer, including switching Outlook modules (Mail,
+    ' Kalender, Kontakte, ...), since each module displays its own default folder. MailDrop only
+    ' makes sense while a mail folder is shown, so the task pane is hidden as soon as the user
+    ' navigates to any non-mail folder (Kalender/Kontakte/Aufgaben/Notizen), not just the two
+    ' modules explicitly reported. Switching between mail folders (still DefaultItemType=olMailItem)
+    ' does not hide it.
+    Private Sub _currentExplorer_FolderSwitch() Handles _currentExplorer.FolderSwitch
+        Debug.WriteLine("[ThisAddIn] Explorer_FolderSwitch fired.")
+        Try
+            HideTaskPaneIfNotMailFolder()
+        Catch ex As Exception
+            Debug.WriteLine($"[ThisAddIn] FolderSwitch: HideTaskPaneIfNotMailFolder failed: {ex.Message}")
+            Logger.LogError("FolderSwitch: HideTaskPaneIfNotMailFolder", ex)
+        End Try
+    End Sub
+
+    Private Sub HideTaskPaneIfNotMailFolder()
+        If taskPane Is Nothing OrElse Not taskPane.Visible Then Return
+        Dim currentFolder As Outlook.Folder = Nothing
+        Try
+            currentFolder = TryCast(_currentExplorer.CurrentFolder, Outlook.Folder)
+            If currentFolder IsNot Nothing AndAlso currentFolder.DefaultItemType <> Outlook.OlItemType.olMailItem Then
+                Debug.WriteLine($"[ThisAddIn] FolderSwitch: left Mail module (DefaultItemType={currentFolder.DefaultItemType}) - hiding task pane.")
+                HideTaskPane()
+            End If
+        Finally
+            If currentFolder IsNot Nothing AndAlso Marshal.IsComObject(currentFolder) Then
+                Marshal.FinalReleaseComObject(currentFolder)
+            End If
         End Try
     End Sub
 
