@@ -317,6 +317,9 @@
     <Compile Include="UI\InfoPopup.xaml.vb">
       <DependentUpon>InfoPopup.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\NotificationToast.xaml.vb">
+      <DependentUpon>NotificationToast.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Core\InputChecker.vb" />
     <Compile Include="UI\MailDropRibbon.vb">
       <SubType>UserControl</SubType>
@@ -380,6 +383,9 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\InfoPopup.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\NotificationToast.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\MailDropWpfTaskPane.xaml">

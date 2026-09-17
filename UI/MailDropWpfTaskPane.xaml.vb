@@ -14,6 +14,7 @@ Public Class MailDropWpfTaskPane
     Public Property Session As New Session()
     Private infoPopup As InfoPopup = Nothing
     Private _applyingTreeViewSuggestion As Boolean = False
+    Private _activeToast As NotificationToast = Nothing
 
     Public Sub New()
         InitializeComponent()
@@ -197,20 +198,43 @@ Public Class MailDropWpfTaskPane
         End If
     End Sub
 
-    Private Sub ButtonOpenAblageordner_Click(sender As Object, e As RoutedEventArgs)
-        Dim pfad = Session.LastSuccessfulAblageordner
-        If String.IsNullOrWhiteSpace(pfad) OrElse Not Directory.Exists(pfad) Then Return
+    ' Liefert die linke obere Ecke dieses Controls in Bildschirmkoordinaten als DIPs.
+    ' PointToScreen liefert Geraetepixel; auf skalierten Bildschirmen (125 %, 150 %, ...) weichen
+    ' die von den DIP-Koordinaten ab, die Window.Left/Top erwarten - daher die Ruecktransformation
+    ' ueber CompositionTarget. Muss aufgerufen werden, SOLANGE die Pane noch sichtbar ist.
+    Private Function GetScreenTopLeftDip() As Point
+        Dim devicePoint = PointToScreen(New Point(0, 0))
+        Dim source = PresentationSource.FromVisual(Me)
+        If source Is Nothing OrElse source.CompositionTarget Is Nothing Then Return devicePoint
+        Return source.CompositionTarget.TransformFromDevice.Transform(devicePoint)
+    End Function
+
+    ' Gemeinsamer Weg fuer die drei Ausgaenge, bei denen die Ablage tatsaechlich stattgefunden hat
+    ' (Success, Overwrite, Duplicate - siehe ButtonOk_Click). Die Meldung wandert in ein eigenes
+    ' Fenster, damit die Pane sofort verschwinden kann, statt fuer die Dauer der Meldung stehen
+    ' zu bleiben. Reihenfolge ist wichtig: Position und Zielordner werden ermittelt, BEVOR die
+    ' Pane ausgeblendet wird.
+    Private Sub ShowFilingToast(kind As NotificationToast.ToastKind, message As String, visibleDuration As TimeSpan)
+        Dim anchor As New Point(0, 0)
         Try
-            Process.Start(pfad)
+            anchor = GetScreenTopLeftDip()
         Catch ex As Exception
-            Logger.LogError("ButtonOpenAblageordner_Click", ex)
-            MessageBox.Show("Ordner konnte nicht geoeffnet werden: " & ex.Message, "Oeffnen", MessageBoxButton.OK, MessageBoxImage.Error)
+            ' Lieber an einer schlechten Position anzeigen als gar nicht - die Ablage war erfolgreich.
+            Logger.LogError("ShowFilingToast: Bildschirmposition ermitteln", ex)
         End Try
+
+        Dim ablageordner = Session.LastSuccessfulAblageordner
+
+        Try
+            _activeToast?.CloseSafely()
+            _activeToast = NotificationToast.ShowToast(kind, message, ablageordner, anchor, visibleDuration)
+        Catch ex As Exception
+            Logger.LogError("ShowFilingToast: Toast anzeigen", ex)
+        End Try
+
+        HideTaskPaneAfterFiling()
     End Sub
 
-    ' Called once a fade-out that follows a *successful* filing (Success/Overwrite/Duplicate,
-    ' never Error - see ButtonOk_Click) has finished, so the task pane collapses only after the
-    ' user had the full notification duration (including a chance to click "Öffnen") to react.
     Private Sub HideTaskPaneAfterFiling()
         Try
             Globals.ThisAddIn.HideTaskPane()
@@ -219,47 +243,37 @@ Public Class MailDropWpfTaskPane
         End Try
     End Sub
 
-    ' Shared fade-in/visible/fade-out driver for all four toast Borders (Success, Error,
-    ' Overwrite, Duplicate). IsHitTestVisible is toggled around the visible window so an
-    ' invisible toast can never swallow clicks meant for whichever one is actually shown (see
-    ' CLAUDE.md). hideTaskPaneAfter controls whether the task pane auto-hides once the fade-out
-    ' Completes - True for the three outcomes that represent a completed filing (Success,
-    ' Overwrite, Duplicate), False for Error, whose ButtonOk_Click branch never reaches a
-    ' completed ProcessSession() and therefore must leave the pane open for correction.
-    Private Sub ShowNotification(notification As Border, visibleDuration As TimeSpan, hideTaskPaneAfter As Boolean)
-        notification.IsHitTestVisible = True
-        notification.BeginAnimation(UIElement.OpacityProperty,
-            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
-        Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = visibleDuration
-        AddHandler timer.Tick, Sub(s, ev)
-            timer.Stop()
-            notification.IsHitTestVisible = False
-            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
-            If hideTaskPaneAfter Then
-                AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
-            End If
-            notification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
-        End Sub
-        timer.Start()
-    End Sub
-
     Private Sub ShowSuccessNotification()
-        ShowNotification(SuccessNotification, TimeSpan.FromSeconds(3.75), hideTaskPaneAfter:=True)
-    End Sub
-
-    Private Sub ShowErrorNotification(message As String)
-        ErrorNotificationText.Text = message
-        ShowNotification(ErrorNotification, TimeSpan.FromSeconds(8), hideTaskPaneAfter:=False)
+        ShowFilingToast(NotificationToast.ToastKind.Success, Nothing, TimeSpan.FromSeconds(3.75))
     End Sub
 
     Private Sub ShowOverwriteWarningNotification()
-        ShowNotification(OverwriteWarningNotification, TimeSpan.FromSeconds(6), hideTaskPaneAfter:=True)
+        ShowFilingToast(NotificationToast.ToastKind.OverwriteWarning, Nothing, TimeSpan.FromSeconds(6))
     End Sub
 
     Private Sub ShowDuplicateWarningNotification(message As String)
-        DuplicateWarningText.Text = message
-        ShowNotification(DuplicateWarningNotification, TimeSpan.FromSeconds(5), hideTaskPaneAfter:=True)
+        ShowFilingToast(NotificationToast.ToastKind.DuplicateWarning, message, TimeSpan.FromSeconds(5))
+    End Sub
+
+    ' Der Fehlerfall bleibt bewusst INNERHALB der Pane: hier hat keine Ablage stattgefunden, der
+    ' Nutzer muss seine Eingaben korrigieren. Die Meldung gehoert also neben die Felder, die zu
+    ' korrigieren sind, und die Pane darf gerade nicht verschwinden. Damit ist ErrorNotification
+    ' die einzige verbliebene Inline-Notification - der zuvor geteilte ShowNotification-Helper
+    ' hatte nur noch diesen einen Aufrufer und ist deshalb wieder hier aufgegangen.
+    Private Sub ShowErrorNotification(message As String)
+        ErrorNotificationText.Text = message
+        ErrorNotification.IsHitTestVisible = True
+        ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
+            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
+        Dim timer As New System.Windows.Threading.DispatcherTimer()
+        timer.Interval = TimeSpan.FromSeconds(8)
+        AddHandler timer.Tick, Sub(s, ev)
+            timer.Stop()
+            ErrorNotification.IsHitTestVisible = False
+            ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
+                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+        End Sub
+        timer.Start()
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
