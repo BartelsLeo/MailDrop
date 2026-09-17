@@ -219,69 +219,47 @@ Public Class MailDropWpfTaskPane
         End Try
     End Sub
 
-    Private Sub ShowSuccessNotification()
-        SuccessNotification.IsHitTestVisible = True
-        SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
+    ' Shared fade-in/visible/fade-out driver for all four toast Borders (Success, Error,
+    ' Overwrite, Duplicate). IsHitTestVisible is toggled around the visible window so an
+    ' invisible toast can never swallow clicks meant for whichever one is actually shown (see
+    ' CLAUDE.md). hideTaskPaneAfter controls whether the task pane auto-hides once the fade-out
+    ' Completes - True for the three outcomes that represent a completed filing (Success,
+    ' Overwrite, Duplicate), False for Error, whose ButtonOk_Click branch never reaches a
+    ' completed ProcessSession() and therefore must leave the pane open for correction.
+    Private Sub ShowNotification(notification As Border, visibleDuration As TimeSpan, hideTaskPaneAfter As Boolean)
+        notification.IsHitTestVisible = True
+        notification.BeginAnimation(UIElement.OpacityProperty,
             New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
         Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(3.75)
+        timer.Interval = visibleDuration
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
-            SuccessNotification.IsHitTestVisible = False
+            notification.IsHitTestVisible = False
             Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
-            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
-            SuccessNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
+            If hideTaskPaneAfter Then
+                AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
+            End If
+            notification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
         End Sub
         timer.Start()
+    End Sub
+
+    Private Sub ShowSuccessNotification()
+        ShowNotification(SuccessNotification, TimeSpan.FromSeconds(3.75), hideTaskPaneAfter:=True)
     End Sub
 
     Private Sub ShowErrorNotification(message As String)
         ErrorNotificationText.Text = message
-        ErrorNotification.IsHitTestVisible = True
-        ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
-            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
-        Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(8)
-        AddHandler timer.Tick, Sub(s, ev)
-            timer.Stop()
-            ErrorNotification.IsHitTestVisible = False
-            ErrorNotification.BeginAnimation(UIElement.OpacityProperty,
-                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
-        End Sub
-        timer.Start()
+        ShowNotification(ErrorNotification, TimeSpan.FromSeconds(8), hideTaskPaneAfter:=False)
     End Sub
 
     Private Sub ShowOverwriteWarningNotification()
-        OverwriteWarningNotification.IsHitTestVisible = True
-        OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
-            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
-        Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(6)
-        AddHandler timer.Tick, Sub(s, ev)
-            timer.Stop()
-            OverwriteWarningNotification.IsHitTestVisible = False
-            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
-            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
-            OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
-        End Sub
-        timer.Start()
+        ShowNotification(OverwriteWarningNotification, TimeSpan.FromSeconds(6), hideTaskPaneAfter:=True)
     End Sub
 
     Private Sub ShowDuplicateWarningNotification(message As String)
         DuplicateWarningText.Text = message
-        DuplicateWarningNotification.IsHitTestVisible = True
-        DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
-            New DoubleAnimation(0, 1, New Duration(TimeSpan.FromMilliseconds(250))))
-        Dim timer As New System.Windows.Threading.DispatcherTimer()
-        timer.Interval = TimeSpan.FromSeconds(5)
-        AddHandler timer.Tick, Sub(s, ev)
-            timer.Stop()
-            DuplicateWarningNotification.IsHitTestVisible = False
-            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
-            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
-            DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
-        End Sub
-        timer.Start()
+        ShowNotification(DuplicateWarningNotification, TimeSpan.FromSeconds(5), hideTaskPaneAfter:=True)
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
