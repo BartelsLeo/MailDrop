@@ -75,21 +75,41 @@ Public Class SessionDatabaseManager
         End Using
     End Function
 
-    Public Function LoadComputedWeights(targetField As String) As Dictionary(Of String, Double)
-        Dim result As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+    ' Laedt die Gewichte aller TargetFields in EINER Query/Verbindung. Zuvor wurde pro TargetField
+    ' einzeln geladen, was beim Erzeugen der SuggestionEngine sieben separate SQLite-Verbindungen
+    ' oeffnete - und das liegt im Startpfad, der laut CLAUDE.md ohnehin unter Beobachtung steht
+    ' (Outlook-Watchdog fuer langsame Add-Ins).
+    Public Function LoadAllComputedWeights() As Dictionary(Of String, Dictionary(Of String, Double))
+        Dim result As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
-            Dim sql As String = "SELECT FeatureName, Weight FROM ComputedWeights WHERE TargetField = @targetField"
-            Using cmd As New SQLiteCommand(sql, conn)
-                cmd.Parameters.AddWithValue("@targetField", targetField)
+            Using cmd As New SQLiteCommand("SELECT TargetField, FeatureName, Weight FROM ComputedWeights", conn)
                 Using reader As SQLiteDataReader = cmd.ExecuteReader()
                     While reader.Read()
-                        result(reader("FeatureName").ToString()) = Convert.ToDouble(reader("Weight"))
+                        Dim targetField = reader("TargetField").ToString()
+                        Dim inner As Dictionary(Of String, Double) = Nothing
+                        If Not result.TryGetValue(targetField, inner) Then
+                            inner = New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+                            result(targetField) = inner
+                        End If
+                        inner(reader("FeatureName").ToString()) = Convert.ToDouble(reader("Weight"))
                     End While
                 End Using
             End Using
         End Using
         Return result
+    End Function
+
+    ' Tolerantes Datums-Parsing: eine einzige unlesbare/NULL-Zelle darf nicht den kompletten
+    ' GetAllSessionRecords-Aufruf per FormatException abbrechen (das wuerde die gesamte Historie
+    ' und damit alle Vorschlaege stillschweigend deaktivieren, da die Aufrufer nur catchen und
+    ' mit leerer Liste weiterlaufen). Date.MinValue ist bereits der etablierte "fehlt"-Sentinel,
+    ' den SuggestionEngine.DateDistanceInDays auswertet.
+    Private Shared Function ParseDateOrMin(value As Object) As DateTime
+        If value Is Nothing OrElse value Is DBNull.Value Then Return Date.MinValue
+        Dim parsed As DateTime
+        If DateTime.TryParse(value.ToString(), parsed) Then Return parsed
+        Return Date.MinValue
     End Function
 
     Public Sub SaveComputedWeights(targetField As String, weights As Dictionary(Of String, Double), recordCount As Integer)
@@ -303,7 +323,12 @@ Public Class SessionDatabaseManager
         Dim result As New List(Of String)()
         Using conn As New SQLiteConnection(connectionString)
             conn.Open()
-            Dim sql As String = "SELECT DISTINCT ProjektPfad FROM Sessions WHERE AusfueBenutzer = @benutzer AND ProjektPfad IS NOT NULL AND ProjektPfad <> '' ORDER BY AusfueDatum DESC LIMIT 10"
+            ' GROUP BY + MAX(AusfueDatum) statt SELECT DISTINCT + ORDER BY AusfueDatum: bei DISTINCT
+            ' werden die Zeilen zuerst zusammengefasst und SQLite sortiert danach nach einem
+            ' beliebigen (faktisch dem aeltesten) AusfueDatum der Gruppe. Ein Projekt, das vor
+            ' langer Zeit einmal und gerade eben wieder benutzt wurde, landete dadurch hinten
+            ' statt vorne - die Liste war also nicht nach "zuletzt benutzt" sortiert.
+            Dim sql As String = "SELECT ProjektPfad FROM Sessions WHERE AusfueBenutzer = @benutzer AND ProjektPfad IS NOT NULL AND ProjektPfad <> '' GROUP BY ProjektPfad ORDER BY MAX(AusfueDatum) DESC LIMIT 10"
             Using cmd As New SQLiteCommand(sql, conn)
                 cmd.Parameters.AddWithValue("@benutzer", benutzer)
                 Using reader As SQLiteDataReader = cmd.ExecuteReader()
@@ -334,7 +359,7 @@ Public Class SessionDatabaseManager
                     While reader.Read()
                         Dim s As New SessionRecord With {
                             .ID = Convert.ToInt32(reader("ID")),
-                            .AusfueDatum = DateTime.Parse(reader("AusfueDatum").ToString()),
+                            .AusfueDatum = ParseDateOrMin(reader("AusfueDatum")),
                             .AusfueBenutzer = reader("AusfueBenutzer").ToString(),
                             .Betreff = reader("Betreff").ToString(),
                             .BetreffEmbedded = If(reader("BetreffEmbedded") IsNot DBNull.Value, DatabaseUtils.BytesToFloats(CType(reader("BetreffEmbedded"), Byte())), Nothing),
@@ -342,7 +367,7 @@ Public Class SessionDatabaseManager
                             .AbsenderDomain = reader("AbsenderDomain").ToString(),
                             .AbsenderKurz = reader("AbsenderKurz").ToString(),
                             .Empfaenger = reader("Empfaenger").ToString(),
-                            .Datum = DateTime.Parse(reader("Datum").ToString()),
+                            .Datum = ParseDateOrMin(reader("Datum")),
                             .DatumFormatiert = reader("DatumFormatiert").ToString(),
                             .ProjektPfad = reader("ProjektPfad").ToString(),
                             .ProjektstrukturPfad = reader("ProjektstrukturPfad").ToString(),
