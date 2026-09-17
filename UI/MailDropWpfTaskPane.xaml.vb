@@ -208,6 +208,17 @@ Public Class MailDropWpfTaskPane
         End Try
     End Sub
 
+    ' Called once a fade-out that follows a *successful* filing (Success/Overwrite/Duplicate,
+    ' never Error - see ButtonOk_Click) has finished, so the task pane collapses only after the
+    ' user had the full notification duration (including a chance to click "Öffnen") to react.
+    Private Sub HideTaskPaneAfterFiling()
+        Try
+            Globals.ThisAddIn.HideTaskPane()
+        Catch ex As Exception
+            Logger.LogError("HideTaskPaneAfterFiling", ex)
+        End Try
+    End Sub
+
     Private Sub ShowSuccessNotification()
         SuccessNotification.IsHitTestVisible = True
         SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
@@ -217,8 +228,9 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             SuccessNotification.IsHitTestVisible = False
-            SuccessNotification.BeginAnimation(UIElement.OpacityProperty,
-                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
+            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
+            SuccessNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
         End Sub
         timer.Start()
     End Sub
@@ -248,8 +260,9 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             OverwriteWarningNotification.IsHitTestVisible = False
-            OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty,
-                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
+            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
+            OverwriteWarningNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
         End Sub
         timer.Start()
     End Sub
@@ -264,8 +277,9 @@ Public Class MailDropWpfTaskPane
         AddHandler timer.Tick, Sub(s, ev)
             timer.Stop()
             DuplicateWarningNotification.IsHitTestVisible = False
-            DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty,
-                New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600))))
+            Dim fadeOut As New DoubleAnimation(1, 0, New Duration(TimeSpan.FromMilliseconds(600)))
+            AddHandler fadeOut.Completed, Sub(s2, ev2) HideTaskPaneAfterFiling()
+            DuplicateWarningNotification.BeginAnimation(UIElement.OpacityProperty, fadeOut)
         End Sub
         timer.Start()
     End Sub

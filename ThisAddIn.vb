@@ -271,6 +271,38 @@ Public Class ThisAddIn
         End Try
     End Sub
 
+    ' Fires on every folder change in the explorer, including switching Outlook modules (Mail,
+    ' Kalender, Kontakte, ...), since each module displays its own default folder. MailDrop only
+    ' makes sense while a mail folder is shown, so the task pane is hidden as soon as the user
+    ' navigates to any non-mail folder (Kalender/Kontakte/Aufgaben/Notizen), not just the two
+    ' modules explicitly reported. Switching between mail folders (still DefaultItemType=olMailItem)
+    ' does not hide it.
+    Private Sub _currentExplorer_FolderSwitch() Handles _currentExplorer.FolderSwitch
+        Debug.WriteLine("[ThisAddIn] Explorer_FolderSwitch fired.")
+        Try
+            HideTaskPaneIfNotMailFolder()
+        Catch ex As Exception
+            Debug.WriteLine($"[ThisAddIn] FolderSwitch: HideTaskPaneIfNotMailFolder failed: {ex.Message}")
+            Logger.LogError("FolderSwitch: HideTaskPaneIfNotMailFolder", ex)
+        End Try
+    End Sub
+
+    Private Sub HideTaskPaneIfNotMailFolder()
+        If taskPane Is Nothing OrElse Not taskPane.Visible Then Return
+        Dim currentFolder As Outlook.Folder = Nothing
+        Try
+            currentFolder = TryCast(_currentExplorer.CurrentFolder, Outlook.Folder)
+            If currentFolder IsNot Nothing AndAlso currentFolder.DefaultItemType <> Outlook.OlItemType.olMailItem Then
+                Debug.WriteLine($"[ThisAddIn] FolderSwitch: left Mail module (DefaultItemType={currentFolder.DefaultItemType}) - hiding task pane.")
+                HideTaskPane()
+            End If
+        Finally
+            If currentFolder IsNot Nothing AndAlso Marshal.IsComObject(currentFolder) Then
+                Marshal.FinalReleaseComObject(currentFolder)
+            End If
+        End Try
+    End Sub
+
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
         ' If a future error.log never shows this line before the next "Startup entered", Outlook
         ' (or the whole process) was killed/crashed rather than exited normally - useful to tell
