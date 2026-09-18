@@ -319,35 +319,53 @@ Public Class SuggestionEngine
         Return String.Empty
     End Function
 
+    ' Rueckgabe-Konvention: Nothing bedeutet "kein Vorschlag gefunden" (Cascade ueberspringt den
+    ' Schritt). String.Empty ist ein GUELTIGER Vorschlag - z.B. der TreeView-Root-Knoten
+    ' "Projektpfad" (direkte Ablage in ProjektPfad, RelativePath=String.Empty, siehe
+    ' DirectoryTreeHelper). Vorher kollabierte String.Empty beide Faelle ("nichts gefunden" UND
+    ' "leerer Wert vorgeschlagen") auf denselben Rueckgabewert, wodurch ein leerer
+    ' ProjektstrukturPfad in der Historie nie als Vorschlag ankommen konnte, selbst wenn er der
+    ' beste Treffer war. requireNonEmptyField:=False laesst solche Records ueberhaupt erst als
+    ' Kandidaten zu (FindRecordsSortedByScore filtert sie sonst per Default heraus).
     Public Function SuggestProjektstrukturPfad(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return String.Empty
-        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), minScore:=SuggestionScoreThreshold)
-            If Not String.IsNullOrWhiteSpace(record.ProjektstrukturPfad) Then
-                Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
-                If IO.Directory.Exists(fullPath) Then
-                    Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
-                    Return record.ProjektstrukturPfad
-                End If
-                Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: skipping non-existent '{fullPath}'")
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return Nothing
+        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+            ' Path.Combine(ProjektPfad, "") = ProjektPfad selbst - existiert bereits validiert.
+            Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
+            If IO.Directory.Exists(fullPath) Then
+                Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
+                Return record.ProjektstrukturPfad
             End If
+            Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: skipping non-existent '{fullPath}'")
         Next
-        Return String.Empty
+        Return Nothing
     End Function
 
+    ' Selbe Nothing/String.Empty-Konvention wie SuggestProjektstrukturPfad: ein leerer Titel ist
+    ' ein gueltiger, historisch beobachteter Wert (nicht jede Mail bekommt einen Titel), kein
+    ' "nichts gefunden"-Signal.
     Public Function SuggestTitel(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel", minScore:=SuggestionScoreThreshold)?.Titel, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        Dim best = FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+        Return If(best Is Nothing, Nothing, best.Titel)
     End Function
 
+    ' Selbe Nothing/String.Empty-Konvention wie SuggestProjektstrukturPfad/SuggestTitel: ein leerer
+    ' Absender (kurz) ist ein gueltiger historischer Wert, kein "nichts gefunden"-Signal.
     Public Function SuggestAbsenderKurz(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz", minScore:=SuggestionScoreThreshold)?.AbsenderKurz, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        Dim best = FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+        Return If(best Is Nothing, Nothing, best.AbsenderKurz)
     End Function
 
+    ' Hier kollidiert der "nichts gefunden"-Fall nicht mit einem gueltigen leeren Ablageordner-
+    ' Schema, weil dessen Sentinel DefaultSchemaTemplate ist (nie leer) statt String.Empty - anders
+    ' als bei Titel/AbsenderKurz/ProjektstrukturPfad reicht hier requireNonEmptyField:=False allein;
+    ' best?.AblageordnerSchema liefert bereits korrekt "" durch, wenn best gefunden wurde.
     Public Function SuggestAblageordnerSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return DefaultSchemaTemplate
-        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema", minScore:=SuggestionScoreThreshold)
+        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
         Return If(best?.AblageordnerSchema, DefaultSchemaTemplate)
     End Function
 
@@ -373,7 +391,7 @@ Public Class SuggestionEngine
         Try
             If startFrom <= CascadeStep.ProjektstrukturPfad Then
                 Dim suggested = SuggestProjektstrukturPfad(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestProjektstrukturPfad(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: ProjektstrukturPfad übersprungen")
@@ -382,7 +400,7 @@ Public Class SuggestionEngine
 
             If startFrom <= CascadeStep.Titel Then
                 Dim suggested = SuggestTitel(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestTitel(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: Titel übersprungen")
@@ -391,16 +409,20 @@ Public Class SuggestionEngine
 
             If startFrom <= CascadeStep.AbsenderKurz Then
                 Dim suggested = SuggestAbsenderKurz(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestAbsenderKurz(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: AbsenderKurz übersprungen")
                 End If
             End If
 
+            ' SuggestAblageordnerSchema gibt nie Nothing zurueck (Sentinel fuer "nichts gefunden"
+            ' ist DefaultSchemaTemplate, siehe dort) - dieser Zweig wendet daher immer an, auch den
+            ' Default. Als IsNot-Nothing-Check geschrieben, um dieselbe Struktur wie die anderen
+            ' Cascade-Schritte zu behalten.
             If startFrom <= CascadeStep.AblageordnerSchema Then
                 Dim suggested = SuggestAblageordnerSchema(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestAblageordnerSchema(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: AblageordnerSchema übersprungen")
@@ -766,6 +788,43 @@ Public Class SuggestionEngine
 
     ' === Korrelationsbasierte Gewichtsberechnung ===
 
+    ' Geometrischer statt fixer Recalc-Trigger: neu berechnen, wenn recordCount eines der
+    ' geometrisch wachsenden "Meilenstein"-Folgenglieder 1, 2, 3, 4, 5, 7, 9, 12, 15, 19, 24, 30,
+    ' 38, 48, 60, 75, 94, ... (milestone_(i+1) = max(milestone_i + 1, ceil(milestone_i *
+    ' growthFactor)), milestone_0 = 0) ist, statt bei jedem n-ten Datensatz. Grund:
+    ' RecalculateWeightsFromHistory ist O(n^2) (Paarschleife ueber alle Records x 7 Zielfelder),
+    ' waehrend der statistische Nutzen weiterer Datenpunkte mit O(1/sqrt(n)) abnimmt
+    ' (Pearson-Schaetzer). Ein fixes Intervall (z.B. alle 50) fuehrt zu kubisch wachsenden
+    ' Lebenszeit-Gesamtkosten (Summe von (50i)^2 ueber alle Meilensteine ~ n^3), da spaete, teure
+    ' Neuberechnungen genauso oft anfallen wie fruehe, guenstige. Die geometrische Folge braucht
+    ' dagegen nur O(log n) Meilensteine ueber die Lebenszeit; da jede Stufe um growthFactor
+    ' groesser ist als die vorherige, ist die kumulierte Kost von der jeweils letzten (groessten)
+    ' Neuberechnung dominiert - die Gesamtkosten bleiben ein konstantes Vielfaches (~ growthFactor^2 /
+    ' (growthFactor^2 - 1), fuer 1.25 also Faktor ~2.3) der Kosten einer einzigen Neuberechnung bei
+    ' aktueller Groesse, statt unbegrenzt zu wachsen. Frueh loest das nahezu bei jeder Ablage aus,
+    ' wo die Neuberechnung noch billig ist und jeder zusaetzliche Datenpunkt die Gewichte noch
+    ' spuerbar veraendern kann; spaeter werden die Abstaende automatisch groesser.
+    '
+    ' Die Meilenstein-Folge selbst haengt nur von growthFactor ab, nicht davon, ob/wann eine
+    ' vorherige Neuberechnung tatsaechlich stattfand oder in ComputedWeights geschrieben wurde -
+    ' recordCount allein reicht daher aus, um per Simulation zu entscheiden, ob es ein
+    ' Folgenglied ist. Das ersetzt einen fruehreren Entwurf, der zusaetzlich den RecordCount der
+    ' letzten erfolgreichen Neuberechnung aus der DB nachschlug (SessionDatabaseManager.
+    ' GetLastWeightRecalcRecordCount(), inzwischen wieder entfernt): unnoetig, da die Folge
+    ' ohnehin deterministisch ist, und eine DB-Abfrage bei jeder Ablage spart. Die Schleife
+    ' braucht dank geometrischen Wachstums nur O(log_growthFactor(recordCount)) Schritte
+    ' (~40 bei 10.000 Datensaetzen und growthFactor=1.25) - vernachlaessigbar gegenueber der
+    ' bisherigen SQLite-Abfrage, geschweige denn gegenueber RecalculateWeightsFromHistory selbst.
+    Friend Shared Function ShouldRecalculateWeights(recordCount As Integer, Optional growthFactor As Double = 1.25) As Boolean
+        If recordCount <= 0 Then Return False
+        Dim milestone As Integer = 0
+        Do
+            milestone = Math.Max(milestone + 1, CInt(Math.Ceiling(milestone * growthFactor)))
+            If milestone = recordCount Then Return True
+        Loop While milestone < recordCount
+        Return False
+    End Function
+
     Public Sub RecalculateWeightsFromHistory()
         Dim records As List(Of SessionRecord)
         Try
@@ -993,11 +1052,14 @@ Public Class SuggestionEngine
         End If
         Dim propInfo = GetType(SessionRecord).GetProperty(targetField)
         If propInfo Is Nothing Then Return
+        ' Ein leerer Zielwert ist ein gueltiger, eigenstaendiger Wert (z.B. Titel oder
+        ' ProjektstrukturPfad leer gelassen) und zaehlt daher als eigene Kategorie mit, statt
+        ' herausgefiltert zu werden - sonst wuerde die Gewichtung nie lernen, wie gut Features
+        ' einen "leer bleibt es"-Fall vorhersagen.
         Dim valueCounts As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
         For Each record In records
             Dim v = TryCast(propInfo.GetValue(record), String)
-            If String.IsNullOrWhiteSpace(v) Then Continue For
-            Dim key = v.Trim()
+            Dim key = If(v, String.Empty).Trim()
             If Not valueCounts.ContainsKey(key) Then valueCounts(key) = 0
             valueCounts(key) += 1
         Next
@@ -1038,8 +1100,10 @@ Public Class SuggestionEngine
     ' Liest den Zielwert jedes Records EINMAL aus, statt ihn (wie zuvor) per Reflection fuer jedes
     ' der O(n^2) Record-Paare erneut zu ermitteln: bei 500 Records sind das 124.750 Paare * 2
     ' GetProperty/GetValue-Aufrufe pro TargetField, also ueber eine Million Reflection-Aufrufe je
-    ' Gewichtsneuberechnung. Nothing bedeutet "leer" und matcht nie - exakt wie die alte
-    ' String.IsNullOrWhiteSpace-Pruefung im vorherigen paarweisen Vergleich.
+    ' Gewichtsneuberechnung. Ein leerer Zielwert wird zu String.Empty normalisiert statt (wie
+    ' zuvor) zu Nothing - Nothing bedeutete "matcht nie", wodurch zwei Records, die beide denselben
+    ' Zielwert leer gelassen haben, nie als "gleich" fuer das Pearson-Label gezaehlt wurden, selbst
+    ' wenn "leer" der historisch haeufigste/konsistenteste Wert war.
     Private Function GetTargetValues(records As List(Of SessionRecord), targetField As String) As String()
         Dim values(records.Count - 1) As String
         If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
@@ -1052,13 +1116,14 @@ Public Class SuggestionEngine
         If propInfo Is Nothing Then Return values
         For i As Integer = 0 To records.Count - 1
             Dim v = TryCast(propInfo.GetValue(records(i)), String)
-            values(i) = If(String.IsNullOrWhiteSpace(v), Nothing, v.Trim())
+            values(i) = If(v, String.Empty).Trim()
         Next
         Return values
     End Function
 
+    ' Reiner Wertevergleich - GetTargetValues liefert nie mehr Nothing (auch ein leerer Zielwert
+    ' ist String.Empty, kein "unbekannt"), daher kein Nothing-Sonderfall mehr noetig.
     Private Function TargetValuesMatch(vi As String, vj As String) As Boolean
-        If vi Is Nothing OrElse vj Is Nothing Then Return False
         Return String.Equals(vi, vj, StringComparison.OrdinalIgnoreCase)
     End Function
 

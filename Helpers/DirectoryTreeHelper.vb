@@ -2,17 +2,35 @@ Imports System.Collections.ObjectModel
 Imports System.IO
 
 Public Module DirectoryTreeHelper
-    ' Erstellt die Directory-Struktur f�r das TreeView
+    ' Erstellt die Directory-Struktur f�r das TreeView. Das TreeView zeigt nicht direkt die
+    ' Kinder von ProjektPfad als Root-Ebene, sondern einen einzigen synthetischen Root-Knoten
+    ' "Projektpfad" (RelativePath=String.Empty, FullPath=projektPfad), dessen Children die
+    ' bisherige erste Ebene sind. Grund: ohne diesen Knoten gibt es in einem WPF TreeView keine
+    ' Moeglichkeit, die Selektion aufzuheben (z.B. durch Klick in eine leere Flaeche) - sobald
+    ' einmal ein Unterordner selektiert wurde, konnte ProjektPfad selbst als Ziel fuer "Neuer
+    ' Ordner"/ProjektstrukturPfad nicht mehr erreicht werden. Der Root-Knoten ist regulaer
+    ' selektierbar (RelativePath=String.Empty gilt als gueltige ProjektstrukturPfad-Auswahl,
+    ' siehe InputChecker.CheckInput) und startet immer aufgeklappt (unabhaengig von
+    ' expandByDefault), damit die bisherige erste Ebene weiterhin ohne zusaetzlichen Klick
+    ' sichtbar ist.
     Public Function BuildDirectoryTree(projektPfad As String) As ObservableCollection(Of DirectoryNode)
+        Dim result As New ObservableCollection(Of DirectoryNode)()
         If String.IsNullOrEmpty(projektPfad) OrElse Not Directory.Exists(projektPfad) Then
-            Return New ObservableCollection(Of DirectoryNode)()
+            Return result
         End If
-        Dim rootChildren As New ObservableCollection(Of DirectoryNode)()
+        Dim rootNode As New DirectoryNode With {
+            .Name = "Projektpfad",
+            .FullPath = projektPfad,
+            .RelativePath = String.Empty,
+            .Children = New ObservableCollection(Of DirectoryNode)(),
+            .IsExpanded = True
+        }
         For Each dir As String In Directory.GetDirectories(projektPfad)
             Dim childNode As DirectoryNode = CreateDirectoryNodeWithExpand(dir, 1, projektPfad, expandByDefault:=False)
-            rootChildren.Add(childNode)
+            rootNode.Children.Add(childNode)
         Next
-        Return rootChildren
+        result.Add(rootNode)
+        Return result
     End Function
 
     ' level: 1 = erste Ebene unter ProjektPfad
@@ -61,6 +79,13 @@ Public Module DirectoryTreeHelper
     ' bereits vorhandenen Knotens. Gibt False zurueck, wenn der Elternknoten nicht gefunden
     ' wurde (Baum bleibt dann unveraendert - Aufrufer sollte auf BuildDirectoryTree() zurueckfallen).
     Public Function RefreshChildren(rootChildren As ObservableCollection(Of DirectoryNode), projektPfad As String, parentFullPath As String) As Boolean
+        ' rootChildren enthaelt genau den einen synthetischen "Projektpfad"-Knoten (siehe
+        ' BuildDirectoryTree). "Root-Ebene" bedeutet daher jetzt: dessen Children ersetzen.
+        Dim projectRootNode = If(rootChildren.Count > 0, rootChildren(0), Nothing)
+        If projectRootNode Is Nothing Then
+            Return False
+        End If
+
         Dim normalizedParent = parentFullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
         Dim normalizedProjekt = projektPfad.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
 
@@ -68,7 +93,8 @@ Public Module DirectoryTreeHelper
         Dim parentLevel As Integer
 
         If String.Equals(normalizedParent, normalizedProjekt, StringComparison.OrdinalIgnoreCase) Then
-            targetChildren = rootChildren
+            projectRootNode.IsExpanded = True
+            targetChildren = projectRootNode.Children
             parentLevel = 0
         Else
             Dim parentNode = FindNodeByFullPath(rootChildren, normalizedParent)

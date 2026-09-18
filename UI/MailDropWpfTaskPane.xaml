@@ -226,7 +226,7 @@
                         <ColumnDefinition Width="24"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="150"/>
+                        <RowDefinition Height="300"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TreeView x:Name="TreeView1" ItemsSource="{Binding TreeViewData}"

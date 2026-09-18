@@ -54,11 +54,15 @@ Public Class NotificationToast
             Logger.LogError("NotificationToast: Owner-Fenster setzen", ex)
         End Try
 
-        ' Horizontal buendig zur linken Kante der Sidebar: der Schattenrand bildet dabei genau
-        ' die Einrueckung nach, die die fruehere Inline-Notification per Margin="14,..." hatte.
-        ' Vertikal wird der Schattenrand herausgerechnet, damit die SICHTBARE Oberkante des
-        ' Toasts exakt auf der Oberkante der Sidebar liegt.
-        toast.Left = screenTopLeft.X
+        ' ShadowMargin wird auf BEIDEN Achsen herausgerechnet (die 14px sind ein Grid.Margin auf
+        ' allen vier Seiten, siehe NotificationToast.xaml), damit die SICHTBARE linke und obere
+        ' Kante des Toasts exakt auf der linken/oberen Kante der Sidebar liegt - unabhaengig von
+        ' screenTopLeft, robust gegen Fensterposition/DPI. Fruehere Version rechnete den Rand nur
+        ' vertikal heraus und liess den Toast horizontal 14px in die Sidebar hinein eingerueckt,
+        ' um das Margin="14,..." der laengst entfernten Inline-Notification nachzubilden - das sah
+        ' neben der buendigen Oberkante schief aus, da links und oben unterschiedlich behandelt
+        ' wurden, ohne dass das noch einem noch sichtbaren Bezugspunkt entsprach.
+        toast.Left = screenTopLeft.X - ShadowMargin
         toast.Top = screenTopLeft.Y - ShadowMargin
 
         toast.Show()

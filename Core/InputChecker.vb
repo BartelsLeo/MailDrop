@@ -84,7 +84,12 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte wählen Sie einen gültigen Projektpfad aus."
             Return result
         End If
-        If String.IsNullOrWhiteSpace(session.ProjektstrukturPfad) Then
+        ' ProjektstrukturPfad = Nothing bedeutet "noch nichts ausgewaehlt" (ungueltig).
+        ' ProjektstrukturPfad = String.Empty bedeutet "der Projektpfad-Root-Knoten wurde explizit
+        ' ausgewaehlt" (gueltig - Mail wird direkt in ProjektPfad abgelegt, siehe TreeView-Root-Knoten
+        ' in DirectoryTreeHelper.BuildDirectoryTree). Nicht IsNullOrWhiteSpace verwenden, da das auch
+        ' den gueltigen leeren String ablehnen wuerde.
+        If session.ProjektstrukturPfad Is Nothing Then
             result.ErrorMessage = "Bitte wählen Sie eine gültige Projektstruktur aus."
             Return result
         End If

@@ -139,7 +139,11 @@ Public Class Session
             Return _projektstrukturPfad
         End Get
         Set(value As String)
-            If _projektstrukturPfad <> value Then
+            ' String.Equals statt <>: VB behandelt Nothing und "" bei <> als gleich, wuerde also
+            ' den Wechsel von "noch nichts ausgewaehlt" (Nothing) zu "Projektpfad-Root ausgewaehlt"
+            ' (String.Empty, der neue synthetische Root-Knoten) faelschlich als Nicht-Aenderung
+            ' verwerfen - genau die Unterscheidung, auf die InputChecker.CheckInput angewiesen ist.
+            If Not String.Equals(_projektstrukturPfad, value) Then
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
@@ -684,7 +688,7 @@ Public Class Session
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
         SuggestionEngine.GetSharedInstance().AppendHistoricalRecord(newRecord)
         Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
-        If recordCount Mod 50 = 0 Then
+        If SuggestionEngine.ShouldRecalculateWeights(recordCount) Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
         End If
         ' Warnungswerte und Zielordner vor Reset() sichern, da Reset() sie löscht.
