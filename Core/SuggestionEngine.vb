@@ -788,25 +788,41 @@ Public Class SuggestionEngine
 
     ' === Korrelationsbasierte Gewichtsberechnung ===
 
-    ' Geometrischer statt fixer Recalc-Trigger: neu berechnen sobald die Datenmenge seit der
-    ' letzten erfolgreichen Neuberechnung um growthFactor gewachsen ist, statt bei jedem
-    ' n-ten Datensatz. Grund: RecalculateWeightsFromHistory ist O(n^2) (Paarschleife ueber alle
-    ' Records x 7 Zielfelder), waehrend der statistische Nutzen weiterer Datenpunkte mit O(1/sqrt(n))
-    ' abnimmt (Pearson-Schaetzer). Ein fixes Intervall (z.B. alle 50) fuehrt zu kubisch wachsenden
+    ' Geometrischer statt fixer Recalc-Trigger: neu berechnen, wenn recordCount eines der
+    ' geometrisch wachsenden "Meilenstein"-Folgenglieder 1, 2, 3, 4, 5, 7, 9, 12, 15, 19, 24, 30,
+    ' 38, 48, 60, 75, 94, ... (milestone_(i+1) = max(milestone_i + 1, ceil(milestone_i *
+    ' growthFactor)), milestone_0 = 0) ist, statt bei jedem n-ten Datensatz. Grund:
+    ' RecalculateWeightsFromHistory ist O(n^2) (Paarschleife ueber alle Records x 7 Zielfelder),
+    ' waehrend der statistische Nutzen weiterer Datenpunkte mit O(1/sqrt(n)) abnimmt
+    ' (Pearson-Schaetzer). Ein fixes Intervall (z.B. alle 50) fuehrt zu kubisch wachsenden
     ' Lebenszeit-Gesamtkosten (Summe von (50i)^2 ueber alle Meilensteine ~ n^3), da spaete, teure
-    ' Neuberechnungen genauso oft anfallen wie fruehe, guenstige. Ein geometrischer Trigger braucht
-    ' dagegen nur O(log n) Neuberechnungen ueber die Lebenszeit; da jede Stufe um growthFactor
+    ' Neuberechnungen genauso oft anfallen wie fruehe, guenstige. Die geometrische Folge braucht
+    ' dagegen nur O(log n) Meilensteine ueber die Lebenszeit; da jede Stufe um growthFactor
     ' groesser ist als die vorherige, ist die kumulierte Kost von der jeweils letzten (groessten)
     ' Neuberechnung dominiert - die Gesamtkosten bleiben ein konstantes Vielfaches (~ growthFactor^2 /
     ' (growthFactor^2 - 1), fuer 1.25 also Faktor ~2.3) der Kosten einer einzigen Neuberechnung bei
-    ' aktueller Groesse, statt unbegrenzt zu wachsen. Frueh (kleines lastRecalcCount) loest das nahezu
-    ' bei jeder Ablage aus, wo die Neuberechnung noch billig ist und jeder zusaetzliche Datenpunkt
-    ' die Gewichte noch spuerbar veraendern kann; spaeter werden die Abstaende automatisch groesser.
-    ' Math.Max stellt sicher, dass bei lastRecalcCount=0 (noch nie berechnet) sofort bei der ersten
-    ' Ablage ausgeloest wird, statt durch ceil(0 * growthFactor) = 0 nie zu triggern.
-    Friend Shared Function ShouldRecalculateWeights(recordCount As Integer, lastRecalcCount As Integer, Optional growthFactor As Double = 1.25) As Boolean
-        Dim nextThreshold = Math.Max(lastRecalcCount + 1, CInt(Math.Ceiling(lastRecalcCount * growthFactor)))
-        Return recordCount >= nextThreshold
+    ' aktueller Groesse, statt unbegrenzt zu wachsen. Frueh loest das nahezu bei jeder Ablage aus,
+    ' wo die Neuberechnung noch billig ist und jeder zusaetzliche Datenpunkt die Gewichte noch
+    ' spuerbar veraendern kann; spaeter werden die Abstaende automatisch groesser.
+    '
+    ' Die Meilenstein-Folge selbst haengt nur von growthFactor ab, nicht davon, ob/wann eine
+    ' vorherige Neuberechnung tatsaechlich stattfand oder in ComputedWeights geschrieben wurde -
+    ' recordCount allein reicht daher aus, um per Simulation zu entscheiden, ob es ein
+    ' Folgenglied ist. Das ersetzt einen fruehreren Entwurf, der zusaetzlich den RecordCount der
+    ' letzten erfolgreichen Neuberechnung aus der DB nachschlug (SessionDatabaseManager.
+    ' GetLastWeightRecalcRecordCount(), inzwischen wieder entfernt): unnoetig, da die Folge
+    ' ohnehin deterministisch ist, und eine DB-Abfrage bei jeder Ablage spart. Die Schleife
+    ' braucht dank geometrischen Wachstums nur O(log_growthFactor(recordCount)) Schritte
+    ' (~40 bei 10.000 Datensaetzen und growthFactor=1.25) - vernachlaessigbar gegenueber der
+    ' bisherigen SQLite-Abfrage, geschweige denn gegenueber RecalculateWeightsFromHistory selbst.
+    Friend Shared Function ShouldRecalculateWeights(recordCount As Integer, Optional growthFactor As Double = 1.25) As Boolean
+        If recordCount <= 0 Then Return False
+        Dim milestone As Integer = 0
+        Do
+            milestone = Math.Max(milestone + 1, CInt(Math.Ceiling(milestone * growthFactor)))
+            If milestone = recordCount Then Return True
+        Loop While milestone < recordCount
+        Return False
     End Function
 
     Public Sub RecalculateWeightsFromHistory()

@@ -137,23 +137,6 @@ Public Class SessionDatabaseManager
         End Using
     End Sub
 
-    ' Liest den RecordCount der letzten erfolgreichen Gewichtsneuberechnung direkt aus
-    ' ComputedWeights, statt ihn separat zu speichern: SaveComputedWeights schreibt fuer alle
-    ' TargetFields einer Neuberechnung denselben records.Count-Wert (ein Run laedt die Historie
-    ' einmal und iteriert dieselbe records-Liste ueber alle TargetFields), daher ist MAX(RecordCount)
-    ' ueber die ganze Tabelle bereits genau dieser Wert - kein eigenes Schema/keine eigene
-    ' Migration fuer den geometrischen Recalc-Trigger noetig. 0, wenn noch nie erfolgreich
-    ' neu berechnet wurde (leere/neue Tabelle), was den Trigger absichtlich sofort/sehr haeufig
-    ' auslösen laesst.
-    Public Function GetLastWeightRecalcRecordCount() As Integer
-        Using conn As New SQLiteConnection(connectionString)
-            conn.Open()
-            Using cmd As New SQLiteCommand("SELECT COALESCE(MAX(RecordCount), 0) FROM ComputedWeights", conn)
-                Return Convert.ToInt32(cmd.ExecuteScalar())
-            End Using
-        End Using
-    End Function
-
     Private Sub CreateSessionTable(conn As SQLiteConnection)
         Dim sql As String =
             "CREATE TABLE IF NOT EXISTS Sessions (" &

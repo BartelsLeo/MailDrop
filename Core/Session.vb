@@ -688,8 +688,7 @@ Public Class Session
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
         SuggestionEngine.GetSharedInstance().AppendHistoricalRecord(newRecord)
         Dim recordCount As Integer = ThisAddIn.CurrentDatabaseManager.GetSessionRecordCount()
-        Dim lastRecalcCount As Integer = ThisAddIn.CurrentDatabaseManager.GetLastWeightRecalcRecordCount()
-        If SuggestionEngine.ShouldRecalculateWeights(recordCount, lastRecalcCount) Then
+        If SuggestionEngine.ShouldRecalculateWeights(recordCount) Then
             Task.Run(Sub() SuggestionEngine.GetSharedInstance().RecalculateWeightsFromHistory())
         End If
         ' Warnungswerte und Zielordner vor Reset() sichern, da Reset() sie löscht.
