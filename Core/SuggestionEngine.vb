@@ -351,14 +351,21 @@ Public Class SuggestionEngine
         Return If(best Is Nothing, Nothing, best.Titel)
     End Function
 
+    ' Selbe Nothing/String.Empty-Konvention wie SuggestProjektstrukturPfad/SuggestTitel: ein leerer
+    ' Absender (kurz) ist ein gueltiger historischer Wert, kein "nichts gefunden"-Signal.
     Public Function SuggestAbsenderKurz(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz", minScore:=SuggestionScoreThreshold)?.AbsenderKurz, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        Dim best = FindBestRecordByField(Function(r) r.AbsenderKurz, GetFeatureWeightsForAbsenderKurzSuggestion(), "AbsenderKurz", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+        Return If(best Is Nothing, Nothing, best.AbsenderKurz)
     End Function
 
+    ' Hier kollidiert der "nichts gefunden"-Fall nicht mit einem gueltigen leeren Ablageordner-
+    ' Schema, weil dessen Sentinel DefaultSchemaTemplate ist (nie leer) statt String.Empty - anders
+    ' als bei Titel/AbsenderKurz/ProjektstrukturPfad reicht hier requireNonEmptyField:=False allein;
+    ' best?.AblageordnerSchema liefert bereits korrekt "" durch, wenn best gefunden wurde.
     Public Function SuggestAblageordnerSchema(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return DefaultSchemaTemplate
-        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema", minScore:=SuggestionScoreThreshold)
+        Dim best = FindBestRecordByField(Function(r) r.AblageordnerSchema, GetFeatureWeightsForAblageordnerSuggestion(), "AblageordnerSchema", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
         Return If(best?.AblageordnerSchema, DefaultSchemaTemplate)
     End Function
 
@@ -402,16 +409,20 @@ Public Class SuggestionEngine
 
             If startFrom <= CascadeStep.AbsenderKurz Then
                 Dim suggested = SuggestAbsenderKurz(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestAbsenderKurz(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: AbsenderKurz übersprungen")
                 End If
             End If
 
+            ' SuggestAblageordnerSchema gibt nie Nothing zurueck (Sentinel fuer "nichts gefunden"
+            ' ist DefaultSchemaTemplate, siehe dort) - dieser Zweig wendet daher immer an, auch den
+            ' Default. Als IsNot-Nothing-Check geschrieben, um dieselbe Struktur wie die anderen
+            ' Cascade-Schritte zu behalten.
             If startFrom <= CascadeStep.AblageordnerSchema Then
                 Dim suggested = SuggestAblageordnerSchema(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestAblageordnerSchema(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: AblageordnerSchema übersprungen")
@@ -1004,11 +1015,14 @@ Public Class SuggestionEngine
         End If
         Dim propInfo = GetType(SessionRecord).GetProperty(targetField)
         If propInfo Is Nothing Then Return
+        ' Ein leerer Zielwert ist ein gueltiger, eigenstaendiger Wert (z.B. Titel oder
+        ' ProjektstrukturPfad leer gelassen) und zaehlt daher als eigene Kategorie mit, statt
+        ' herausgefiltert zu werden - sonst wuerde die Gewichtung nie lernen, wie gut Features
+        ' einen "leer bleibt es"-Fall vorhersagen.
         Dim valueCounts As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
         For Each record In records
             Dim v = TryCast(propInfo.GetValue(record), String)
-            If String.IsNullOrWhiteSpace(v) Then Continue For
-            Dim key = v.Trim()
+            Dim key = If(v, String.Empty).Trim()
             If Not valueCounts.ContainsKey(key) Then valueCounts(key) = 0
             valueCounts(key) += 1
         Next
@@ -1049,8 +1063,10 @@ Public Class SuggestionEngine
     ' Liest den Zielwert jedes Records EINMAL aus, statt ihn (wie zuvor) per Reflection fuer jedes
     ' der O(n^2) Record-Paare erneut zu ermitteln: bei 500 Records sind das 124.750 Paare * 2
     ' GetProperty/GetValue-Aufrufe pro TargetField, also ueber eine Million Reflection-Aufrufe je
-    ' Gewichtsneuberechnung. Nothing bedeutet "leer" und matcht nie - exakt wie die alte
-    ' String.IsNullOrWhiteSpace-Pruefung im vorherigen paarweisen Vergleich.
+    ' Gewichtsneuberechnung. Ein leerer Zielwert wird zu String.Empty normalisiert statt (wie
+    ' zuvor) zu Nothing - Nothing bedeutete "matcht nie", wodurch zwei Records, die beide denselben
+    ' Zielwert leer gelassen haben, nie als "gleich" fuer das Pearson-Label gezaehlt wurden, selbst
+    ' wenn "leer" der historisch haeufigste/konsistenteste Wert war.
     Private Function GetTargetValues(records As List(Of SessionRecord), targetField As String) As String()
         Dim values(records.Count - 1) As String
         If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
@@ -1063,13 +1079,14 @@ Public Class SuggestionEngine
         If propInfo Is Nothing Then Return values
         For i As Integer = 0 To records.Count - 1
             Dim v = TryCast(propInfo.GetValue(records(i)), String)
-            values(i) = If(String.IsNullOrWhiteSpace(v), Nothing, v.Trim())
+            values(i) = If(v, String.Empty).Trim()
         Next
         Return values
     End Function
 
+    ' Reiner Wertevergleich - GetTargetValues liefert nie mehr Nothing (auch ein leerer Zielwert
+    ' ist String.Empty, kein "unbekannt"), daher kein Nothing-Sonderfall mehr noetig.
     Private Function TargetValuesMatch(vi As String, vj As String) As Boolean
-        If vi Is Nothing OrElse vj Is Nothing Then Return False
         Return String.Equals(vi, vj, StringComparison.OrdinalIgnoreCase)
     End Function
 
