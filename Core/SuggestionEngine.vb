@@ -319,25 +319,36 @@ Public Class SuggestionEngine
         Return String.Empty
     End Function
 
+    ' Rueckgabe-Konvention: Nothing bedeutet "kein Vorschlag gefunden" (Cascade ueberspringt den
+    ' Schritt). String.Empty ist ein GUELTIGER Vorschlag - z.B. der TreeView-Root-Knoten
+    ' "Projektpfad" (direkte Ablage in ProjektPfad, RelativePath=String.Empty, siehe
+    ' DirectoryTreeHelper). Vorher kollabierte String.Empty beide Faelle ("nichts gefunden" UND
+    ' "leerer Wert vorgeschlagen") auf denselben Rueckgabewert, wodurch ein leerer
+    ' ProjektstrukturPfad in der Historie nie als Vorschlag ankommen konnte, selbst wenn er der
+    ' beste Treffer war. requireNonEmptyField:=False laesst solche Records ueberhaupt erst als
+    ' Kandidaten zu (FindRecordsSortedByScore filtert sie sonst per Default heraus).
     Public Function SuggestProjektstrukturPfad(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return String.Empty
-        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), minScore:=SuggestionScoreThreshold)
-            If Not String.IsNullOrWhiteSpace(record.ProjektstrukturPfad) Then
-                Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
-                If IO.Directory.Exists(fullPath) Then
-                    Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
-                    Return record.ProjektstrukturPfad
-                End If
-                Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: skipping non-existent '{fullPath}'")
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return Nothing
+        For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+            ' Path.Combine(ProjektPfad, "") = ProjektPfad selbst - existiert bereits validiert.
+            Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
+            If IO.Directory.Exists(fullPath) Then
+                Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
+                Return record.ProjektstrukturPfad
             End If
+            Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: skipping non-existent '{fullPath}'")
         Next
-        Return String.Empty
+        Return Nothing
     End Function
 
+    ' Selbe Nothing/String.Empty-Konvention wie SuggestProjektstrukturPfad: ein leerer Titel ist
+    ' ein gueltiger, historisch beobachteter Wert (nicht jede Mail bekommt einen Titel), kein
+    ' "nichts gefunden"-Signal.
     Public Function SuggestTitel(session As Session) As String
-        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
-        Return If(FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel", minScore:=SuggestionScoreThreshold)?.Titel, String.Empty)
+        If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
+        Dim best = FindBestRecordByField(Function(r) r.Titel, GetFeatureWeightsForTitelSuggestion(), "Titel", requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
+        Return If(best Is Nothing, Nothing, best.Titel)
     End Function
 
     Public Function SuggestAbsenderKurz(session As Session) As String
@@ -373,7 +384,7 @@ Public Class SuggestionEngine
         Try
             If startFrom <= CascadeStep.ProjektstrukturPfad Then
                 Dim suggested = SuggestProjektstrukturPfad(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestProjektstrukturPfad(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: ProjektstrukturPfad übersprungen")
@@ -382,7 +393,7 @@ Public Class SuggestionEngine
 
             If startFrom <= CascadeStep.Titel Then
                 Dim suggested = SuggestTitel(session)
-                If Not String.IsNullOrWhiteSpace(suggested) Then
+                If suggested IsNot Nothing Then
                     session.SuggestTitel(suggested)
                 Else
                     Debug.WriteLine($"[SuggestionEngine] Cascade: Titel übersprungen")
