@@ -788,6 +788,27 @@ Public Class SuggestionEngine
 
     ' === Korrelationsbasierte Gewichtsberechnung ===
 
+    ' Geometrischer statt fixer Recalc-Trigger: neu berechnen sobald die Datenmenge seit der
+    ' letzten erfolgreichen Neuberechnung um growthFactor gewachsen ist, statt bei jedem
+    ' n-ten Datensatz. Grund: RecalculateWeightsFromHistory ist O(n^2) (Paarschleife ueber alle
+    ' Records x 7 Zielfelder), waehrend der statistische Nutzen weiterer Datenpunkte mit O(1/sqrt(n))
+    ' abnimmt (Pearson-Schaetzer). Ein fixes Intervall (z.B. alle 50) fuehrt zu kubisch wachsenden
+    ' Lebenszeit-Gesamtkosten (Summe von (50i)^2 ueber alle Meilensteine ~ n^3), da spaete, teure
+    ' Neuberechnungen genauso oft anfallen wie fruehe, guenstige. Ein geometrischer Trigger braucht
+    ' dagegen nur O(log n) Neuberechnungen ueber die Lebenszeit; da jede Stufe um growthFactor
+    ' groesser ist als die vorherige, ist die kumulierte Kost von der jeweils letzten (groessten)
+    ' Neuberechnung dominiert - die Gesamtkosten bleiben ein konstantes Vielfaches (~ growthFactor^2 /
+    ' (growthFactor^2 - 1), fuer 1.25 also Faktor ~2.3) der Kosten einer einzigen Neuberechnung bei
+    ' aktueller Groesse, statt unbegrenzt zu wachsen. Frueh (kleines lastRecalcCount) loest das nahezu
+    ' bei jeder Ablage aus, wo die Neuberechnung noch billig ist und jeder zusaetzliche Datenpunkt
+    ' die Gewichte noch spuerbar veraendern kann; spaeter werden die Abstaende automatisch groesser.
+    ' Math.Max stellt sicher, dass bei lastRecalcCount=0 (noch nie berechnet) sofort bei der ersten
+    ' Ablage ausgeloest wird, statt durch ceil(0 * growthFactor) = 0 nie zu triggern.
+    Friend Shared Function ShouldRecalculateWeights(recordCount As Integer, lastRecalcCount As Integer, Optional growthFactor As Double = 1.25) As Boolean
+        Dim nextThreshold = Math.Max(lastRecalcCount + 1, CInt(Math.Ceiling(lastRecalcCount * growthFactor)))
+        Return recordCount >= nextThreshold
+    End Function
+
     Public Sub RecalculateWeightsFromHistory()
         Dim records As List(Of SessionRecord)
         Try
