@@ -50,9 +50,12 @@ Public Class MailDropWpfTaskPane
     End Function
 
     ' Prueft, ob candidateRelativePath ein Vorfahre (echtes Praefix, getrennt durch Pfadtrenner) von
-    ' targetRelativePath ist.
+    ' targetRelativePath ist. Ein leerer candidateRelativePath ist der synthetische
+    ' "Projektpfad"-Root-Knoten (siehe DirectoryTreeHelper.BuildDirectoryTree) und damit ein
+    ' echter Vorfahre jedes nicht-leeren Zielpfads - ohne diesen Sonderfall wuerde die Suche nie
+    ' in dessen Children absteigen.
     Private Function IsAncestorRelativePath(candidateRelativePath As String, targetRelativePath As String) As Boolean
-        If String.IsNullOrEmpty(candidateRelativePath) Then Return False
+        If String.IsNullOrEmpty(candidateRelativePath) Then Return Not String.IsNullOrEmpty(targetRelativePath)
         If Not targetRelativePath.StartsWith(candidateRelativePath, StringComparison.OrdinalIgnoreCase) Then Return False
         If targetRelativePath.Length = candidateRelativePath.Length Then Return False
         Dim nextChar = targetRelativePath(candidateRelativePath.Length)
@@ -73,7 +76,10 @@ Public Class MailDropWpfTaskPane
     End Function
 
     Private Sub SelectTreeViewPath(relativePath As String)
-        If String.IsNullOrWhiteSpace(relativePath) Then
+        ' relativePath = String.Empty ist eine gueltige Zielangabe (der "Projektpfad"-Root-Knoten,
+        ' z.B. nach dem Loeschen eines Ordners auf oberster Ebene) - nur Nothing bedeutet "nichts
+        ' auszuwaehlen".
+        If relativePath Is Nothing Then
             Return
         End If
 
@@ -463,6 +469,11 @@ Public Class MailDropWpfTaskPane
             Return
         End If
 
+        If String.IsNullOrEmpty(selectedNode.RelativePath) Then
+            MessageBox.Show("Der Projektpfad selbst kann nicht gelöscht werden.", "Ordner löschen", MessageBoxButton.OK, MessageBoxImage.Information)
+            Return
+        End If
+
         If Directory.GetFileSystemEntries(selectedNode.FullPath).Length > 0 Then
             MessageBox.Show("Der Ordner ist nicht leer und kann daher nicht gelöscht werden.", "Ordner löschen", MessageBoxButton.OK, MessageBoxImage.Warning)
             Return
@@ -499,6 +510,11 @@ Public Class MailDropWpfTaskPane
         Dim selectedNode = TryCast(TreeView1.SelectedItem, DirectoryNode)
         If selectedNode Is Nothing Then
             MessageBox.Show("Bitte zuerst einen Ordner in der Projektstruktur auswaehlen.", "Ordner umbenennen", MessageBoxButton.OK, MessageBoxImage.Information)
+            Return
+        End If
+
+        If String.IsNullOrEmpty(selectedNode.RelativePath) Then
+            MessageBox.Show("Der Projektpfad selbst kann nicht umbenannt werden.", "Ordner umbenennen", MessageBoxButton.OK, MessageBoxImage.Information)
             Return
         End If
 

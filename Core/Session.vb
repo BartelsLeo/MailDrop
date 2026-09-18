@@ -139,7 +139,11 @@ Public Class Session
             Return _projektstrukturPfad
         End Get
         Set(value As String)
-            If _projektstrukturPfad <> value Then
+            ' String.Equals statt <>: VB behandelt Nothing und "" bei <> als gleich, wuerde also
+            ' den Wechsel von "noch nichts ausgewaehlt" (Nothing) zu "Projektpfad-Root ausgewaehlt"
+            ' (String.Empty, der neue synthetische Root-Knoten) faelschlich als Nicht-Aenderung
+            ' verwerfen - genau die Unterscheidung, auf die InputChecker.CheckInput angewiesen ist.
+            If Not String.Equals(_projektstrukturPfad, value) Then
                 _projektstrukturPfad = value
                 OnPropertyChanged(NameOf(ProjektstrukturPfad))
                 SuggestionEngineInstance?.RecalculateProjektstrukturPfadDistances(Me)
