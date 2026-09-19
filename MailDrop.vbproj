@@ -418,7 +418,7 @@
     <ManifestKeyFile>MailDrop_1_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>6CE832BECD40C26E8437D2818F36C512A2BD8A4B</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>3E84998B1B3EE993EA4F0438B754B6F86F4F7AD1</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationRevision>0</ApplicationRevision>

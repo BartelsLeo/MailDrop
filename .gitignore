@@ -249,9 +249,11 @@ ClientBin/
 *.dbproj.schemaview
 *.jfm
 *.pfx
-# ...except the ClickOnce manifest-signing key, which is intentionally committed (self-signed,
-# no CA trust value beyond signing this project's own manifests; see Publish/Install-Certificate.ps1).
-!/MailDrop_1_TemporaryKey.pfx
+# MailDrop_1_TemporaryKey.pfx (the ClickOnce manifest-signing private key) used to be force-included
+# here via an !/MailDrop_1_TemporaryKey.pfx exception - that was a real private-key leak (blank PFX
+# password, trivially extractable from git history) fixed by a certificate rotation; see the
+# Distribution section in CLAUDE.md. The .pfx is now provisioned locally/out-of-band per machine and
+# must never be committed again - this blanket *.pfx rule is intentionally NOT exempted anymore.
 *.publishsettings
 orleans.codegen.cs
 
