@@ -54,29 +54,19 @@ MailDrop ist ein VSTO-Add-in fuer Microsoft Outlook. Es hilft dabei, E-Mails und
 
 ## Branching-Strategie
 
-- released: Stabiler Branch fuer produktive Releases
-- development: Integrations-Branch fuer laufende Entwicklung
-- feature/*: Kurzlebige Arbeits-Branches, die in development zusammengefuehrt werden
-- Freigabe: Reife Staende aus development werden nach released uebernommen
+- development: einziger laufender Branch, direkte Commits fuer Routineaenderungen
+- feature/*: Kurzlebige Arbeits-Branches fuer isoliert zu review-ende Aenderungen, die in development zusammengefuehrt werden
+- Ein frueherer separater released-Branch (Freigabe-Gate development -> released per Pull Request) wurde entfernt, da er einen zusaetzlichen Freigabeschritt ohne ausreichende Release-Kadenz bedeutete; Releases werden jetzt direkt aus development getaggt
 
 ## Repository-Governance (Best Practice)
 
-- Default-Branch in GitHub: released
-- Pull Request Ziel:
-  - Normalfall: feature/* -> development
-  - Release-Freigabe: development -> released
-  - Hotfix: hotfix/* -> released und danach Rueckmerge nach development
-- Schutzregeln fuer released:
-  - Keine direkten Pushes
-  - Merge nur via Pull Request
-  - Mindestens 1 Review erforderlich
-  - Alte Reviews bei neuen Commits verwerfen
+- Default-Branch in GitHub: development
+- Pull Request Ziel: feature/* -> development (nur bei Bedarf fuer isoliertes Review, sonst direkter Commit)
 - Schutzregeln fuer development:
-  - Keine direkten Pushes
-  - Merge nur via Pull Request
-  - Mindestens 1 Review empfohlen
+  - Direkte Pushes fuer Routinearbeit erlaubt
+  - Kein Pull Request erforderlich fuer Routineaenderungen
 
-Hinweis: Die eigentliche Default-Branch-Umstellung und Branch-Protection werden in den GitHub-Repository-Settings gesetzt.
+Details zum Vorgehen (inkl. Release-Tagging) siehe CONTRIBUTING.md.
 
 ## Installation und Setup
 

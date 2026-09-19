@@ -54,29 +54,19 @@ MailDrop is a VSTO add-in for Microsoft Outlook. It helps users file emails and 
 
 ## Branching Strategy
 
-- released: Stable branch for production-ready releases
-- development: Integration branch for ongoing development
-- feature/*: Short-lived working branches merged into development
-- Release flow: Mature states from development are promoted to released
+- development: the only ongoing branch, direct commits for routine changes
+- feature/*: short-lived working branches for changes that want isolated review, merged into development
+- A previous separate `released` branch (promotion gate `development` -> `released` via pull request) was removed since it added a promotion step without enough release cadence to justify it; releases are now tagged directly on `development`
 
 ## Repository Governance (Best Practice)
 
-- Default branch in GitHub: released
-- Pull request targets:
-  - Normal flow: feature/* -> development
-  - Release promotion: development -> released
-  - Hotfix flow: hotfix/* -> released, then back-merge into development
-- Protection rules for released:
-  - No direct pushes
-  - Pull request merge only
-  - At least 1 required review
-  - Dismiss stale reviews when new commits are pushed
+- Default branch in GitHub: development
+- Pull request target: feature/* -> development (only when isolated review is wanted, otherwise commit directly)
 - Protection rules for development:
-  - No direct pushes
-  - Pull request merge only
-  - At least 1 review recommended
+  - Direct pushes allowed for routine work
+  - No pull request required for routine changes
 
-Note: The actual default-branch switch and branch protection are configured in GitHub repository settings.
+See CONTRIBUTING.md for the full workflow, including release tagging.
 
 ## Installation and Setup
 

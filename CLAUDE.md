@@ -150,11 +150,11 @@ MailDrop/
 
 ## Branching model
 
-- `released`: stable branch intended for production-ready releases.
-- `development`: integration branch for ongoing development changes. Routine changes are committed directly to `development` (no per-change feature branch/PR required); an isolated `feature/...`/`fix/...` branch is only used when a change is large/risky enough to want it reviewed in isolation before landing.
-- Release-ready states on `development` are promoted into `released` via pull request (this is the one gate that stays PR-only, since `released` is what end users install from).
+- **Single-branch model: `development` is the only ongoing branch.** The previous two-branch model (`development` for integration, a separate `released` branch as the PR-gated production/distribution source) was retired and `released` was deleted - it added a promotion step (`development` -> `released` via PR) without enough release cadence to justify a separate branch; `development`'s own head is now what gets published for distribution (see Distribution section) when a release is cut.
+- Routine changes are committed directly to `development` (no per-change feature branch/PR required); an isolated `feature/...`/`fix/...` branch is still used, same as before, when a change is large/risky enough to want it reviewed in isolation before landing (PR into `development`).
+- A release is cut by tagging the chosen commit on `development` directly (e.g. `v1.0.1.0`, matching the ClickOnce `ApplicationVersion`) instead of promoting into a separate branch first.
 - Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
-- GitHub default branch should be `released` (currently `development` is the default on the remote — switch it in repository settings).
+- GitHub default branch is `development` (this was already the actual default on the remote before `released` was deleted, despite `released` being documented as the intended default at the time - so deleting it required no default-branch change).
 
 ## Architecture and control flow
 
