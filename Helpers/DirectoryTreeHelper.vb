@@ -4,11 +4,12 @@ Imports System.IO
 Public Module DirectoryTreeHelper
     ' Erstellt die Directory-Struktur f�r das TreeView. Das TreeView zeigt nicht direkt die
     ' Kinder von ProjektPfad als Root-Ebene, sondern einen einzigen synthetischen Root-Knoten
-    ' "Projektpfad" (RelativePath=String.Empty, FullPath=projektPfad), dessen Children die
-    ' bisherige erste Ebene sind. Grund: ohne diesen Knoten gibt es in einem WPF TreeView keine
-    ' Moeglichkeit, die Selektion aufzuheben (z.B. durch Klick in eine leere Flaeche) - sobald
-    ' einmal ein Unterordner selektiert wurde, konnte ProjektPfad selbst als Ziel fuer "Neuer
-    ' Ordner"/ProjektstrukturPfad nicht mehr erreicht werden. Der Root-Knoten ist regulaer
+    ' (RelativePath=String.Empty, FullPath=projektPfad, Name=der tatsaechliche Ordnername von
+    ' projektPfad statt eines festen Labels - siehe GetProjektPfadDisplayName), dessen Children
+    ' die bisherige erste Ebene sind. Grund: ohne diesen Knoten gibt es in einem WPF TreeView
+    ' keine Moeglichkeit, die Selektion aufzuheben (z.B. durch Klick in eine leere Flaeche) -
+    ' sobald einmal ein Unterordner selektiert wurde, konnte ProjektPfad selbst als Ziel fuer
+    ' "Neuer Ordner"/ProjektstrukturPfad nicht mehr erreicht werden. Der Root-Knoten ist regulaer
     ' selektierbar (RelativePath=String.Empty gilt als gueltige ProjektstrukturPfad-Auswahl,
     ' siehe InputChecker.CheckInput) und startet immer aufgeklappt (unabhaengig von
     ' expandByDefault), damit die bisherige erste Ebene weiterhin ohne zusaetzlichen Klick
@@ -19,7 +20,7 @@ Public Module DirectoryTreeHelper
             Return result
         End If
         Dim rootNode As New DirectoryNode With {
-            .Name = "Projektpfad",
+            .Name = GetProjektPfadDisplayName(projektPfad),
             .FullPath = projektPfad,
             .RelativePath = String.Empty,
             .Children = New ObservableCollection(Of DirectoryNode)(),
@@ -31,6 +32,18 @@ Public Module DirectoryTreeHelper
         Next
         result.Add(rootNode)
         Return result
+    End Function
+
+    ' Path.GetFileName gibt fuer einen Pfad mit abschliessendem Trennzeichen (z.B. "C:\Projekte\P-1\")
+    ' String.Empty zurueck, und fuer einen reinen Laufwerksbuchstaben ("C:\") nach dem Trimmen "C:" -
+    ' beides Faelle, die ein ProjektPfad-Ordnerpicker durchaus liefern kann. TrimEnd sorgt dafuer,
+    ' dass ein abschliessendes Trennzeichen den echten Ordnernamen nicht verschluckt; der Fallback
+    ' auf den vollen (getrimmten) Pfad greift nur im entarteten Fall eines Laufwerks-Root ohne
+    ' Ordnernamen, damit der Root-Knoten nie leer beschriftet ist.
+    Private Function GetProjektPfadDisplayName(projektPfad As String) As String
+        Dim trimmed = projektPfad.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        Dim name = Path.GetFileName(trimmed)
+        Return If(String.IsNullOrEmpty(name), trimmed, name)
     End Function
 
     ' level: 1 = erste Ebene unter ProjektPfad
