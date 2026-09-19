@@ -15,8 +15,12 @@
     daher gefahrlos veroeffentlicht werden. Es sind KEINE Administratorrechte noetig, da die
     Zertifikatsspeicher des aktuellen Benutzers ohne erhoehte Rechte beschreibbar sind.
 
+    Entfernt ausserdem IMMER (auch ohne -Uninstall) das/die alte(n), kompromittierte(n)
+    MailDrop-Zertifikat(e) aus $oldCompromisedThumbprints, falls vorhanden - siehe
+    "Zertifikatsrotation" unten.
+
 .PARAMETER Uninstall
-    Entfernt das MailDrop-Zertifikat wieder aus den Zertifikatsspeichern.
+    Entfernt das aktuelle MailDrop-Zertifikat wieder aus den Zertifikatsspeichern.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\Install-Certificate.ps1
@@ -33,28 +37,42 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Oeffentliches MailDrop-Signaturzertifikat (kein privater Schluessel), extrahiert direkt nach der
-# Zertifikatserzeugung. Gueltig bis 01.07.2056 (30 Jahre) - bewusst langlebig gewaehlt, damit dieser
+# Zertifikatserzeugung. Gueltig bis 11.09.2056 (~30 Jahre) - bewusst langlebig gewaehlt, damit dieser
 # Trust-Schritt nicht alle paar Monate/Jahre fuer bereits installierte Benutzer wiederholt werden muss.
 # Bei einer neuen Zertifikatsgenerierung (z.B. Kompromittierung des privaten Schluessels) muss dieser
-# Block aus dem neuen MailDrop.vsto (Element <X509Certificate>) aktualisiert werden.
+# Block aus dem neuen MailDrop.vsto (Element <X509Certificate>) aktualisiert werden - UND der alte
+# Thumbprint unten in $oldCompromisedThumbprints eingetragen werden, damit dieses Skript alte,
+# kompromittierte Zertifikate auch aktiv wieder aus dem Trust-Store entfernt statt sie nur additiv
+# stehen zu lassen.
 $certBase64 = @'
-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
+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
+tJbzNUBSzMTAmaiUH7OJsxM=
 '@
+
+# Zertifikatsrotation (2026-09-19): das vorherige Zertifikat (Thumbprint 6CE832BE...) wurde ueber
+# eine im Git-Repository committete .pfx-Datei mit LEEREM Passwort kompromittiert (privater
+# Schluessel war trivial extrahierbar). Dieses Skript entfernt dessen Thumbprint hier deshalb aktiv
+# aus dem Trust-Store, statt das alte Zertifikat einfach weiter als vertrauenswuerdig stehen zu
+# lassen - jemand mit dem alten privaten Schluessel koennte sonst weiterhin beliebige Manifeste
+# signieren, die auf bereits umgestellten Rechnern trotzdem noch akzeptiert wuerden.
+$oldCompromisedThumbprints = @(
+    '6CE832BECD40C26E8437D2818F36C512A2BD8A4B'
+)
 
 $storeNames = @('Root', 'TrustedPublisher')
 
@@ -78,6 +96,16 @@ foreach ($storeName in $storeNames) {
     $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeName, 'CurrentUser')
     $store.Open('ReadWrite')
     try {
+        # Alte, kompromittierte Zertifikate immer entfernen (auch im normalen Install-Lauf, nicht
+        # nur bei -Uninstall) - siehe "Zertifikatsrotation" oben.
+        foreach ($oldThumbprint in $oldCompromisedThumbprints) {
+            $oldExisting = $store.Certificates | Where-Object { $_.Thumbprint -eq $oldThumbprint }
+            foreach ($oldCert in $oldExisting) {
+                $store.Remove($oldCert)
+                Write-Host "Altes, kompromittiertes Zertifikat ($oldThumbprint) aus 'CurrentUser\$storeName' entfernt." -ForegroundColor Yellow
+            }
+        }
+
         if ($Uninstall) {
             $existing = $store.Certificates | Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
             if ($existing) {
