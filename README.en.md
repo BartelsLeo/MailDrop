@@ -54,15 +54,15 @@ MailDrop is a VSTO add-in for Microsoft Outlook. It helps users file emails and 
 
 ## Branching Strategy
 
-- development: the only ongoing branch, direct commits for routine changes
-- feature/*: short-lived working branches for changes that want isolated review, merged into development
-- A previous separate `released` branch (promotion gate `development` -> `released` via pull request) was removed since it added a promotion step without enough release cadence to justify it; releases are now tagged directly on `development`
+- main: the only ongoing branch, direct commits for routine changes (formerly named development, renamed 2026-09-20 since it's the repo's only branch anyway)
+- feature/*: short-lived working branches for changes that want isolated review, merged into main
+- A previous separate `released` branch (promotion gate `development` -> `released` via pull request) was removed since it added a promotion step without enough release cadence to justify it; releases are now tagged directly on `main`
 
 ## Repository Governance (Best Practice)
 
-- Default branch in GitHub: development
-- Pull request target: feature/* -> development (only when isolated review is wanted, otherwise commit directly)
-- Protection rules for development:
+- Default branch in GitHub: main
+- Pull request target: feature/* -> main (only when isolated review is wanted, otherwise commit directly)
+- Protection rules for main:
   - Direct pushes allowed for routine work
   - No pull request required for routine changes
 

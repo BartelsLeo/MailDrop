@@ -145,11 +145,12 @@ MailDrop/
 
 ## Branching model
 
-- **Single-branch model: `development` is the only ongoing branch.** The previous two-branch model (`development` for integration, a separate `released` branch as the PR-gated production/distribution source) was retired and `released` was deleted - it added a promotion step (`development` -> `released` via PR) without enough release cadence to justify a separate branch; `development`'s own head is now what gets published for distribution (see Distribution section) when a release is cut.
-- Routine changes are committed directly to `development` (no per-change feature branch/PR required); an isolated `feature/...`/`fix/...` branch is still used, same as before, when a change is large/risky enough to want it reviewed in isolation before landing (PR into `development`).
-- A release is cut by tagging the chosen commit on `development` directly (e.g. `v1.0.1.0`, matching the ClickOnce `ApplicationVersion`) instead of promoting into a separate branch first.
+- **Single-branch model: `main` is the only ongoing branch.** The previous two-branch model (`development` for integration, a separate `released` branch as the PR-gated production/distribution source) was retired and `released` was deleted - it added a promotion step (`development` -> `released` via PR) without enough release cadence to justify a separate branch; the remaining single branch's own head is now what gets published for distribution (see Distribution section) when a release is cut.
+- **Renamed `development` -> `main` (2026-09-20).** Now that it's the repo's only ongoing branch, `development` no longer described its role accurately; renamed to the conventional `main`. All now-merged/obsolete `claude/*` feature branches from the prior workflow were deleted in the same cleanup. Any local clone still tracking `development` needs `git fetch --prune` and a checkout of `main`.
+- All Claude Code contributions in this repository are committed and pushed **directly to `main`** - no per-change feature branch or PR, including for routine changes. An isolated `feature/...`/`fix/...` branch is still used, same as before, when a change is large/risky enough to want it reviewed in isolation before landing (PR into `main`).
+- A release is cut by tagging the chosen commit on `main` directly (e.g. `v1.0.1.0`, matching the ClickOnce `ApplicationVersion`) instead of promoting into a separate branch first.
 - Repository governance details (review gates and merge flow) are documented in CONTRIBUTING.md.
-- GitHub default branch is `development` (this was already the actual default on the remote before `released` was deleted, despite `released` being documented as the intended default at the time - so deleting it required no default-branch change).
+- GitHub default branch is `main`.
 
 ## Architecture and control flow
 
