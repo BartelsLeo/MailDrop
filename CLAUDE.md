@@ -67,12 +67,10 @@ MailDrop/
 |- README.en.md
 |- MailDrop.sln
 |- MailDrop.vbproj
-|- model.onnx
 |- packages.config
 |- ThisAddIn.Designer.vb
 |- ThisAddIn.Designer.xml
 |- ThisAddIn.vb
-|- vocab.txt
 |- Core/
 |  |- InputChecker.vb
 |  |- Session.vb
@@ -93,10 +91,6 @@ MailDrop/
 |  |- Settings.settings
 |- Services/
 |  |- EmbeddingService.vb
-|- TestDirectory/
-|  |- P-23002/
-|  |- P-23003_Kita/
-|  |- P-23004_Modehaus/
 |- UI/
 	|- AttachmentRenameDialog.xaml
 	|- AttachmentRenameDialog.xaml.vb
@@ -124,8 +118,8 @@ MailDrop/
 - Error log (Release-safe): %APPDATA%/MailDrop/error.log, written by Helpers/Logger.vb's LogError(context, ex) for exceptions and LogInfo(context, message) for non-exception diagnostics (startup timing, version/environment info, dependency-file presence — see "Startup timing instrumentation" below). Release builds compile out Debug.WriteLine entirely (DefineDebug=false in MailDrop.vbproj), so this file is currently the only diagnostic trail available on an end-user machine; check it first when "the MailDrop button does nothing" or "the add-in got disabled" is reported. Both LogError and LogInfo never throw themselves (wrapped in Try/Catch) so logging failures cannot mask the original error or crash the caller. ThisAddIn_Startup unconditionally writes version/environment and dependency-check lines before doing anything else, so this file should now get at least those entries on every run that reaches Startup at all, even one that then fails — an entirely empty/missing error.log points to a failure before Startup was even invoked (CLR/ClickOnce/assembly load), not inside this project's own code.
 - SQLite schema versioning uses `PRAGMA user_version`; `SessionDatabaseManager.CurrentSchemaVersion` defines the expected schema and `ApplyMigrations(...)` upgrades older databases.
 - Database manager initialization is lazy: ThisAddIn.CurrentDatabaseManager creates SessionDatabaseManager on first access (not in ThisAddIn_Startup).
-- ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt.
-- The root-level model.onnx and vocab.txt are source artifacts; runtime inference uses the files under Models/.
+- ONNX model files are loaded from output folder path Models/model.onnx and Models/vocab.txt. These are the only committed copies of the model artifacts.
+- **Repo cleanup (2026-09-20): removed unnecessary committed files from `development`.** Root-level `model.onnx`/`vocab.txt` were byte-identical duplicates of `Models/model.onnx`/`Models/vocab.txt` (~90 MB + ~230 KB), referenced by nothing (`MailDrop.vbproj`, `MailDrop.sln`, all code and docs only ever pointed at `Models/`) - almost certainly stale leftovers from before the `Models/` reorg. Deleted, and this file's earlier claim that they were deliberate "source artifacts" is corrected: they weren't. Also removed: `TestDirectory/` (already dropped in a prior commit, but this file's workspace-layout listing hadn't been updated to match) and the tracked `.claude/settings.json`, which held stale, single-use permission rules from a past session (a hardcoded commit-message-specific `Bash` allow rule, a Windows-local `Read(//c/Program Files/**)` path) rather than deliberate team-wide policy - not something that belongs in shared project config. If team-wide Claude Code settings are wanted here in the future, `.claude/settings.json` should be reintroduced deliberately with reviewed content, not left as incidental session output.
 
 ## Distribution (ClickOnce / GitHub Releases zip + network drive)
 
