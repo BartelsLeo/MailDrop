@@ -9,12 +9,17 @@ Imports System.Threading.Tasks
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
-    ' Eigene Task Pane pro geoeffnetem Mail-Fenster (Ribbon "Nachricht"). CustomTaskPanes sind in
-    ' Outlook immer an genau ein Fenster gebunden, die Explorer-Pane (taskPane) kann daher nicht
-    ' in einem Inspector angezeigt werden. Erst beim ersten Klick im jeweiligen Fenster erzeugt
-    ' (nicht fuer jede geoeffnete Mail) und bei Inspector.Close wieder entfernt. Der Dictionary-
-    ' Schluessel haelt zugleich das Inspector-RCW am Leben, an dem der Close-Handler haengt.
-    Private ReadOnly _inspectorPanes As New Dictionary(Of Outlook.Inspector, Microsoft.Office.Tools.CustomTaskPane)()
+    ' "Feste Bindung": wurde MailDrop aus einem geoeffneten Mail-Fenster (Ribbon "Nachricht")
+    ' gestartet, zeigt die normale Explorer-Pane genau diese Mail statt der Listenauswahl. Das
+    ' Feld haelt zugleich das Inspector-RCW am Leben, an dem der Close-Handler haengt.
+    ' Geloest wird die Bindung, sobald die Pane ausgeblendet wird (VisibleChanged: OK, Abbrechen,
+    ' X, Modulwechsel, Button), das Mail-Fenster geschlossen wird oder der Nutzer in der Liste
+    ' tatsaechlich eine Mail auswaehlt.
+    Private _pinnedInspector As Outlook.Inspector
+    ' Auswahl-Schluessel der Liste direkt nach dem Leeren der Auswahl beim Binden - ein
+    ' SelectionChange, der dieselbe Auswahl meldet (Outlook feuert z.B. beim Aktivieren des
+    ' Explorers gelegentlich ohne echte Aenderung), loest die Bindung nicht.
+    Private _selectionKeyAtPin As String
     Private Shared _currentDatabaseManager As SessionDatabaseManager
     Private Shared ReadOnly _databaseManagerLock As New Object()
     Private WithEvents _explorers As Outlook.Explorers
@@ -258,6 +263,13 @@ Public Class ThisAddIn
         ' Explorer-Pane sonst an diesem Inspector haengen und mit ihm verschwinden.
         ' ActiveExplorer() liefert dasselbe RCW wie _currentExplorer - daher NICHT freigeben.
         taskPane = CreateTaskPane(Application.ActiveExplorer())
+        AddHandler taskPane.VisibleChanged, AddressOf TaskPane_VisibleChanged
+    End Sub
+
+    Private Sub TaskPane_VisibleChanged(sender As Object, e As EventArgs)
+        If taskPane IsNot Nothing AndAlso Not taskPane.Visible Then
+            UnpinInspector()
+        End If
     End Sub
 
     Private Function CreateTaskPane(window As Object) As Microsoft.Office.Tools.CustomTaskPane
@@ -298,6 +310,18 @@ Public Class ThisAddIn
             Return
         End If
         Try
+            ' Feste Bindung an ein Mail-Fenster: nur eine echte, nicht-leere neue Auswahl in der
+            ' Liste loest sie (der Nutzer will dann offensichtlich diese Mail ablegen). Das Leeren
+            ' der Auswahl beim Binden selbst und Aktivierungs-Echos werden ignoriert.
+            If _pinnedInspector IsNot Nothing Then
+                Dim key As String = GetSelectionKey(_currentExplorer)
+                If String.IsNullOrEmpty(key) OrElse String.Equals(key, _selectionKeyAtPin, StringComparison.Ordinal) Then
+                    Debug.WriteLine("[ThisAddIn] SelectionChange: pinned to inspector, selection unchanged/empty - ignoring.")
+                    Return
+                End If
+                UnpinInspector()
+            End If
+
             MailSelected()
         Catch ex As Exception
             Debug.WriteLine($"[ThisAddIn] SelectionChange: MailSelected failed: {ex.Message}")
@@ -386,8 +410,9 @@ Public Class ThisAddIn
     End Function
 
     ' Callback for Ribbon button (Explorer-Ribbon "Start" und Inspector-Ribbon "Nachricht").
-    ' Der Button schaltet um: ist die Pane des Fensters, aus dem geklickt wurde, sichtbar, wird
-    ' sie ausgeblendet, sonst frisch vorbereitet und eingeblendet.
+    ' Der Button schaltet um: ist die Pane sichtbar, wird sie ausgeblendet, sonst frisch
+    ' vorbereitet und eingeblendet. Aus einem Mail-Fenster heraus wird die Pane fest an dessen
+    ' Mail gebunden (ShowPinnedToInspector).
     Public Sub MailAblegen_Click(control As Object)
         Dim inspector As Outlook.Inspector = Nothing
         Try
@@ -396,7 +421,7 @@ Public Class ThisAddIn
             Logger.LogError("MailAblegen_Click: Ribbon-Kontext ermitteln", ex)
         End Try
         If inspector IsNot Nothing Then
-            ToggleInspectorTaskPane(inspector)
+            ShowPinnedToInspector(inspector)
             Return
         End If
 
@@ -422,6 +447,9 @@ Public Class ThisAddIn
             Return
         End Try
 
+        ' Klick in der Hauptansicht meint immer die Listenauswahl.
+        UnpinInspector()
+
         Try
             MailSelected()
         Catch ex As Exception
@@ -439,68 +467,140 @@ Public Class ThisAddIn
                          "MailDrop", MessageBoxButtons.OK, MessageBoxIcon.Error)
     End Sub
 
-    Private Sub ToggleInspectorTaskPane(inspector As Outlook.Inspector)
-        Dim pane As Microsoft.Office.Tools.CustomTaskPane = Nothing
-        If _inspectorPanes.TryGetValue(inspector, pane) AndAlso pane.Visible Then
-            Debug.WriteLine("[ThisAddIn] Inspector pane visible — hiding (toggle).")
-            pane.Visible = False
+    Private Function EnsureExplorerTaskPane() As Boolean
+        If taskPane IsNot Nothing Then Return True
+        Try
+            CreateExplorerTaskPane()
+            Return True
+        Catch ex As Exception
+            Logger.LogError("EnsureExplorerTaskPane", ex)
+            ShowTaskPaneCreationError(ex)
+            Return False
+        End Try
+    End Function
+
+    ' Aus dem Mail-Fenster: statt einer eigenen Pane im (schmalen) Mail-Fenster wird die feste
+    ' Explorer-Pane benutzt und an die Mail dieses Fensters gebunden. Die Mail wird NICHT in der
+    ' Liste gesucht/ausgewaehlt (scheitert an "Relevant/Sonstige", zugeklappten Unterhaltungen,
+    ' Filtern, .msg-Dateien vom Laufwerk) - stattdessen wird die Listenauswahl geleert, damit
+    ' keine andere markierte Mail mit der abzulegenden verwechselt wird. Das Mail-Fenster bleibt
+    ' offen (die Mail wird weiter aus ihm gelesen) und wird erst nach erfolgreicher Ablage
+    ' geschlossen (HideTaskPaneAfterFiling).
+    Private Sub ShowPinnedToInspector(inspector As Outlook.Inspector)
+        If taskPane IsNot Nothing AndAlso taskPane.Visible AndAlso _pinnedInspector Is inspector Then
+            Debug.WriteLine("[ThisAddIn] Pinned pane visible for this inspector — hiding (toggle).")
+            taskPane.Visible = False
             Return
         End If
 
-        If pane Is Nothing Then
-            Try
-                pane = CreateTaskPane(inspector)
-                Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(pane)
-                If wpf IsNot Nothing Then wpf.Session.SourceInspector = inspector
-                RegisterInspectorPane(inspector, pane)
-            Catch ex As Exception
-                Logger.LogError("MailAblegen_Click: Inspector-Pane erstellen", ex)
-                ShowTaskPaneCreationError(ex)
-                Return
-            End Try
+        If Not EnsureExplorerTaskPane() Then Return
+
+        ' taskPane.Window ist der Explorer, an den die Pane gebunden ist (nicht freigeben, s.o.).
+        Dim explorer As Outlook.Explorer = TryCast(taskPane.Window, Outlook.Explorer)
+        If explorer Is Nothing Then explorer = Application.ActiveExplorer()
+        If explorer Is Nothing Then
+            MessageBox.Show("Bitte zuerst das Outlook-Hauptfenster öffnen.", "MailDrop", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
         End If
+
+        UnpinInspector()
+        PinInspector(inspector)
 
         Try
-            ' Immer neu vorbereiten: das Fenster kann inzwischen eine andere Mail zeigen
-            ' (Naechstes/Vorheriges Element), und nach einer Ablage wurde die Session zurueckgesetzt.
-            PrepareWpfTaskPane(GetWpfTaskPane(pane))
+            explorer.ClearSelection()
         Catch ex As Exception
-            Logger.LogError("MailAblegen_Click: Inspector-Pane vorbereiten", ex)
+            Logger.LogError("ShowPinnedToInspector: ClearSelection", ex)
         End Try
-        pane.Visible = True
+        _selectionKeyAtPin = GetSelectionKey(explorer)
+
+        Try
+            If explorer.WindowState = Outlook.OlWindowState.olMinimized Then
+                explorer.WindowState = Outlook.OlWindowState.olNormalWindow
+            End If
+            ' Cast: "Activate" ist auf Outlook.Explorer zwischen Methode und Event mehrdeutig.
+            DirectCast(explorer, Outlook._Explorer).Activate()
+        Catch ex As Exception
+            Logger.LogError("ShowPinnedToInspector: Explorer aktivieren", ex)
+        End Try
+
+        Try
+            PrepareWpfTaskPane(GetWpfTaskPane(taskPane))
+        Catch ex As Exception
+            Logger.LogError("ShowPinnedToInspector: Pane vorbereiten", ex)
+        End Try
+        taskPane.Visible = True
     End Sub
 
-    Private Sub RegisterInspectorPane(inspector As Outlook.Inspector, pane As Microsoft.Office.Tools.CustomTaskPane)
-        _inspectorPanes(inspector) = pane
-        Dim inspectorEvents = DirectCast(inspector, Outlook.InspectorEvents_10_Event)
-        Dim closeHandler As Outlook.InspectorEvents_10_CloseEventHandler = Nothing
-        closeHandler = Sub()
-            Try
-                RemoveHandler inspectorEvents.Close, closeHandler
-                _inspectorPanes.Remove(inspector)
-                Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(pane)
-                If wpf IsNot Nothing Then wpf.Session.SourceInspector = Nothing
-                Me.CustomTaskPanes.Remove(pane)
-            Catch ex As Exception
-                Logger.LogError("Inspector.Close: Task Pane entfernen", ex)
-            End Try
-        End Sub
-        AddHandler inspectorEvents.Close, closeHandler
+    Private Sub PinInspector(inspector As Outlook.Inspector)
+        _pinnedInspector = inspector
+        _selectionKeyAtPin = GetSelectionKey(_currentExplorer)
+        AddHandler DirectCast(inspector, Outlook.InspectorEvents_10_Event).Close, AddressOf PinnedInspector_Close
+        Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(taskPane)
+        If wpf IsNot Nothing Then wpf.Session.SourceInspector = inspector
     End Sub
 
-    ' owner = die WPF-Pane, die sich selbst ausblenden will (OK/Abbrechen). Ohne owner (z.B.
-    ' Modulwechsel im Explorer) ist die Explorer-Pane gemeint.
-    Public Sub HideTaskPane(Optional owner As MailDropWpfTaskPane = Nothing)
-        If owner IsNot Nothing Then
-            For Each pane In _inspectorPanes.Values
-                If GetWpfTaskPane(pane) Is owner Then
-                    pane.Visible = False
-                    Return
-                End If
-            Next
-        End If
+    Private Sub UnpinInspector()
+        If _pinnedInspector Is Nothing Then Return
+        Try
+            RemoveHandler DirectCast(_pinnedInspector, Outlook.InspectorEvents_10_Event).Close, AddressOf PinnedInspector_Close
+        Catch ex As Exception
+            Logger.LogError("UnpinInspector: Close-Handler entfernen", ex)
+        End Try
+        _pinnedInspector = Nothing
+        _selectionKeyAtPin = Nothing
+        Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(taskPane)
+        If wpf IsNot Nothing Then wpf.Session.SourceInspector = Nothing
+    End Sub
+
+    ' Der Nutzer hat das gebundene Mail-Fenster selbst geschlossen: Bindung loesen und die
+    ' (sichtbare) Pane wieder auf die Listenauswahl setzen - die ist leer, also nicht editierbar.
+    Private Sub PinnedInspector_Close()
+        Try
+            UnpinInspector()
+            If taskPane IsNot Nothing AndAlso taskPane.Visible Then MailSelected()
+        Catch ex As Exception
+            Logger.LogError("PinnedInspector_Close", ex)
+        End Try
+    End Sub
+
+    ' EntryID des ersten ausgewaehlten Elements (+ Anzahl) als Vergleichsschluessel; leer, wenn
+    ' nichts ausgewaehlt ist. Das Element wird freigegeben, der Explorer nicht (s. MailUtils).
+    Private Function GetSelectionKey(explorer As Outlook.Explorer) As String
+        If explorer Is Nothing Then Return String.Empty
+        Dim item As Object = Nothing
+        Try
+            Dim selection = explorer.Selection
+            If selection.Count = 0 Then Return String.Empty
+            item = selection.Item(1)
+            Return $"{selection.Count}|{item.EntryID}"
+        Catch ex As Exception
+            Logger.LogError("GetSelectionKey", ex)
+            Return String.Empty
+        Finally
+            If item IsNot Nothing AndAlso Marshal.IsComObject(item) Then Marshal.FinalReleaseComObject(item)
+        End Try
+    End Function
+
+    Public Sub HideTaskPane()
         If taskPane IsNot Nothing Then
             taskPane.Visible = False
+        End If
+    End Sub
+
+    ' Nach erfolgreicher Ablage: Pane ausblenden und - falls aus einem Mail-Fenster gestartet -
+    ' dieses schliessen. Reihenfolge wichtig: erst Bindung loesen (Close-Handler weg), dann
+    ' schliessen, sonst wuerde PinnedInspector_Close die Pane neu befuellen.
+    ' Cast auf _Inspector, weil "Close" auf Outlook.Inspector zwischen Methode und Event mehrdeutig ist.
+    Public Sub HideTaskPaneAfterFiling()
+        Dim inspector As Outlook.Inspector = _pinnedInspector
+        HideTaskPane()
+        UnpinInspector()
+        If inspector IsNot Nothing Then
+            Try
+                DirectCast(inspector, Outlook._Inspector).Close(Outlook.OlInspectorClose.olPromptForSave)
+            Catch ex As Exception
+                Logger.LogError("HideTaskPaneAfterFiling: Mail-Fenster schliessen", ex)
+            End Try
         End If
     End Sub
 

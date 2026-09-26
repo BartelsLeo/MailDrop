@@ -243,7 +243,7 @@ Public Class MailDropWpfTaskPane
 
     Private Sub HideTaskPaneAfterFiling()
         Try
-            Globals.ThisAddIn.HideTaskPane(Me)
+            Globals.ThisAddIn.HideTaskPaneAfterFiling()
         Catch ex As Exception
             Logger.LogError("HideTaskPaneAfterFiling", ex)
         End Try
@@ -289,7 +289,7 @@ Public Class MailDropWpfTaskPane
             infoPopup = Nothing
         End If
         Try
-            Globals.ThisAddIn.HideTaskPane(Me)
+            Globals.ThisAddIn.HideTaskPane()
         Catch
             ' Fallback: Fenster schlie�en
             Dim wnd = Window.GetWindow(Me)
@@ -323,8 +323,8 @@ Public Class MailDropWpfTaskPane
 
     ' Gibt True zur�ck, wenn genau eine Mail selektiert ist, sonst False
     Public Function SingleMailSelected() As Boolean
-        ' Pane eines geoeffneten Mail-Fensters: dessen aktuelles Element zaehlt, nicht die
-        ' Explorer-Auswahl (die kann im Hintergrund beliebig sein).
+        ' Fest an ein geoeffnetes Mail-Fenster gebunden: dessen aktuelles Element zaehlt, nicht die
+        ' (beim Binden geleerte) Explorer-Auswahl.
         If Session.SourceInspector IsNot Nothing Then
             Return TypeOf Session.SourceInspector.CurrentItem Is Outlook.MailItem
         End If

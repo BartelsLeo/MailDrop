@@ -35,8 +35,9 @@ Public Class Session
 
     ' Quelle der abzulegenden Mail: Nothing = Explorer-Auswahl (Standard-Listenansicht),
     ' sonst das geoeffnete Mail-Fenster (Inspector), aus dessen Ribbon "Nachricht" MailDrop
-    ' gestartet wurde. Wird von ThisAddIn einmalig pro Inspector-Pane gesetzt und von Reset()
-    ' bewusst NICHT geloescht - die Pane gehoert fuer ihre ganze Lebensdauer zu diesem Fenster.
+    ' gestartet wurde ("feste Bindung", verwaltet von ThisAddIn.PinInspector/UnpinInspector).
+    ' Wird von Reset() bewusst NICHT geloescht - ProcessSession ruft Reset() vor dem Ende der
+    ' Ablage auf, die Bindung wird erst von ThisAddIn geloest.
     Public Property SourceInspector As Outlook.Inspector
 
     ' EntryID der Mail, fuer die PrepareSession die Felder befuellt hat. Beim Speichern wird
