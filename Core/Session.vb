@@ -32,6 +32,18 @@ Public Class Session
     Public Property LastDuplicateWarning As String
     Public Property LastOverwriteWarning As String
     Public Property LastSuccessfulAblageordner As String
+
+    ' Quelle der abzulegenden Mail: Nothing = Explorer-Auswahl (Standard-Listenansicht),
+    ' sonst das geoeffnete Mail-Fenster (Inspector), aus dessen Ribbon "Nachricht" MailDrop
+    ' gestartet wurde. Wird von ThisAddIn einmalig pro Inspector-Pane gesetzt und von Reset()
+    ' bewusst NICHT geloescht - die Pane gehoert fuer ihre ganze Lebensdauer zu diesem Fenster.
+    Public Property SourceInspector As Outlook.Inspector
+
+    ' EntryID der Mail, fuer die PrepareSession die Felder befuellt hat. Beim Speichern wird
+    ' geprueft, dass noch dieselbe Mail aktiv ist (z.B. hat der Nutzer im Inspector mit
+    ' "Naechstes Element" weitergeblaettert) - sonst wuerde eine andere Mail unter den fuer die
+    ' urspruengliche Mail berechneten Namen abgelegt.
+    Public Property SourceMailEntryId As String
     Public Property Anhaenge As New ObservableCollection(Of AttachmentItem)()
 
     Private _projektPfad As String
@@ -347,6 +359,7 @@ Public Class Session
 
     Public Sub Reset()
         LastDuplicateWarning = String.Empty
+        SourceMailEntryId = Nothing
         Anhaenge.Clear()
         OnPropertyChanged(NameOf(HasAnhaenge))
         ProjektPfad = Nothing
@@ -674,12 +687,12 @@ Public Class Session
         If overwriteFound Then
             LastOverwriteWarning = "Erfolgreich abgelegt. Existierende Dateien überschrieben."
         End If
-        Dim mailResult = MailUtils.SaveSelectedMailAsMsg(checkedInput.CheckedMsgZielpfad)
+        Dim mailResult = MailUtils.SaveSelectedMailAsMsg(Me, checkedInput.CheckedMsgZielpfad)
         If mailResult <> String.Empty Then
             Return mailResult
         End If
         If AnhaengeAblegen Then
-            Dim anhangResult = MailUtils.SaveMailAttachments(checkedInput.CheckedAnhZielpfade)
+            Dim anhangResult = MailUtils.SaveMailAttachments(Me, checkedInput.CheckedAnhZielpfade)
             If anhangResult <> String.Empty Then
                 Return anhangResult
             End If

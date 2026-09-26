@@ -9,6 +9,12 @@ Imports System.Threading.Tasks
 Public Class ThisAddIn
     Private ribbonObj As MailDropRibbon
     Private taskPane As Microsoft.Office.Tools.CustomTaskPane
+    ' Eigene Task Pane pro geoeffnetem Mail-Fenster (Ribbon "Nachricht"). CustomTaskPanes sind in
+    ' Outlook immer an genau ein Fenster gebunden, die Explorer-Pane (taskPane) kann daher nicht
+    ' in einem Inspector angezeigt werden. Erst beim ersten Klick im jeweiligen Fenster erzeugt
+    ' (nicht fuer jede geoeffnete Mail) und bei Inspector.Close wieder entfernt. Der Dictionary-
+    ' Schluessel haelt zugleich das Inspector-RCW am Leben, an dem der Close-Handler haengt.
+    Private ReadOnly _inspectorPanes As New Dictionary(Of Outlook.Inspector, Microsoft.Office.Tools.CustomTaskPane)()
     Private Shared _currentDatabaseManager As SessionDatabaseManager
     Private Shared ReadOnly _databaseManagerLock As New Object()
     Private WithEvents _explorers As Outlook.Explorers
@@ -235,7 +241,7 @@ Public Class ThisAddIn
             Try
                 Dim sw As Stopwatch = Stopwatch.StartNew()
                 Debug.WriteLine("[ThisAddIn] PreloadTaskPane: creating hidden task pane…")
-                CreateAndRegisterTaskPane()
+                CreateExplorerTaskPane()
                 taskPane.Visible = False
                 Debug.WriteLine($"[ThisAddIn] PreloadTaskPane: done in {sw.ElapsedMilliseconds} ms — task pane ready.")
             Catch ex As Exception
@@ -246,15 +252,29 @@ Public Class ThisAddIn
         timer.Start()
     End Sub
 
-    Private Sub CreateAndRegisterTaskPane()
+    Private Sub CreateExplorerTaskPane()
+        ' Explizit an den Explorer binden: CustomTaskPanes.Add ohne Fenster nimmt Outlooks
+        ' ActiveWindow - ist beim (verzoegerten) Preload gerade ein Mail-Fenster aktiv, wuerde die
+        ' Explorer-Pane sonst an diesem Inspector haengen und mit ihm verschwinden.
+        ' ActiveExplorer() liefert dasselbe RCW wie _currentExplorer - daher NICHT freigeben.
+        taskPane = CreateTaskPane(Application.ActiveExplorer())
+    End Sub
+
+    Private Function CreateTaskPane(window As Object) As Microsoft.Office.Tools.CustomTaskPane
         Dim sw As Stopwatch = Stopwatch.StartNew()
         Dim paneControl As New MailDropWpfHostControl()
         Debug.WriteLine($"[ThisAddIn]   MailDropWpfHostControl created: {sw.ElapsedMilliseconds} ms")
-        taskPane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
-        taskPane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
-        taskPane.Width = 500
+        Dim pane As Microsoft.Office.Tools.CustomTaskPane
+        If window IsNot Nothing Then
+            pane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen", window)
+        Else
+            pane = Me.CustomTaskPanes.Add(paneControl, "Mail ablegen")
+        End If
+        pane.DockPosition = Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight
+        pane.Width = 500
         Debug.WriteLine($"[ThisAddIn]   Task pane registered and docked: {sw.ElapsedMilliseconds} ms")
-    End Sub
+        Return pane
+    End Function
 
     Private Sub _explorers_NewExplorer(NewExplorer As Outlook.Explorer) Handles _explorers.NewExplorer
         Debug.WriteLine("[ThisAddIn] NewExplorer fired - updating _currentExplorer.")
@@ -331,8 +351,12 @@ Public Class ThisAddIn
 
     ' Kapselt die Logik für die TaskPane-Initialisierung und Editierbarkeit
     Private Sub MailSelected()
-        Dim wpfTaskPane As MailDropWpfTaskPane = GetWpfTaskPane()
+        Dim wpfTaskPane As MailDropWpfTaskPane = GetWpfTaskPane(taskPane)
         Debug.WriteLine($"[ThisAddIn] MailSelected: taskPane={If(taskPane IsNot Nothing, "open", "null")}, wpfTaskPane={If(wpfTaskPane IsNot Nothing, "ok", "null")}")
+        PrepareWpfTaskPane(wpfTaskPane)
+    End Sub
+
+    Private Sub PrepareWpfTaskPane(wpfTaskPane As MailDropWpfTaskPane)
         If wpfTaskPane IsNot Nothing Then
             Dim singleMail = wpfTaskPane.SingleMailSelected()
             Debug.WriteLine($"[ThisAddIn] MailSelected: SingleMailSelected={singleMail}")
@@ -347,9 +371,9 @@ Public Class ThisAddIn
     End Sub
 
     ' Hilfsmethode, um die WPF TaskPane Instanz zu bekommen
-    Private Function GetWpfTaskPane() As MailDropWpfTaskPane
-        If taskPane Is Nothing Then Return Nothing
-        Dim wpfPane = TryCast(taskPane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
+    Private Function GetWpfTaskPane(pane As Microsoft.Office.Tools.CustomTaskPane) As MailDropWpfTaskPane
+        If pane Is Nothing Then Return Nothing
+        Dim wpfPane = TryCast(pane.Control.Controls(0), System.Windows.Forms.Integration.ElementHost)
         If wpfPane IsNot Nothing Then
             Return TryCast(wpfPane.Child, MailDropWpfTaskPane)
         End If
@@ -361,22 +385,40 @@ Public Class ThisAddIn
         Return ribbonObj
     End Function
 
-    ' Callback for Ribbon button
+    ' Callback for Ribbon button (Explorer-Ribbon "Start" und Inspector-Ribbon "Nachricht").
+    ' Der Button schaltet um: ist die Pane des Fensters, aus dem geklickt wurde, sichtbar, wird
+    ' sie ausgeblendet, sonst frisch vorbereitet und eingeblendet.
     Public Sub MailAblegen_Click(control As Object)
+        Dim inspector As Outlook.Inspector = Nothing
+        Try
+            inspector = TryCast(TryCast(control, Microsoft.Office.Core.IRibbonControl)?.Context, Outlook.Inspector)
+        Catch ex As Exception
+            Logger.LogError("MailAblegen_Click: Ribbon-Kontext ermitteln", ex)
+        End Try
+        If inspector IsNot Nothing Then
+            ToggleInspectorTaskPane(inspector)
+            Return
+        End If
+
+        If taskPane IsNot Nothing AndAlso taskPane.Visible Then
+            Debug.WriteLine("[ThisAddIn] MailAblegen_Click: task pane visible — hiding (toggle).")
+            taskPane.Visible = False
+            Return
+        End If
+
         Try
             If taskPane Is Nothing Then
                 ' Preload hasn't fired yet (clicked within first 4 s) — create synchronously.
                 Debug.WriteLine("[ThisAddIn] MailAblegen_Click: preload not done, creating task pane now…")
-                CreateAndRegisterTaskPane()
+                CreateExplorerTaskPane()
             Else
                 Debug.WriteLine("[ThisAddIn] MailAblegen_Click: task pane was preloaded — showing immediately.")
             End If
         Catch ex As Exception
             ' Task pane could not be created at all — nothing to show, so surface the error directly.
-            Debug.WriteLine($"[ThisAddIn] MailAblegen_Click: CreateAndRegisterTaskPane failed: {ex.Message}")
-            Logger.LogError("MailAblegen_Click: CreateAndRegisterTaskPane", ex)
-            MessageBox.Show($"MailDrop konnte nicht geoeffnet werden:{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}Details in: {Path.Combine(DbDirectory, "error.log")}",
-                             "MailDrop", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine($"[ThisAddIn] MailAblegen_Click: CreateExplorerTaskPane failed: {ex.Message}")
+            Logger.LogError("MailAblegen_Click: CreateExplorerTaskPane", ex)
+            ShowTaskPaneCreationError(ex)
             Return
         End Try
 
@@ -392,7 +434,71 @@ Public Class ThisAddIn
         taskPane.Visible = True
     End Sub
 
-    Public Sub HideTaskPane()
+    Private Sub ShowTaskPaneCreationError(ex As Exception)
+        MessageBox.Show($"MailDrop konnte nicht geoeffnet werden:{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}Details in: {Path.Combine(DbDirectory, "error.log")}",
+                         "MailDrop", MessageBoxButtons.OK, MessageBoxIcon.Error)
+    End Sub
+
+    Private Sub ToggleInspectorTaskPane(inspector As Outlook.Inspector)
+        Dim pane As Microsoft.Office.Tools.CustomTaskPane = Nothing
+        If _inspectorPanes.TryGetValue(inspector, pane) AndAlso pane.Visible Then
+            Debug.WriteLine("[ThisAddIn] Inspector pane visible — hiding (toggle).")
+            pane.Visible = False
+            Return
+        End If
+
+        If pane Is Nothing Then
+            Try
+                pane = CreateTaskPane(inspector)
+                Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(pane)
+                If wpf IsNot Nothing Then wpf.Session.SourceInspector = inspector
+                RegisterInspectorPane(inspector, pane)
+            Catch ex As Exception
+                Logger.LogError("MailAblegen_Click: Inspector-Pane erstellen", ex)
+                ShowTaskPaneCreationError(ex)
+                Return
+            End Try
+        End If
+
+        Try
+            ' Immer neu vorbereiten: das Fenster kann inzwischen eine andere Mail zeigen
+            ' (Naechstes/Vorheriges Element), und nach einer Ablage wurde die Session zurueckgesetzt.
+            PrepareWpfTaskPane(GetWpfTaskPane(pane))
+        Catch ex As Exception
+            Logger.LogError("MailAblegen_Click: Inspector-Pane vorbereiten", ex)
+        End Try
+        pane.Visible = True
+    End Sub
+
+    Private Sub RegisterInspectorPane(inspector As Outlook.Inspector, pane As Microsoft.Office.Tools.CustomTaskPane)
+        _inspectorPanes(inspector) = pane
+        Dim inspectorEvents = DirectCast(inspector, Outlook.InspectorEvents_10_Event)
+        Dim closeHandler As Outlook.InspectorEvents_10_CloseEventHandler = Nothing
+        closeHandler = Sub()
+            Try
+                RemoveHandler inspectorEvents.Close, closeHandler
+                _inspectorPanes.Remove(inspector)
+                Dim wpf As MailDropWpfTaskPane = GetWpfTaskPane(pane)
+                If wpf IsNot Nothing Then wpf.Session.SourceInspector = Nothing
+                Me.CustomTaskPanes.Remove(pane)
+            Catch ex As Exception
+                Logger.LogError("Inspector.Close: Task Pane entfernen", ex)
+            End Try
+        End Sub
+        AddHandler inspectorEvents.Close, closeHandler
+    End Sub
+
+    ' owner = die WPF-Pane, die sich selbst ausblenden will (OK/Abbrechen). Ohne owner (z.B.
+    ' Modulwechsel im Explorer) ist die Explorer-Pane gemeint.
+    Public Sub HideTaskPane(Optional owner As MailDropWpfTaskPane = Nothing)
+        If owner IsNot Nothing Then
+            For Each pane In _inspectorPanes.Values
+                If GetWpfTaskPane(pane) Is owner Then
+                    pane.Visible = False
+                    Return
+                End If
+            Next
+        End If
         If taskPane IsNot Nothing Then
             taskPane.Visible = False
         End If

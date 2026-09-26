@@ -377,6 +377,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="UI\MailDropRibbon.xml" />
+    <EmbeddedResource Include="UI\MailDropRibbonInspector.xml" />
   </ItemGroup>
   <ItemGroup>
     <Page Include="UI\AttachmentRenameDialog.xaml">

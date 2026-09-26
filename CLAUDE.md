@@ -12,7 +12,12 @@ MailDrop is a **Visual Studio Tools for Office (VSTO) Outlook Add-in** written i
 
 ## Features
 
-- Outlook ribbon button MailDrop opens a right-side task pane.
+- Outlook ribbon button MailDrop opens a right-side task pane. The button **toggles**: clicking it while the pane of the window it was clicked in is visible hides that pane instead (plain `button`, not a `toggleButton` - a `getPressed` state would have to be invalidated from every other hide path: OK, Abbrechen, the pane's own X, module switch).
+- The button exists in two ribbons: the Explorer ribbon (tab "Start", `UI/MailDropRibbon.xml`) and the read-mail Inspector ribbon (tab "Nachricht", `UI/MailDropRibbonInspector.xml`, `idMso="TabReadMessage"`), so a mail opened in its own window can be filed from there. `MailDropRibbon.GetCustomUI` picks the XML by `ribbonID` (`Microsoft.Outlook.Explorer` / `Microsoft.Outlook.Mail.Read`) and returns `Nothing` for every other ribbon (compose, appointment, contact, ...). Previously one XML was returned for every ribbon ID.
+- Custom task panes are bound to exactly one Outlook window, so an Inspector cannot show the Explorer's pane: `ThisAddIn` keeps a separate pane per Inspector in `_inspectorPanes` (Dictionary keyed by the Inspector RCW from `IRibbonControl.Context`, same pattern as Microsoft's "task panes with e-mail messages" walkthrough). It is created lazily on the first click in that window (not for every opened mail), freshly prepared (`PrepareSession`) on every show, and removed via `CustomTaskPanes.Remove` in an `InspectorEvents_10_Event.Close` handler. Each Inspector pane has its own `MailDropWpfTaskPane`/`Session`; `Session.SourceInspector` (survives `Reset()`) tells `MailUtils.GetSourceMail` and `SingleMailSelected` to use `Inspector.CurrentItem` instead of the Explorer selection. `ThisAddIn.HideTaskPane(owner)` hides the pane hosting the given WPF pane (OK/Abbrechen), without an owner the Explorer pane (module switch).
+- `Session.SourceMailEntryId` (set in `ReadMailMeta`, cleared in `Reset()`) is compared against the mail's `EntryID` in `SaveSelectedMailAsMsg`/`SaveMailAttachments`; on mismatch filing is refused ("Die angezeigte Mail hat sich geändert ..."). Needed because an Inspector can navigate to the next/previous item while the pane still shows the fields prepared for the previous mail; also applies in Explorer mode, where it is a no-op in practice (selection changes re-prepare the pane). As a side effect both save functions now require exactly one selected mail (was `Count < 1`, i.e. with multiple selected the first one was saved).
+- The Explorer pane is now created with the explicit window `Application.ActiveExplorer()` (`CreateExplorerTaskPane` -> `CreateTaskPane(window)`); `CustomTaskPanes.Add` without a window uses Outlook's `ActiveWindow`, which could be an Inspector when the delayed preload fires.
+- Overlaying the pane over the mail list/reading pane instead of shrinking them is **not** possible with a docked `CustomTaskPane` (Office always reflows the host window's content around docked panes). Only alternatives: `msoCTPDockPositionFloating` (free-floating tool window, user-movable, not anchored to the Outlook edge) or replacing the task pane with an own borderless WPF `Window` positioned over Outlook's right edge like `NotificationToast` (would need window tracking on move/resize/minimize and its own focus handling). Not implemented; open decision.
 - The add-in reacts to selection changes and enables editing only when exactly one mail is selected.
 - Session data is prepared from the selected mail metadata (Betreff, Absender, AbsenderDomain, Empfaenger, Datum).
 - ProjektPfad offers recent project folders for the current user (from SQLite history) plus anderes... via folder picker.
@@ -98,6 +103,7 @@ MailDrop/
 	|- InfoPopup.xaml.vb
 	|- MailDropRibbon.vb
 	|- MailDropRibbon.xml
+	|- MailDropRibbonInspector.xml
 	|- MailDropWpfHostControl.vb
 	|- MailDropWpfTaskPane.xaml
 	|- MailDropWpfTaskPane.xaml.vb
@@ -156,7 +162,7 @@ MailDrop/
 ## Architecture and control flow
 
 - Entry point: ThisAddIn_Startup in ThisAddIn.vb. Startup itself must stay fast and free of synchronous blocking work: Outlook measures its own call into this method and auto-disables the add-in if it takes too long (see `DisabledItems`/slow-add-in caveat below) — everything it does is either deferred to a background Task or a short UI-thread Timer tick, never executed inline.
-- Ribbon action: MailDropRibbon -> Globals.ThisAddIn.MailAblegen_Click.
+- Ribbon action: MailDropRibbon -> Globals.ThisAddIn.MailAblegen_Click (Explorer: toggles `taskPane`; Inspector context: `ToggleInspectorTaskPane`).
 - Task pane creation: MailDropWpfHostControl hosts MailDropWpfTaskPane.
 - Task pane default width is set during first creation in ThisAddIn.MailAblegen_Click (currently 500 px) and docked right.
 - Selection updates: Explorer.SelectionChange -> MailSelected(), but only while the task pane is actually visible (`taskPane Is Nothing OrElse Not taskPane.Visible` short-circuits with an early Return before calling `MailSelected()`) - PrepareSession()'s work (mail metadata read, DB query, SuggestionEngine feature-distance/embedding computation) is otherwise invisible to the user and would just be wasted on every selection change while the pane is hidden or not yet opened. Safe because `MailAblegen_Click` always calls `MailSelected()` itself, before setting `taskPane.Visible = True`, so the pane is guaranteed to be freshly prepared for whatever is currently selected the moment it becomes visible again, regardless of how many selection changes were skipped while hidden.
@@ -286,7 +292,8 @@ Note:
 ## Quick verification checklist after changes
 
 - Build succeeds in Visual Studio.
-- Ribbon button opens the task pane.
+- Ribbon button opens the task pane; clicking it again hides it.
+- Opened mail (double-click): tab "Nachricht" shows the MailDrop button; filing from there saves that mail, closing the window removes its pane.
 - Exactly one selected mail enables editing; other selections disable editing.
 - Selecting ProjektPfad refreshes Projektstruktur TreeView.
 - Context menu actions (`Neuer Ordner`, `Loeschen`, `Umbenennen`) work on the expected TreeView node and keep selection in sync.

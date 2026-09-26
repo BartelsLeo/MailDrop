@@ -10,22 +10,37 @@ Public Module MailUtils
         End If
     End Sub
 
+    ' Liefert die abzulegende Mail: aus dem geoeffneten Mail-Fenster (session.SourceInspector),
+    ' sonst die einzelne Auswahl im Explorer. Nothing, wenn keine einzelne MailItem verfuegbar ist.
+    ' Der Explorer/Inspector selbst wird NIE freigegeben (siehe Kommentar in ReadMailMeta) - nur
+    ' das zurueckgegebene MailItem gibt der Aufrufer im Finally frei.
+    Private Function GetSourceMail(session As Session) As Outlook.MailItem
+        Dim inspector As Outlook.Inspector = session?.SourceInspector
+        If inspector IsNot Nothing Then
+            Return TryCast(inspector.CurrentItem, Outlook.MailItem)
+        End If
+        Dim explorer As Outlook.Explorer = Globals.ThisAddIn.Application.ActiveExplorer()
+        If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then Return Nothing
+        Return TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+    End Function
+
+    ' Prueft, ob noch dieselbe Mail aktiv ist, fuer die PrepareSession die Felder befuellt hat.
+    Private Function IsSameMailAsPrepared(session As Session, mail As Outlook.MailItem) As Boolean
+        If String.IsNullOrEmpty(session.SourceMailEntryId) Then Return True
+        Return String.Equals(session.SourceMailEntryId, mail.EntryID, StringComparison.Ordinal)
+    End Function
+
     ' Liest die Metadaten der ausgew�hlten Mail und bef�llt die Properties der �bergebenen Session
     Public Sub ReadMailMeta(session As Session)
         Dim mail As Object = Nothing
         Debug.WriteLine("[MailUtils] ReadMailMeta called.")
         Try
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer As Object = app.ActiveExplorer()
-            If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then
-                Debug.WriteLine($"[MailUtils] ReadMailMeta: selection count={If(explorer Is Nothing, "no explorer", explorer.Selection.Count.ToString())} - skipping.")
-                Return
-            End If
-            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            mail = GetSourceMail(session)
             If mail Is Nothing Then
-                Debug.WriteLine("[MailUtils] ReadMailMeta: selected item is not a MailItem - skipping.")
+                Debug.WriteLine("[MailUtils] ReadMailMeta: no single MailItem available - skipping.")
                 Return
             End If
+            session.SourceMailEntryId = mail.EntryID
             session.Absender = mail.SenderName
             If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
                 Dim emailParts = mail.SenderEmailAddress.Split("@"c)
@@ -43,23 +58,21 @@ Public Module MailUtils
             ReleaseComObjectSafe(mail)
             ' Explorer is intentionally NOT released: app.ActiveExplorer() returns the same RCW
             ' as _currentExplorer in ThisAddIn. FinalReleaseComObject on it would destroy the
-            ' SelectionChange event connection permanently.
+            ' SelectionChange event connection permanently. Same for session.SourceInspector: its
+            ' RCW is held by ThisAddIn for the Inspector.Close handler of that window's task pane.
         End Try
     End Sub
 
     ' Speichert die markierte Mail als .msg im Ablageordner
-    Public Function SaveSelectedMailAsMsg(msgZielPfad As String) As String
-        Dim explorer As Object = Nothing
+    Public Function SaveSelectedMailAsMsg(session As Session, msgZielPfad As String) As String
         Dim mail As Object = Nothing
         Try
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            explorer = app.ActiveExplorer()
-            If explorer Is Nothing OrElse explorer.Selection.Count < 1 Then
+            mail = GetSourceMail(session)
+            If mail Is Nothing Then
                 Return "Bitte wählen Sie eine einzelne E-Mail aus."
             End If
-            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
-            If mail Is Nothing Then
-                Return "Bitte w�hlen Sie eine einzelne E-Mail aus."
+            If Not IsSameMailAsPrepared(session, mail) Then
+                Return "Die angezeigte Mail hat sich geändert. Bitte MailDrop erneut öffnen."
             End If
             Dim vollPfad = msgZielPfad
             If Not vollPfad.ToLower().EndsWith(".msg") Then
@@ -81,10 +94,7 @@ Public Module MailUtils
     Public Sub ReadAttachmentNames(session As Session)
         Dim mail As Object = Nothing
         Try
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            Dim explorer As Object = app.ActiveExplorer()
-            If explorer Is Nothing OrElse explorer.Selection.Count <> 1 Then Return
-            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            mail = GetSourceMail(session)
             If mail Is Nothing Then Return
             session.Anhaenge.Clear()
             For i As Integer = 1 To mail.Attachments.Count
@@ -108,18 +118,15 @@ Public Module MailUtils
     End Sub
 
     ' Speichert die selektierten Anhänge der Mail; Zuordnung per Dateiname (nicht per Index)
-    Public Function SaveMailAttachments(anhangZielpfade As List(Of String)) As String
-        Dim explorer As Object = Nothing
+    Public Function SaveMailAttachments(session As Session, anhangZielpfade As List(Of String)) As String
         Dim mail As Object = Nothing
         Try
-            Dim app As Outlook.Application = Globals.ThisAddIn.Application
-            explorer = app.ActiveExplorer()
-            If explorer Is Nothing OrElse explorer.Selection.Count < 1 Then
-                Return "Bitte w�hlen Sie eine einzelne E-Mail aus."
-            End If
-            mail = TryCast(explorer.Selection.Item(1), Outlook.MailItem)
+            mail = GetSourceMail(session)
             If mail Is Nothing Then
                 Return "Bitte w�hlen Sie eine einzelne E-Mail aus."
+            End If
+            If Not IsSameMailAsPrepared(session, mail) Then
+                Return "Die angezeigte Mail hat sich geändert. Bitte MailDrop erneut öffnen."
             End If
             For Each anhangPfad In anhangZielpfade
                 Dim targetName = Path.GetFileName(anhangPfad)
