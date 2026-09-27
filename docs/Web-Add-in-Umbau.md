@@ -143,11 +143,25 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
   bei einem „uncased“ BERT-Modell vorgesehen – Akzente/Umlaute (ä → a). Die VSTO-Version
   (`Microsoft.ML.Tokenizers.BertTokenizer` mit Standardoptionen) tut das vermutlich nicht, sodass deutsche
   Umlaut-Wörter dort zu `[UNK]` werden – die Web-Variante ist hier fachlich korrekter.
-- **Nebenbefund Modell:** `vocab.txt` ist das **englische** uncased-BERT-Vokabular (30.522 Einträge), das Modell
-  also sehr wahrscheinlich ein rein englisches Satzmodell (MiniLM-Familie). Deutsche Betreffzeilen werden in
-  viele Wortstücke zerlegt, die semantische Ähnlichkeit ist dadurch schwächer als möglich. Ein mehrsprachiges
-  Modell (z. B. aus der „paraphrase-multilingual“-Familie) wäre für deutsche Mails besser, ist aber deutlich
-  größer – eigene Entscheidung, am besten mit echten Betreffzeilen vergleichen.
+- **Modellwahl – Entscheidung 2026-09-27: ein deutschsprachiges Modell genügt.** Das heutige Modell ist rein
+  englisch (`vocab.txt` = englisches uncased-BERT-Vokabular, 30.522 Einträge); deutsche Betreffzeilen werden in
+  viele Wortstücke zerlegt, die semantische Ähnlichkeit leidet.
+  - Rein deutsche Satzmodelle gibt es praktisch nur in großen Varianten (BERT-large-Größe, mehrere hundert MB)
+    – für den Aufgabenbereich ungeeignet.
+  - **Geplant:** `paraphrase-multilingual-MiniLM-L12-v2` (118 Mio. Parameter, 384 Dimensionen – gleiche
+    Schnittstelle wie heute). In einem deutschen Vergleich deutlich besser als GBERT-large (Korrelation 0,84 vs.
+    0,67). Das Modell ist nur deshalb groß (~470 MB), weil ~96 Mio. Parameter auf das Vokabular für 50+ Sprachen
+    entfallen. Da Deutsch genügt, wird das **Vokabular auf deutsch (+ englisch) relevante Tokens gekürzt** und
+    das Modell auf 8 Bit quantisiert → erwartet ca. 20–40 MB. Die Gewichte der behaltenen Tokens bleiben
+    unverändert, die Qualität für deutsche Texte damit praktisch gleich (per Vergleich mit dem Originalmodell
+    auf echten Betreffzeilen zu bestätigen).
+  - **Folgen:** Der Tokenizer ist dann SentencePiece statt WordPiece → `web/src/embedding/wordpiece.ts` wird
+    durch den Tokenizer aus Transformers.js (liest `tokenizer.json`) ersetzt. Modell nicht mehr in Git
+    einchecken (GitHub-Grenze 100 MB je Datei), sondern per Skript mit fester Version + Prüfsumme von
+    Hugging Face holen und kürzen – im Build (GitHub Actions) bzw. einmalig lokal. Hugging Face ist aus der
+    Claude-Umgebung gesperrt; der Schritt muss daher bei euch bzw. in GitHub Actions laufen.
+  - **Azure Static Web Apps:** Das kleinere Modell entschärft zugleich die Speichergrenzen (Free-Tarif 250 MB
+    gesamt; gemeldete Grenze von 100 MB pro Datei – das heutige 86-MB-Modell läge knapp darunter).
 - **Offener Punkt Laufzeit:** ~90 MB Modell im Aufgabenbereich des (neuen) Outlook – Ladezeit beim ersten Start
   und Speicherverbrauch im Pilot messen; bei Bedarf eine quantisierte Variante (~¼ der Größe) testen und die
   Vorschlagsqualität vergleichen.
