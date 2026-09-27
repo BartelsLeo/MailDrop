@@ -290,20 +290,45 @@ def pruned_hf_tokenizer(tokenizer_json: dict, kept_ids: list[int]) -> Tokenizer:
 
 
 def prune_onnx(source: Path, target: Path, kept_ids: list[int], vocab_size: int) -> None:
+    """Schneidet die Token-Tabelle auf kept_ids zu.
+
+    Gesucht wird die Tabelle über den Gather-Knoten, der input_ids liest - nicht über die Zeilenzahl:
+    das Modell hat mehr Zeilen als der Tokenizer Tokens (vocab_size 250037 vs. 250002; die übrigen
+    Zeilen werden nie adressiert). Die Tabelle kann als Initializer oder als Constant-Knoten vorliegen.
+    """
     model = onnx.load(str(source))
-    matches = [init for init in model.graph.initializer if len(init.dims) == 2 and init.dims[0] == vocab_size]
-    if len(matches) != 1:
-        raise SystemExit(f"Token-Tabelle nicht eindeutig gefunden ({len(matches)} Kandidaten mit {vocab_size} Zeilen).")
-    table = numpy_helper.to_array(matches[0])
-    pruned = numpy_helper.from_array(np.ascontiguousarray(table[kept_ids]), matches[0].name)
-    matches[0].CopyFrom(pruned)
+    graph = model.graph
+    gathers = [n for n in graph.node if n.op_type == "Gather" and len(n.input) > 1 and n.input[1] == "input_ids"]
+    initializers = {init.name: init for init in graph.initializer}
+    if len(gathers) == 1:
+        table_name = gathers[0].input[0]
+    else:
+        # Rückfall (z. B. input_ids erst über Cast/Reshape): größter 2D-Initializer mit genügend Zeilen.
+        candidates = sorted((i for i in graph.initializer if len(i.dims) == 2 and i.dims[0] >= vocab_size),
+                            key=lambda i: i.dims[0] * i.dims[1], reverse=True)
+        if not candidates:
+            raise SystemExit(f"Token-Tabelle nicht gefunden ({len(gathers)} Gather auf input_ids, kein Initializer >= {vocab_size} Zeilen).")
+        table_name = candidates[0].name
+    constants = {n.output[0]: n for n in graph.node if n.op_type == "Constant"}
+    if table_name in initializers:
+        holder = initializers[table_name]
+        table = numpy_helper.to_array(holder)
+    elif table_name in constants:
+        holder = next(a for a in constants[table_name].attribute if a.name == "value").t
+        table = numpy_helper.to_array(holder)
+    else:
+        raise SystemExit(f"Token-Tabelle {table_name!r} ist weder Initializer noch Constant.")
+    if table.ndim != 2 or table.shape[0] < vocab_size:
+        raise SystemExit(f"Token-Tabelle {table_name!r} hat Form {table.shape}, erwartet [>= {vocab_size}, H].")
+    pruned = numpy_helper.from_array(np.ascontiguousarray(table[kept_ids]), holder.name)
+    holder.CopyFrom(pruned)
     opset = max((o.version for o in model.opset_import if o.domain in ("", "ai.onnx")), default=0)
     if opset > 19:
         raise SystemExit(f"Opset {opset} ist zu neu für ONNX Runtime 1.16 (VSTO).")
     # ONNX Runtime 1.16 (VSTO) liest IR-Version <= 9; neuere Exporte tragen oft 10 ohne neue Features.
     model.ir_version = min(model.ir_version, 9)
     onnx.save(model, str(target))
-    log(f"Token-Tabelle {matches[0].name}: {table.shape} -> {tuple(pruned.dims)}")
+    log(f"Token-Tabelle {table_name}: {table.shape} -> {tuple(pruned.dims)}")
 
 
 class OnnxEmbedder:
