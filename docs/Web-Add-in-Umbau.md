@@ -29,7 +29,12 @@ Microsoft-Schnittstelle **Graph** möglich, also mit **SharePoint/OneDrive als A
 Port, sondern ein Neubau, bei dem die fachliche Logik (Platzhalter, Validierung, Vorschlagskaskade) übernommen
 wird.
 
-Ausgangsannahme aus den Vorgesprächen: **Jedes Projekt hat eine eigene SharePoint-Site mit eigener Bibliothek.**
+Ausgangsannahmen aus den Vorgesprächen:
+
+- **Jedes Projekt hat eine eigene SharePoint-Site mit eigener Bibliothek.**
+- **Das heutige VSTO-MailDrop ist noch nicht verteilt und wird nicht genutzt.** Es gibt also keinen Übergang,
+  keinen Parallelbetrieb, keine bestehenden Ablagen und keinen Altverlauf zu berücksichtigen. Das Web-Add-in
+  startet auf der grünen Wiese; das VSTO-Projekt dient nur als fachliche Vorlage (Logik, Oberfläche, Erfahrungen).
 
 ---
 
@@ -41,7 +46,7 @@ Ausgangsannahme aus den Vorgesprächen: **Jedes Projekt hat eine eigene SharePoi
 |---|---|
 | **SharePoint, eine Site + Bibliothek pro Projekt** (über Graph) | **Empfohlen.** Kein eigener Server nötig, Berechtigungen liegen in SharePoint, passt 1:1 zum heutigen ProjektPfad-Konzept. |
 | Netzlaufwerk wie heute | Nur mit **eigenem Server**, der im Auftrag des Add-ins auf die Freigaben schreibt (Anmeldung, Berechtigungsprüfung, Betrieb), oder mit einem **Hilfsprogramm auf jedem PC** (dann entfällt der Hauptvorteil des Web-Add-ins). Nicht empfohlen. |
-| Im OneDrive synchronisierte Bibliotheken | Für ein Web-Add-in **nicht nutzbar** – es sieht das lokale Dateisystem nicht. (Für das heutige VSTO-MailDrop dagegen ein brauchbarer Übergang, siehe Abschnitt 7.) |
+| Im OneDrive synchronisierte Bibliotheken | Für ein Web-Add-in **nicht nutzbar** – es sieht das lokale Dateisystem nicht. (Nur für das VSTO-MailDrop relevant, siehe Abschnitt 8.) |
 
 ### E2 – Zugriff auf die Projekt-Sites (Berechtigungsmodell)
 
@@ -81,14 +86,28 @@ Technische Details zur empfohlenen Variante:
 | Verknüpfungen unter „Meine Dateien“ / gefolgte Sites | Ergänzend: „meine Projekte“ ohne Suche. |
 | Site-Adresse einfügen | Nur als Notlösung/Rückfallebene. |
 
-Die Liste der zuletzt genutzten Projekte bleibt wie heute (aus dem Verlauf), nur mit Site/Bibliothek statt Pfad.
+Die Liste der zuletzt genutzten Projekte funktioniert wie im VSTO-Konzept (aus dem Verlauf), nur mit Site/Bibliothek statt Pfad.
 
 ### E5 – Format der abgelegten Mail
 
-Office.js und Graph liefern eine Mail nur als **.eml** (MIME), **nicht als .msg**. Entscheidung nötig:
-.eml akzeptieren (öffnet sich in Outlook, enthält Anhänge) – eine .msg-Erzeugung im Browser ist nicht
-realistisch. Folge: Bestehende Ablagen sind .msg, neue wären .eml; Duplikatprüfung und Dateinamenschema
-entsprechend anpassen.
+Office.js und Graph liefern eine Mail nur als **.eml** (MIME), **nicht als .msg**. Die .eml wird **genauso
+abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinamen-Schema, nur mit Endung
+`.eml` (Feld „msg Dateiname“ wird zu „Dateiname“). Anhänge können wie heute zusätzlich einzeln abgelegt werden.
+
+- **Inhalt:** Die .eml ist die vollständige Mail inklusive Kopfzeilen, Text und **eingebetteter Anhänge** –
+  fachlich gleichwertig zur .msg.
+- **Beschaffung ohne Zusatzberechtigung:** `item.getAsFileAsync()` (Office.js, Requirement Set Mailbox 1.14)
+  liefert die .eml direkt aus dem geöffneten Element. Alternative über Graph (`/messages/{id}/$value`) bräuchte
+  zusätzlich die Berechtigung `Mail.Read` – vermeiden.
+- **Öffnen:** Doppelklick auf eine synchronisierte/heruntergeladene .eml öffnet sie in Outlook (klassisch und
+  neu – aktuellen Stand beim neuen Outlook prüfen). In der SharePoint-Weboberfläche wird eine .eml in der Regel
+  heruntergeladen statt als Vorschau angezeigt.
+- **Upload:** kleine Dateien direkt, große (viele/große Anhänge) per Upload-Session über Graph.
+- **Mehrwert gegenüber heute:** Beim Upload können **Metadaten als Spalten der Bibliothek** gesetzt werden
+  (Absender, Datum, Betreff, Titel). Dann sind Mails in SharePoint filter- und sortierbar, ohne sie zu öffnen –
+  optional, erfordert passende Spalten in den Projektbibliotheken (Site-Vorlage).
+- **Sonderfälle prüfen:** verschlüsselte/signierte Mails (S/MIME) und Mails mit Vertraulichkeitsbezeichnung bzw.
+  Rechteverwaltung – ob und wie diese als .eml exportierbar und später lesbar sind.
 
 ### E6 – KI-Modell für die Vorschläge
 
@@ -97,17 +116,6 @@ entsprechend anpassen.
   Prüfen, ob eine **quantisierte/kleinere Variante** ausreicht (schnellerer erster Start).
 - Tokenizer (WordPiece, `vocab.txt`) muss in TypeScript nachgebaut oder aus einer Bibliothek übernommen werden;
   Ergebnisse gegen die .NET-Version abgleichen (gleiche Embeddings → gleiche Vorschläge).
-
-### E7 – Umgang mit dem alten Verlauf
-
-Der alte Verlauf speichert Netzlaufwerkpfade. Optionen: (a) Neustart ohne Verlauf, (b) einmalige Migration
-mit einer **Zuordnungstabelle Netzlaufwerk-Projektordner → Projekt-Site**, falls die Projekte ohnehin
-umziehen. Empfehlung: (b), wenn die Zuordnung ohnehin für die Projektmigration entsteht, sonst (a).
-
-### E8 – Übergang
-
-Web-Add-ins laufen **auch im klassischen Outlook**. Deshalb ist ein **Parallelbetrieb** möglich:
-Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach VSTO-Version abkündigen.
 
 ---
 
@@ -152,13 +160,13 @@ Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach 
 
 ## 5. Vorgehen in Phasen
 
-1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E8 festhalten.
+1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E6 festhalten.
 2. **Technischer Durchstich (Prototyp):** Anmeldung, aktuelle Mail lesen, eine Projekt-Site finden, Ordner
    anzeigen, .eml + Anhänge hochladen. Klärt die riskanten Punkte früh (Berechtigungen, Anmeldung, Upload).
 3. **Kernfunktionen:** komplette Oberfläche, Platzhalter, Validierung, Ordneraktionen, Verlauf in OneDrive.
 4. **Vorschläge:** SuggestionEngine + Embedding portieren, Abgleich mit der .NET-Version.
-5. **Pilot** mit kleiner Gruppe, parallel zum VSTO-MailDrop.
-6. **Rollout** an alle, VSTO-Version abkündigen.
+5. **Pilot** mit kleiner Gruppe.
+6. **Rollout** an alle.
 
 ---
 
@@ -167,7 +175,7 @@ Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach 
 **Grundsätzliches**
 
 1. Ist **SharePoint als Ablageort** für Projekt-Mails gewollt und verbindlich? (Ohne das lohnt der Umbau nicht.)
-2. Was passiert mit den **bestehenden Projektordnern auf dem Netzlaufwerk** – Migration, Parallelbetrieb, nur neue Projekte?
+2. Liegen **alle** Projekte (auch laufende) bereits auf SharePoint, oder gibt es noch Projektordner auf dem Netzlaufwerk, in die abgelegt werden soll?
 3. Wann ist mit einem **verpflichtenden Umstieg auf das neue Outlook** zu rechnen? (Bestimmt den Zeitdruck.)
 
 **Projekt-Sites**
@@ -187,7 +195,7 @@ Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach 
 10. Darf eine **Azure Static Web App** im Tenant betrieben werden? Welche Subscription/Ressourcengruppe, wer ist Besitzer?
 11. Eigene Adresse (z. B. `maildrop.firma.de`) gewünscht?
 12. Wer verteilt das Add-in im **Admin-Center (Integrierte Apps)**, an welche Gruppen?
-13. Sind **Outlook-Versionen** und **WebView2** auf allen PCs aktuell genug (für den Parallelbetrieb im klassischen Outlook)?
+13. Welche Outlook-Varianten sind im Einsatz (klassisch/neu/Web)? Im klassischen Outlook: sind **Outlook-Version** und **WebView2** aktuell genug für Web-Add-ins?
 14. Müssen Adressen im **Proxy/Firewall** freigegeben werden?
 
 **Datenschutz**
@@ -220,7 +228,7 @@ Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach 
 - [ ] Projekt-Sites an Hub anbinden bzw. Namensschema sicherstellen (E4).
 - [ ] Berechtigungen pro Projekt-Site wie gewohnt pflegen (bleibt die eigentliche Zugriffssteuerung).
 - [ ] Ggf. Aufbewahrungsrichtlinien für die Bibliotheken festlegen.
-- [ ] Ggf. Migration der Netzlaufwerk-Projekte und Zuordnungstabelle Ordner → Site bereitstellen (E7).
+- [ ] Optional: Spalten für Mail-Metadaten (Absender, Datum, Betreff) in die Vorlage der Projektbibliotheken aufnehmen (E5).
 
 **Verteilung und Betrieb**
 
@@ -233,21 +241,34 @@ Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach 
 
 ---
 
-## 8. Übergangslösung ohne Web-Add-in
+## 8. Alternative: VSTO-MailDrop fertigstellen statt Web-Add-in
 
-Solange das klassische Outlook genutzt werden kann, lässt sich SharePoint als Ablageort **schon mit dem
-heutigen VSTO-MailDrop** nutzen: Jeder Nutzer synchronisiert die Projektbibliothek über OneDrive; sie erscheint
-als lokaler Ordner und kann über „anderes…“ als ProjektPfad gewählt werden. OneDrive lädt abgelegte Dateien
-automatisch hoch. Mögliche Erweiterungen: synchronisierte Bibliotheken automatisch in der ProjektPfad-Liste
-anbieten, Pfadlängenprüfung an SharePoint-Grenzen anpassen. So kann die Projektablage schon vor dem
-Web-Add-in auf SharePoint umziehen – die IT-Themen „SharePoint-Struktur und -Berechtigungen“ sind dann bereits
-erledigt, wenn der Umbau beginnt.
+Da das VSTO-MailDrop noch nicht verteilt ist, steht die Grundsatzfrage jetzt: **VSTO fertigstellen oder direkt
+das Web-Add-in bauen?**
+
+| | VSTO fertigstellen | Web-Add-in bauen |
+|---|---|---|
+| Aufwand bis zum Einsatz | gering (existiert, muss getestet und verteilt werden) | hoch (Neubau) |
+| Läuft im neuen Outlook | nein | ja |
+| Lebensdauer | begrenzt durch Supportende des klassischen Outlook | zukunftssicher |
+| Verteilung | ClickOnce, selbstsigniertes Zertifikat, bekannte Probleme (Deaktivierung wegen langsamen Starts, `Temp\Deployment`-Fehler) | zentral über Admin-Center, keine Installation |
+| SharePoint als Ablageort | nur über im OneDrive synchronisierte Bibliotheken (lokale Ordner, jeder Nutzer muss synchronisieren) | direkt über Graph |
+| IT-Aufwand | Zertifikat/Verteilung | Azure, App-Registrierung, Admin-Center (Abschnitt 7) |
+
+Mit VSTO wäre SharePoint nur über synchronisierte Bibliotheken nutzbar: Jeder Nutzer synchronisiert die
+Projektbibliothek über OneDrive; sie erscheint als lokaler Ordner und kann über „anderes…“ als ProjektPfad
+gewählt werden, OneDrive lädt abgelegte Dateien hoch. Erweiterungen dafür wären: synchronisierte Bibliotheken
+automatisch in der ProjektPfad-Liste anbieten, Pfadlängenprüfung an SharePoint-Grenzen anpassen.
+
+Einschätzung: Wenn der Umstieg auf das neue Outlook in absehbarer Zeit kommt oder die Projekte ohnehin auf
+SharePoint liegen, spricht viel dafür, **das VSTO-MailDrop gar nicht erst zu verteilen** und die Energie direkt
+in das Web-Add-in zu stecken – sonst wird zweimal ausgerollt und zweimal geschult.
 
 ---
 
 ## 9. Risiken und offene Punkte
 
-- **.eml statt .msg** (E5) – fachlich akzeptieren oder nicht.
+- **.eml statt .msg** (E5) – fachlich gleichwertig; Sonderfälle verschlüsselter/gekennzeichneter Mails prüfen.
 - **Berechtigungsmodell** (E2) – wenn nur `Sites.Selected` erlaubt ist, hängt der Betrieb an einer zuverlässigen Automatisierung.
 - **Erster Start** mit ~90 MB Modell – ggf. kleineres Modell nötig.
 - **Vorschlagsqualität** nach Portierung – nur durch Abgleich mit der .NET-Version auf denselben Daten nachweisbar.
