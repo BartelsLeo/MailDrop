@@ -1,0 +1,255 @@
+# MailDrop als Web-Add-in – Umbauskizze
+
+Stand: 2026-09-27 · Status: **Konzeptskizze, nichts davon ist umgesetzt**
+
+Dieses Dokument skizziert, was nötig wäre, um MailDrop vom heutigen VSTO-Add-in (VB.NET, nur klassisches
+Outlook für Windows) auf ein **Office-Web-Add-in** umzustellen, das auch im **neuen Outlook** und in Outlook im
+Browser läuft. Es enthält die Grundsatzentscheidungen, die Umbauten pro Komponente, die vorab nötigen
+Absprachen mit der IT und die Schritte, die die IT danach durchführt.
+
+> Hinweis: Microsoft ändert Bezeichnungen von Rollen, Berechtigungen und Admin-Oberflächen regelmäßig. Dieses
+> Dokument beschreibt, **was** zu tun ist; konkrete Klickpfade, Namen und Grenzwerte sind vor der Umsetzung gegen
+> die aktuelle Microsoft-Dokumentation zu prüfen.
+
+---
+
+## 1. Ausgangslage
+
+| | Heute (VSTO) | Web-Add-in |
+|---|---|---|
+| Läuft in | nur klassischem Outlook für Windows | klassischem Outlook (über WebView2), neuem Outlook, Outlook im Browser, Mac |
+| Technik | VB.NET, WPF, .NET Framework 4.7.2 | TypeScript/JavaScript, HTML, Office.js |
+| Dateisystem | voller Zugriff (Netzlaufwerk, lokale Ordner) | **kein Zugriff** – läuft abgeschottet wie eine Webseite |
+| Verteilung | ClickOnce (`setup.exe`), selbstsigniertes Zertifikat | zentral über das Microsoft-365-Admin-Center |
+| Verlauf | SQLite unter `%APPDATA%\MailDrop\sessions.db` | muss an einen erreichbaren Ort (siehe E3) |
+| KI-Vorschläge | ONNX Runtime (.NET) | ONNX Runtime Web (im Browser) |
+
+Kernproblem: MailDrops Hauptaufgabe – Dateien in Projektordner schreiben – ist im Web-Add-in nur über die
+Microsoft-Schnittstelle **Graph** möglich, also mit **SharePoint/OneDrive als Ablageort**. Deshalb ist das kein
+Port, sondern ein Neubau, bei dem die fachliche Logik (Platzhalter, Validierung, Vorschlagskaskade) übernommen
+wird.
+
+Ausgangsannahme aus den Vorgesprächen: **Jedes Projekt hat eine eigene SharePoint-Site mit eigener Bibliothek.**
+
+---
+
+## 2. Grundsatzentscheidungen
+
+### E1 – Ablageort der Projekte
+
+| Option | Bewertung |
+|---|---|
+| **SharePoint, eine Site + Bibliothek pro Projekt** (über Graph) | **Empfohlen.** Kein eigener Server nötig, Berechtigungen liegen in SharePoint, passt 1:1 zum heutigen ProjektPfad-Konzept. |
+| Netzlaufwerk wie heute | Nur mit **eigenem Server**, der im Auftrag des Add-ins auf die Freigaben schreibt (Anmeldung, Berechtigungsprüfung, Betrieb), oder mit einem **Hilfsprogramm auf jedem PC** (dann entfällt der Hauptvorteil des Web-Add-ins). Nicht empfohlen. |
+| Im OneDrive synchronisierte Bibliotheken | Für ein Web-Add-in **nicht nutzbar** – es sieht das lokale Dateisystem nicht. (Für das heutige VSTO-MailDrop dagegen ein brauchbarer Übergang, siehe Abschnitt 7.) |
+
+### E2 – Zugriff auf die Projekt-Sites (Berechtigungsmodell)
+
+| Option | Bewertung |
+|---|---|
+| **Delegierter Zugriff auf Dateien „im Namen des Nutzers“** (z. B. `Files.ReadWrite.All`, delegiert) | **Empfohlen.** MailDrop kann nur, was der angemeldete Nutzer ohnehin darf; die Projektberechtigungen in SharePoint bleiben die einzige Zugriffssteuerung. Kein Pflegeaufwand pro neuem Projekt. Nachteil: Die Berechtigung heißt „…All“, was manche IT-Richtlinien grundsätzlich ablehnen – dann gut begründen (effektiv = Nutzerrechte). |
+| Freischaltung pro Site (`Sites.Selected`) | Minimalprinzip, aber **jede neue Projekt-Site muss einzeln für MailDrop freigeschaltet werden**. Nur praktikabel, wenn das automatisch im Prozess zum Anlegen von Projekt-Sites passiert. |
+
+### E3 – Speicherort des Verlaufs („die SQL“)
+
+Der Verlauf (heute `sessions.db`: SessionRecords + ComputedWeights) enthält Betreffzeilen, Absender und
+Ablagepfade, also personenbezogene Daten.
+
+| Option | Wandert mit? | Server? | Bewertung |
+|---|---|---|---|
+| **SQLite-Datei im App-Ordner des Nutzer-OneDrive** | ja | nein | **Empfohlen.** Jede App bekommt dort einen eigenen, privaten Ordner (Berechtigung `Files.ReadWrite.AppFolder`), MailDrop sieht nur diesen. Die Datenbank bleibt SQLite (im Browser z. B. über `sql.js`/`wa-sqlite`), das Schema kann weitgehend übernommen werden. Verlauf ist automatisch auf allen Geräten da – der heutige manuelle Export („Vorschlagsdaten exportieren“) entfällt. |
+| Browser-Speicher (IndexedDB) | nein | nein | Nur als **lokaler Zwischenspeicher** zusätzlich zu OneDrive; allein zu unsicher (kann gelöscht werden, pro Gerät/Outlook-Variante getrennt). |
+| Roaming Settings des Add-ins (im Postfach) | ja | nein | Zu klein (ca. 32 KB). Nur für Einstellungen. |
+| Datei/Liste auf SharePoint (gemeinsam fürs Team) | ja | nein | Nur, wenn der Verlauf bewusst **teamweit** geteilt werden soll (neue Kollegen bekommen sofort Vorschläge). Erfordert Regeln, wer welche Betreffzeilen sehen darf. |
+| Eigene Datenbank in Azure (+ Azure Functions) | ja | ja (serverlos) | Erst sinnvoll bei Auswertungen über alle Nutzer. Mehr Aufwand, mehr Datenschutzthemen. |
+
+Technische Details zur empfohlenen Variante:
+
+- Beim Öffnen: `sessions.db` aus dem App-Ordner laden (falls vorhanden), lokal in IndexedDB zwischenspeichern.
+- Nach jeder Ablage: Datensatz lokal einfügen, Datei zurück in den App-Ordner schreiben.
+- **Parallele Nutzung auf zwei Geräten:** Datensätze bekommen eine **GUID**. Vor dem Zurückschreiben wird die
+  aktuelle Datei gelesen und per GUID **zusammengeführt** statt überschrieben (Datensätze werden nur angehängt,
+  nie geändert – das macht die Zusammenführung einfach). `ComputedWeights` wird lokal neu berechnet, nicht
+  zusammengeführt.
+
+### E4 – Projekte finden (ersetzt „anderes…“ und den Ordnerdialog)
+
+| Option | Bewertung |
+|---|---|
+| **Hub-Site, an der alle Projekt-Sites hängen** | **Empfohlen**, falls vorhanden: MailDrop listet die Sites des Hubs und bietet eine Suche darüber. |
+| Namensschema der Sites (z. B. `P-1234 …`) | Gut, wenn einheitlich: Suche über Graph nach dem Schema. |
+| Verknüpfungen unter „Meine Dateien“ / gefolgte Sites | Ergänzend: „meine Projekte“ ohne Suche. |
+| Site-Adresse einfügen | Nur als Notlösung/Rückfallebene. |
+
+Die Liste der zuletzt genutzten Projekte bleibt wie heute (aus dem Verlauf), nur mit Site/Bibliothek statt Pfad.
+
+### E5 – Format der abgelegten Mail
+
+Office.js und Graph liefern eine Mail nur als **.eml** (MIME), **nicht als .msg**. Entscheidung nötig:
+.eml akzeptieren (öffnet sich in Outlook, enthält Anhänge) – eine .msg-Erzeugung im Browser ist nicht
+realistisch. Folge: Bestehende Ablagen sind .msg, neue wären .eml; Duplikatprüfung und Dateinamenschema
+entsprechend anpassen.
+
+### E6 – KI-Modell für die Vorschläge
+
+- Modell läuft **lokal im Browser** (ONNX Runtime Web), Daten verlassen das Gerät nicht.
+- Das heutige Modell (~90 MB) liegt mit auf dem Webspace und wird nach dem ersten Laden zwischengespeichert.
+  Prüfen, ob eine **quantisierte/kleinere Variante** ausreicht (schnellerer erster Start).
+- Tokenizer (WordPiece, `vocab.txt`) muss in TypeScript nachgebaut oder aus einer Bibliothek übernommen werden;
+  Ergebnisse gegen die .NET-Version abgleichen (gleiche Embeddings → gleiche Vorschläge).
+
+### E7 – Umgang mit dem alten Verlauf
+
+Der alte Verlauf speichert Netzlaufwerkpfade. Optionen: (a) Neustart ohne Verlauf, (b) einmalige Migration
+mit einer **Zuordnungstabelle Netzlaufwerk-Projektordner → Projekt-Site**, falls die Projekte ohnehin
+umziehen. Empfehlung: (b), wenn die Zuordnung ohnehin für die Projektmigration entsteht, sonst (a).
+
+### E8 – Übergang
+
+Web-Add-ins laufen **auch im klassischen Outlook**. Deshalb ist ein **Parallelbetrieb** möglich:
+Pilotgruppe nutzt das Web-Add-in, alle anderen weiter das VSTO-MailDrop. Danach VSTO-Version abkündigen.
+
+---
+
+## 3. Technischer Aufbau (Zielbild)
+
+- **Frontend:** TypeScript, React + Fluent UI (Office-Optik), gebaut als statische Seite.
+- **Hosting:** Azure Static Web Apps (statisch, kein eigener Server), automatische Veröffentlichung per GitHub Actions.
+- **Manifest:** Add-in-Beschreibung (XML-Manifest oder das neuere einheitliche JSON-Manifest – aktuellen
+  Unterstützungsstand für Outlook prüfen). Button im Lesebereich und im geöffneten Mail-Fenster
+  (Befehlsoberfläche „Nachricht lesen“).
+- **Anmeldung:** MSAL.js mit **Nested App Authentication** (von Microsoft für Office-Add-ins empfohlen, Anmeldung
+  über das Outlook-Konto ohne eigenes Anmeldefenster, **kein Client-Geheimnis**).
+- **Daten:** Microsoft Graph für SharePoint (Projekte, Ordner, Upload) und OneDrive-App-Ordner (Verlauf).
+- **Rechenintensives** (Embedding, Gewichtsneuberechnung O(n²)) in einem **Web Worker**, damit die Oberfläche
+  nicht einfriert.
+
+---
+
+## 4. Umbauten pro Komponente
+
+| Heute | Web-Add-in | Art |
+|---|---|---|
+| `ThisAddIn.vb` – Lebenszyklus, Explorer-Events, Task Pane, Preloads | Task Pane mit **Anheften** (`SupportsPinning`) + Ereignis `ItemChanged` statt `SelectionChange`. Startzeit-Probleme, ClickOnce-Diagnose, COM-Freigabe-Fallen entfallen komplett. | Neubau, stark vereinfacht |
+| Ribbon (`MailDropRibbon.*`, Explorer + Inspector) | Button im Manifest; erscheint automatisch im Lesebereich **und** im geöffneten Mail-Fenster. Die „feste Bindung“ an ein Mail-Fenster entfällt. | entfällt/ersetzt |
+| Toggle-Button, Ausblenden nach Ablage | Task Pane öffnen/schließen über Office; Schließen per Code nur eingeschränkt möglich (aktuellen Stand prüfen). Überlagerung der Leseansicht ist auch hier nicht möglich (Pane ist angedockt). | anpassen |
+| `MailDropWpfTaskPane.xaml(.vb)` | React-Komponenten mit Fluent UI; gleiche Felder und Reihenfolge. | Neubau |
+| TreeView ProjektstrukturPfad (`DirectoryTreeHelper`) | Baum über Graph, **lädt nur die aufgeklappte Ebene** (löst nebenbei das heutige Performance-Problem des vollständigen Einlesens). Neuer Ordner/Löschen/Umbenennen über Graph. Synthetischer Wurzelknoten bleibt. | Neubau |
+| ProjektPfad-Liste + „anderes…“ | Letzte Projekte aus dem Verlauf + Projektsuche (E4). Gespeichert werden Site-ID/Bibliothek-ID + Anzeigename statt Pfad. | Neubau |
+| `Session.vb` – Zustand, Kaskade, Platzhalter (`ReplacePlaceholders`) | TypeScript-Zustand; Platzhalter-Logik (Literal/Connector/Placeholder, Skip-Empty-Join) **1:1 portieren**, mit Unit-Tests aus den dokumentierten Beispielen. | Portierung |
+| `InputChecker.vb` | Portieren, aber **SharePoint-Regeln** statt Windows-Regeln: verbotene Zeichen, führende/abschließende Leerzeichen, reservierte Namen, maximale Pfadlänge (URL-dekodiert ca. 400 Zeichen), Dateigröße. `IsInsideBaseFolder` sinngemäß über Bibliothekspfade. | Portierung + Anpassung |
+| `MailUtils.vb` – Metadaten, .msg, Anhänge | Office.js: Betreff, Absender, Empfänger, Datum aus `item`; Mail als .eml über `getAsFileAsync`; Anhänge über `getAttachmentContentAsync`; Upload über Graph (kleine Dateien direkt, große per Upload-Session). | Neubau |
+| `AttachmentRenameDialog` | Dialog innerhalb der Pane. | Neubau |
+| `DatabaseUtils.vb` / SQLite / Migrationen | SQLite im Browser + Sync mit OneDrive-App-Ordner (E3). Schema übernehmen, **GUID-Spalte ergänzen**; `PRAGMA user_version`-Migrationen weiterverwenden. | Portierung + Sync neu |
+| `SuggestionEngine.vb` | Portieren (Features, Gewichte, Kaskade, geometrischer Neuberechnungs-Trigger, Pearson-Gewichte); Neuberechnung im Web Worker. Ergebnisse gegen die .NET-Version mit denselben Daten abgleichen. | Portierung |
+| `EmbeddingService.vb` + `Models/` | ONNX Runtime Web + Tokenizer in TS; Modell auf dem Webspace, Browser-Cache. | Portierung |
+| `NotificationToast` | Meldung innerhalb der Pane oder Office-Benachrichtigungsleiste am Element; „Öffnen“ öffnet den Ablageordner in SharePoint (Browser) statt im Explorer. | Neubau |
+| `InfoPopup` | Panel/Dialog in der Pane; „Vorschlagsdaten exportieren“ entfällt (Verlauf liegt in OneDrive). | Neubau, vereinfacht |
+| `Logger` / `error.log` | Entscheidung: Browser-Konsole + Fehleranzeige, oder Application Insights in Azure (dann **ohne** Mail-Inhalte loggen, Datenschutz). | Neubau |
+| ClickOnce, `Install-Certificate.ps1`, Zertifikat, `SQLite.Interop.dll`-Workaround | **Entfallen** vollständig. | entfällt |
+
+---
+
+## 5. Vorgehen in Phasen
+
+1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E8 festhalten.
+2. **Technischer Durchstich (Prototyp):** Anmeldung, aktuelle Mail lesen, eine Projekt-Site finden, Ordner
+   anzeigen, .eml + Anhänge hochladen. Klärt die riskanten Punkte früh (Berechtigungen, Anmeldung, Upload).
+3. **Kernfunktionen:** komplette Oberfläche, Platzhalter, Validierung, Ordneraktionen, Verlauf in OneDrive.
+4. **Vorschläge:** SuggestionEngine + Embedding portieren, Abgleich mit der .NET-Version.
+5. **Pilot** mit kleiner Gruppe, parallel zum VSTO-MailDrop.
+6. **Rollout** an alle, VSTO-Version abkündigen.
+
+---
+
+## 6. Absprachen mit der IT (vorab zu klären)
+
+**Grundsätzliches**
+
+1. Ist **SharePoint als Ablageort** für Projekt-Mails gewollt und verbindlich? (Ohne das lohnt der Umbau nicht.)
+2. Was passiert mit den **bestehenden Projektordnern auf dem Netzlaufwerk** – Migration, Parallelbetrieb, nur neue Projekte?
+3. Wann ist mit einem **verpflichtenden Umstieg auf das neue Outlook** zu rechnen? (Bestimmt den Zeitdruck.)
+
+**Projekt-Sites**
+
+4. Hängen alle Projekt-Sites an einer **Hub-Site**? Gibt es ein festes **Namensschema**?
+5. Wie werden Projekt-Sites **angelegt** (manuell, Skript, Vorlage)? Relevant, falls pro Site freigeschaltet werden muss.
+6. Gibt es **Aufbewahrungs-/Compliance-Richtlinien** für abgelegte Mails?
+
+**Berechtigungen und Anmeldung**
+
+7. Ist **delegierter Dateizugriff „im Namen des Nutzers“** (`Files.ReadWrite.All`, delegiert) zulässig – oder nur **Freischaltung pro Site** (`Sites.Selected`)?
+8. Ist der **OneDrive-App-Ordner** (`Files.ReadWrite.AppFolder`) für den Verlauf zulässig?
+9. Gibt es **Richtlinien für bedingten Zugriff** (verwaltete Geräte, MFA, Standorte), die das Add-in betreffen?
+
+**Azure und Verteilung**
+
+10. Darf eine **Azure Static Web App** im Tenant betrieben werden? Welche Subscription/Ressourcengruppe, wer ist Besitzer?
+11. Eigene Adresse (z. B. `maildrop.firma.de`) gewünscht?
+12. Wer verteilt das Add-in im **Admin-Center (Integrierte Apps)**, an welche Gruppen?
+13. Sind **Outlook-Versionen** und **WebView2** auf allen PCs aktuell genug (für den Parallelbetrieb im klassischen Outlook)?
+14. Müssen Adressen im **Proxy/Firewall** freigegeben werden?
+
+**Datenschutz**
+
+15. Datenschutz-Prüfung / Eintrag im Verzeichnis der Verarbeitungstätigkeiten: Verlauf mit Betreff, Absender, Pfaden im OneDrive des Nutzers; KI läuft lokal; keine Daten an Dritte.
+16. Verlauf **pro Person** (OneDrive) oder **teamweit** (SharePoint)?
+
+---
+
+## 7. Schritte der IT (nach den Absprachen)
+
+**Azure**
+
+- [ ] Ressourcengruppe bereitstellen, **Azure Static Web App** anlegen (kleinster Tarif genügt).
+- [ ] Veröffentlichung einrichten: Entwickler als Mitwirkender auf der Ressourcengruppe **oder** Bereitstellungstoken für GitHub Actions herausgeben.
+- [ ] Optional: eigene Domain verbinden (Zertifikat stellt Azure automatisch).
+
+**Entra ID (App-Registrierung)**
+
+- [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
+- [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.AppFolder`, und je nach E2 `Files.ReadWrite.All` **oder** `Sites.Selected`.
+- [ ] **Administrator-Zustimmung** erteilen.
+- [ ] Falls `Sites.Selected`: Freischaltung für alle bestehenden Projekt-Sites durchführen und **in den Prozess zum Anlegen neuer Projekt-Sites einbauen**.
+- [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
+- [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.
+
+**SharePoint**
+
+- [ ] Projekt-Sites an Hub anbinden bzw. Namensschema sicherstellen (E4).
+- [ ] Berechtigungen pro Projekt-Site wie gewohnt pflegen (bleibt die eigentliche Zugriffssteuerung).
+- [ ] Ggf. Aufbewahrungsrichtlinien für die Bibliotheken festlegen.
+- [ ] Ggf. Migration der Netzlaufwerk-Projekte und Zuordnungstabelle Ordner → Site bereitstellen (E7).
+
+**Verteilung und Betrieb**
+
+- [ ] Manifest im **Microsoft-365-Admin-Center → Integrierte Apps** hochladen, zunächst an eine **Pilotgruppe** zuweisen, später an alle.
+- [ ] Sicherstellen, dass Add-ins in Outlook nicht per Richtlinie gesperrt sind.
+- [ ] Proxy/Firewall: Adresse der Static Web App freigeben.
+- [ ] Outlook-Versionen/WebView2 auf den PCs prüfen.
+- [ ] Datenschutz-Dokumentation abschließen.
+- [ ] Laufend: neue Nutzer der Gruppe hinzufügen, neue Projekt-Sites anlegen (und ggf. freischalten). Updates des Add-ins verteilen sich automatisch mit jeder Veröffentlichung.
+
+---
+
+## 8. Übergangslösung ohne Web-Add-in
+
+Solange das klassische Outlook genutzt werden kann, lässt sich SharePoint als Ablageort **schon mit dem
+heutigen VSTO-MailDrop** nutzen: Jeder Nutzer synchronisiert die Projektbibliothek über OneDrive; sie erscheint
+als lokaler Ordner und kann über „anderes…“ als ProjektPfad gewählt werden. OneDrive lädt abgelegte Dateien
+automatisch hoch. Mögliche Erweiterungen: synchronisierte Bibliotheken automatisch in der ProjektPfad-Liste
+anbieten, Pfadlängenprüfung an SharePoint-Grenzen anpassen. So kann die Projektablage schon vor dem
+Web-Add-in auf SharePoint umziehen – die IT-Themen „SharePoint-Struktur und -Berechtigungen“ sind dann bereits
+erledigt, wenn der Umbau beginnt.
+
+---
+
+## 9. Risiken und offene Punkte
+
+- **.eml statt .msg** (E5) – fachlich akzeptieren oder nicht.
+- **Berechtigungsmodell** (E2) – wenn nur `Sites.Selected` erlaubt ist, hängt der Betrieb an einer zuverlässigen Automatisierung.
+- **Erster Start** mit ~90 MB Modell – ggf. kleineres Modell nötig.
+- **Vorschlagsqualität** nach Portierung – nur durch Abgleich mit der .NET-Version auf denselben Daten nachweisbar.
+- **Graph-Drosselung** bei sehr großen Bibliotheken/Ordnerbäumen – durch ebenenweises Laden entschärft.
+- **Office.js-Funktionsumfang** (Anheften, Schließen der Pane per Code, Mehrfachauswahl) hängt von den unterstützten Requirement Sets der eingesetzten Outlook-Versionen ab – vor Phase 2 prüfen.
