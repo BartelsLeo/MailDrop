@@ -139,10 +139,10 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
   384-dimensionales Modell, Mean Pooling, L2-Normalisierung). **Im Prototyp umgesetzt** (`web/src/embedding/`):
   eigener WordPiece-Tokenizer in TypeScript + ONNX Runtime Web (WASM), getestet in Node und im echten
   Chromium (lokal: 86 MB Download ~3,6 s, Laden ~2,2 s, 3 Embeddings ~0,2 s, plausible Ähnlichkeiten).
-- **Kein Abgleich mit der .NET-Version nötig:** Es gibt keinen Altverlauf. Der Web-Tokenizer entfernt – wie
-  bei einem „uncased“ BERT-Modell vorgesehen – Akzente/Umlaute (ä → a). Die VSTO-Version
-  (`Microsoft.ML.Tokenizers.BertTokenizer` mit Standardoptionen) tut das vermutlich nicht, sodass deutsche
-  Umlaut-Wörter dort zu `[UNK]` werden – die Web-Variante ist hier fachlich korrekter.
+- **Gleichstand mit der .NET-Version:** Mit dem deutschfähigen Modell (unten) verwenden VSTO und Web denselben
+  Tokenizer und dasselbe Modell; die Gleichheit ist über gemeinsame Prüfvektoren getestet. Für das bisherige
+  englische Modell galt das nicht (der Web-Tokenizer entfernt Umlaute, `BertTokenizer` in VSTO vermutlich
+  nicht) – dank fehlendem Altverlauf war das kein Problem.
 - **Modellwahl – Entscheidung 2026-09-27: ein deutschsprachiges Modell genügt.** Das heutige Modell ist rein
   englisch (`vocab.txt` = englisches uncased-BERT-Vokabular, 30.522 Einträge); deutsche Betreffzeilen werden in
   viele Wortstücke zerlegt, die semantische Ähnlichkeit leidet.
@@ -155,16 +155,30 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
     das Modell auf 8 Bit quantisiert → erwartet ca. 20–40 MB. Die Gewichte der behaltenen Tokens bleiben
     unverändert, die Qualität für deutsche Texte damit praktisch gleich (per Vergleich mit dem Originalmodell
     auf echten Betreffzeilen zu bestätigen).
-  - **Folgen:** Der Tokenizer ist dann SentencePiece statt WordPiece → `web/src/embedding/wordpiece.ts` wird
-    durch den Tokenizer aus Transformers.js (liest `tokenizer.json`) ersetzt. Modell nicht mehr in Git
-    einchecken (GitHub-Grenze 100 MB je Datei), sondern per Skript mit fester Version + Prüfsumme von
-    Hugging Face holen und kürzen – im Build (GitHub Actions) bzw. einmalig lokal. Hugging Face ist aus der
-    Claude-Umgebung gesperrt; der Schritt muss daher bei euch bzw. in GitHub Actions laufen.
+  - **Umsetzung (2026-09-27, für VSTO und Web gemeinsam):** Beide Add-ins nutzen dasselbe gekürzte Modell aus
+    `Models/`, damit die Vorschläge auf beiden Seiten gleich funktionieren.
+    - `tools/model/build_german_model.py` lädt das Originalmodell (ONNX-Fassung aus dem Hugging-Face-Repo),
+      zählt die Tokens auf einem Korpus aus 40.000 deutschen + 5.000 englischen Wikipedia-Artikelanfängen,
+      behält die häufigen Tokens (höchstens 50.000) plus alle Einzelzeichen der lateinischen Schriften,
+      schneidet die Token-Tabelle zu und quantisiert auf int8. Ausgabe unter den **bisherigen Dateinamen**
+      `Models/model.onnx` und `Models/vocab.txt` (jetzt `Token<TAB>Score` je Zeile), dazu
+      `testvectors.json` (Prüfvektoren) und `MODEL_INFO.md` (Revision, Prüfsummen, Messwerte).
+    - Der Tokenizer (SentencePiece/Unigram) ist dreimal gleich umgesetzt: `web/src/embedding/unigram.ts`,
+      `Services/UnigramTokenizer.vb`, Referenz im Build-Skript. Kein Transformers.js – eine eigene, kleine
+      Umsetzung lässt sich in VB genauso schreiben und über dieselben Prüfvektoren absichern.
+    - Das Skript bricht ab, wenn der eigene Tokenizer auf weniger als 99 % der Korpustexte vom gekürzten
+      Hugging-Face-Tokenizer abweicht oder die Embeddings im Mittel unter Kosinus 0,97 zum Originalmodell
+      fallen. Danach prüfen Web-Tests (Vitest) und `tools/tokenizer-check` (VB) die Prüfvektoren.
+    - Läuft in GitHub Actions (`.github/workflows/build-german-model.yml`, bei Änderungen unter
+      `tools/model/` oder per Hand) und checkt das Ergebnis ein – Hugging Face ist aus der Claude-Umgebung
+      gesperrt. Das Modell bleibt eingecheckt (erwartet 30–45 MB, unter der 100-MB-Grenze), damit VSTO-Build
+      und ClickOnce ohne Download-Schritt auskommen.
+    - `EmbeddingService.vb` und `embedder.ts` erkennen das Format von `vocab.txt`: bis das neue Modell
+      eingecheckt ist, läuft unverändert das englische Modell weiter.
   - **Azure Static Web Apps:** Das kleinere Modell entschärft zugleich die Speichergrenzen (Free-Tarif 250 MB
     gesamt; gemeldete Grenze von 100 MB pro Datei – das heutige 86-MB-Modell läge knapp darunter).
-- **Offener Punkt Laufzeit:** ~90 MB Modell im Aufgabenbereich des (neuen) Outlook – Ladezeit beim ersten Start
-  und Speicherverbrauch im Pilot messen; bei Bedarf eine quantisierte Variante (~¼ der Größe) testen und die
-  Vorschlagsqualität vergleichen.
+- **Offener Punkt Laufzeit:** Ladezeit beim ersten Start und Speicherverbrauch des (gekürzten, int8-)Modells im
+  Aufgabenbereich des (neuen) Outlook im Pilot messen.
 
 ---
 

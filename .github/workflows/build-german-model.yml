@@ -1,0 +1,82 @@
+# Baut das deutschfähige Embedding-Modell (tools/model/build_german_model.py), prüft es gegen die
+# TypeScript- (web/) und VB-Umsetzung (tools/tokenizer-check) des Tokenizers und checkt
+# Models/model.onnx, vocab.txt, testvectors.json und MODEL_INFO.md in den auslösenden Branch ein.
+# Läuft hier statt lokal, weil Hugging Face (Modell) und Wikipedia (Korpus) erreichbar sein müssen.
+name: build-german-model
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Revision von sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        default: "main"
+  push:
+    paths:
+      - "tools/model/**"
+      - ".github/workflows/build-german-model.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-german-model-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tools/model/requirements.txt
+
+      - name: Abhängigkeiten
+        run: pip install -r tools/model/requirements.txt
+
+      - name: Modell bauen und prüfen
+        run: python tools/model/build_german_model.py --out Models --revision "${{ inputs.revision || 'main' }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web - Tokenizer und Embeddings gegen Prüfvektoren
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: VB - Tokenizer gegen Prüfvektoren
+        run: dotnet run --project tools/tokenizer-check -- "$GITHUB_WORKSPACE/Models"
+
+      - name: Ergebnis als Artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: german-model
+          path: |
+            Models/model.onnx
+            Models/vocab.txt
+            Models/testvectors.json
+            Models/MODEL_INFO.md
+          if-no-files-found: ignore
+
+      - name: Einchecken
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Models/model.onnx Models/vocab.txt Models/testvectors.json Models/MODEL_INFO.md
+          if git diff --cached --quiet; then echo "Keine Änderung."; exit 0; fi
+          git commit -m "Deutschfähiges Embedding-Modell gebaut (build-german-model)"
+          git push

@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import * as ort from "onnxruntime-web";
 import { Embedder, cosine } from "../src/embedding/embedder";
 
-const modelsDir = join(__dirname, "..", "..", "Models");
+// MAILDROP_MODELS_DIR: anderer Modellordner, z. B. die Ausgabe von tools/model/build_german_model.py.
+const modelsDir = process.env.MAILDROP_MODELS_DIR ?? join(__dirname, "..", "..", "Models");
 const modelPath = join(modelsDir, "model.onnx");
 
 describe.skipIf(!existsSync(modelPath))("Embedder (echtes Modell)", () => {
@@ -27,4 +28,23 @@ describe.skipIf(!existsSync(modelPath))("Embedder (echtes Modell)", () => {
       `Ladezeit ${embedder.loadInfo.loadMs.toFixed(0)} ms, sim(a,b)=${cosine(a, b).toFixed(3)}, sim(a,c)=${cosine(a, c).toFixed(3)}`,
     );
   }, 120_000);
+});
+
+// Prüfvektoren des deutschfähigen Modells (tools/model/build_german_model.py): die Embeddings
+// der Browser-Laufzeit müssen denen von PyTorch/ONNX Runtime (Python) entsprechen.
+const vectorsPath = join(modelsDir, "testvectors.json");
+describe.skipIf(!existsSync(vectorsPath))("Embedder (Prüfvektoren deutschfähiges Modell)", () => {
+  it("stimmt mit den Referenz-Embeddings überein", async () => {
+    const embedder = await Embedder.create(
+      ort,
+      new Uint8Array(readFileSync(modelPath)),
+      readFileSync(join(modelsDir, "vocab.txt"), "utf8"),
+    );
+    expect(embedder.loadInfo.tokenizer).toBe("unigram");
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8")) as { text: string; embedding: number[] }[];
+    for (const v of vectors) {
+      const e = await embedder.embed(v.text);
+      expect(cosine(e, Float32Array.from(v.embedding)), v.text).toBeGreaterThan(0.999);
+    }
+  }, 300_000);
 });

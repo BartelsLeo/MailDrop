@@ -75,5 +75,5 @@ sowie mit einer **verschlüsselten/als vertraulich gekennzeichneten** Mail, fall
 - `src/checks.ts` – die neun Prüfungen
 - `src/auth.ts` – Anmeldung (NAA, Rückfallebene Popup)
 - `src/graph.ts`, `src/mail.ts` – Graph- und Office.js-Zugriffe
-- `src/embedding/` – Tokenizer und Modell (wird für das spätere Add-in weiterverwendet)
+- `src/embedding/` – Tokenizer (Unigram für das deutschfähige Modell, WordPiece als Rückfall für das alte englische) und Modell; Tests lesen mit `MAILDROP_MODELS_DIR` auch einen anderen Modellordner
 - `scripts/copy-models.mjs` – kopiert `Models/model.onnx` und `vocab.txt` nach `public/models` (nicht eingecheckt)

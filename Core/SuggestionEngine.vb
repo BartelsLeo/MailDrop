@@ -117,6 +117,39 @@ Public Class SuggestionEngine
         Catch ex As Exception
             Debug.WriteLine($"[SuggestionEngine] PreloadEmbeddingService: warmup failed: {ex.Message}")
         End Try
+        EnsureHistoryEmbeddingsMatchModel(svc)
+    End Sub
+
+    Private Const EmbeddingModelIdKey As String = "EmbeddingModelId"
+
+    ' Gespeicherte Betreff-Embeddings stammen von dem Modell, das beim Ablegen aktiv war. Nach einem
+    ' Modellwechsel (z. B. englisches -> deutschfähiges Modell oder ein neu gebautes Modell) wären sie
+    ' zwar gleich lang (384), aber nicht mehr mit neuen Embeddings vergleichbar - die Betreff-
+    ' Ähnlichkeit würde stillschweigend zu Rauschen. Deshalb hier (Hintergrund-Thread des Preloads)
+    ' alle Betreffs mit dem aktuellen Modell neu berechnen, wenn die in der Datenbank vermerkte
+    ' Modell-ID abweicht (oder noch fehlt). Kosten: ein Embedding je Verlaufseintrag, einmalig.
+    Private Sub EnsureHistoryEmbeddingsMatchModel(svc As EmbeddingService)
+        Try
+            Dim db = ThisAddIn.CurrentDatabaseManager
+            If db.GetMetaValue(EmbeddingModelIdKey) = svc.ModelId Then Return
+            Dim sw As Stopwatch = Stopwatch.StartNew()
+            Dim updates As New Dictionary(Of Integer, Single())
+            ' Per Index bis zur aktuellen Länge: der UI-Thread kann parallel neue Einträge anhängen
+            ' (AppendHistoricalRecord) - diese tragen bereits Embeddings des aktuellen Modells.
+            Dim count As Integer = EnginesHistoricalSessionRecords.Count
+            For i As Integer = 0 To count - 1
+                Dim record = EnginesHistoricalSessionRecords(i)
+                If String.IsNullOrWhiteSpace(record.Betreff) Then Continue For
+                Dim embedding = svc.GenerateEmbedding(record.Betreff)
+                record.BetreffEmbedded = embedding
+                updates(record.ID) = embedding
+            Next
+            db.UpdateBetreffEmbeddings(updates)
+            db.SetMetaValue(EmbeddingModelIdKey, svc.ModelId)
+            Logger.LogInfo("Embedding-Modell", $"Betreff-Embeddings von {updates.Count} Verlaufseinträgen für Modell {svc.ModelId.Substring(0, 12)} neu berechnet in {sw.ElapsedMilliseconds} ms.")
+        Catch ex As Exception
+            Logger.LogError("EnsureHistoryEmbeddingsMatchModel", ex)
+        End Try
     End Sub
 
     Public Shared Sub DisposeSharedInstance()
@@ -674,7 +707,7 @@ Public Class SuggestionEngine
         End If
 
         Try
-            currentSession.BetreffEmbedded = GetEmbeddingService()?.GenerateEmbedding(currentSession.Betreff.ToLower())
+            currentSession.BetreffEmbedded = GetEmbeddingService()?.GenerateEmbedding(currentSession.Betreff)
         Catch ex As Exception
             Debug.WriteLine("[SuggestionEngine] BetreffEmbedding generation failed: " & ex.Message)
             currentSession.BetreffEmbedded = Nothing

@@ -1,20 +1,36 @@
 // Betreff-Embedding im Browser: gleiches Verfahren wie Services/EmbeddingService.vb
 // (Modell Models/model.onnx, 384 Dimensionen, Mittelwert über alle Tokens, L2-Normalisierung),
 // aber mit ONNX Runtime Web (WASM, ein Thread) statt ONNX Runtime für .NET.
+//
+// Der Tokenizer richtet sich nach Models/vocab.txt: Zeilen "piece<TAB>score" = deutschfähiges
+// Modell (Unigram, tools/model/), sonst das bisherige englische BERT-Vokabular (WordPiece).
+// Die WordPiece-Variante bleibt nur, bis das deutschfähige Modell gebaut und eingecheckt ist.
 
 import type * as OrtNamespace from "onnxruntime-web";
+import { UnigramTokenizer } from "./unigram";
 import { WordPieceTokenizer } from "./wordpiece";
+
+export interface Tokenizer {
+  encode(text: string): number[];
+}
+
+export function createTokenizer(vocabText: string): { tokenizer: Tokenizer; kind: "unigram" | "wordpiece" } {
+  return UnigramTokenizer.looksLikeUnigramVocab(vocabText)
+    ? { tokenizer: new UnigramTokenizer(vocabText), kind: "unigram" }
+    : { tokenizer: new WordPieceTokenizer(vocabText), kind: "wordpiece" };
+}
 
 export interface EmbedderLoadInfo {
   modelBytes: number;
   loadMs: number;
+  tokenizer: "unigram" | "wordpiece";
 }
 
 export class Embedder {
   private constructor(
     private readonly ort: typeof OrtNamespace,
     private readonly session: OrtNamespace.InferenceSession,
-    private readonly tokenizer: WordPieceTokenizer,
+    private readonly tokenizer: Tokenizer,
     readonly loadInfo: EmbedderLoadInfo,
   ) {}
 
@@ -29,10 +45,11 @@ export class Embedder {
       executionProviders: ["wasm"],
       graphOptimizationLevel: "all",
     });
-    const tokenizer = new WordPieceTokenizer(vocabText);
+    const { tokenizer, kind } = createTokenizer(vocabText);
     return new Embedder(ort, session, tokenizer, {
       modelBytes: modelBytes.byteLength,
       loadMs: performance.now() - started,
+      tokenizer: kind,
     });
   }
 

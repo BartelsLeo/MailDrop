@@ -318,7 +318,7 @@ export async function checkModell(): Promise<CheckResult> {
     const { Embedder, cosine } = await import("./embedding/embedder");
     start = performance.now();
     const embedder = await Embedder.create(ort, modelBytes, vocab);
-    details.push(`Modell geladen in ${Math.round(embedder.loadInfo.loadMs)} ms, danach ${memory()}`);
+    details.push(`Modell geladen in ${Math.round(embedder.loadInfo.loadMs)} ms (Tokenizer: ${embedder.loadInfo.tokenizer === "unigram" ? "Unigram, deutschfähiges Modell" : "WordPiece, bisheriges englisches Modell"}), danach ${memory()}`);
 
     start = performance.now();
     const subject = (() => {
