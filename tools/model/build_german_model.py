@@ -32,6 +32,7 @@ import datetime
 import hashlib
 import json
 import math
+import shutil
 import sys
 import tempfile
 import unicodedata
@@ -57,6 +58,7 @@ KEEP_CHAR_RANGES = [
     (0x20, 0x7E),      # ASCII
     (0xA0, 0x24F),     # Latin-1, Latin Extended-A/B
     (0x370, 0x3FF),    # Griechisch (Formelzeichen)
+    (0x1E00, 0x1EFF),  # Latin Extended Additional (u. a. großes ẞ)
     (0x2000, 0x206F),  # Allgemeine Interpunktion (–, —, „, “, …)
     (0x20A0, 0x20CF),  # Währungszeichen (€)
     (0x2100, 0x214F),  # Buchstabenähnliche Symbole (№, ™)
@@ -403,19 +405,51 @@ def main() -> int:
     covered = sum(c for i, c in counts.items() if i in set(kept_ids)) / max(1, sum(counts.values()))
     log(f"Gekürztes Vokabular: {len(vocab)} Tokens, deckt {covered:.2%} der Korpus-Tokens direkt ab")
 
+    vocab_path = out / "vocab.txt"
+    vocab_path.write_text("".join(f"{p}\t{s!r}\n" for p, s in vocab), encoding="utf-8", newline="\n")
+    ours = UnigramTokenizer([(p, float(repr(s))) for p, s in vocab])
+
+    # Qualitätsmaß: gekürzt(+quantisiert, eigener Tokenizer) gegen Original (HF-Tokenizer, fp32).
+    original = OnnxEmbedder(source_onnx)
+    original_tokenizer.enable_truncation(MAX_LENGTH)
+    quality_texts = [t for t in CURATED_TEXTS if normalize(t)] + [p for pair in SIMILARITY_PAIRS for p in pair[:2]]
+    original_vectors = [original.embed(original_tokenizer.encode(t).ids) for t in quality_texts]
+
+    def quality(path: Path) -> list[float]:
+        candidate = OnnxEmbedder(path)
+        return [float(o @ candidate.embed(ours.encode(t))) for o, t in zip(original_vectors, quality_texts)]
+
+    # Quantisierungsvarianten. Bewusst NICHT die Standardvariante (int8-Gewichte, pro Tensor): auf CPUs
+    # ohne AVX-512-VNNI kann die u8s8-Multiplikation von ONNX Runtime sättigen - gemessen am ersten Build:
+    # dasselbe Modell lieferte auf dem GitHub-Runner und auf einem anderen Rechner nur Kosinus 0,991
+    # zueinander, gegenüber dem Original minimal 0,73. Outlook läuft auf beliebigen Büro-PCs, und die
+    # Messung hier auf dem (VNNI-fähigen) Runner würde das Problem nicht zeigen. Deshalb nur die beiden
+    # laut ONNX-Runtime-Doku sättigungsfreien Varianten: uint8-Gewichte (u8u8) bzw. int8 mit reduce_range.
+    variants = {
+        "uint8-Gewichte, pro Kanal": dict(weight_type=QuantType.QUInt8, per_channel=True),
+        "int8-Gewichte, pro Kanal, reduce_range": dict(weight_type=QuantType.QInt8, per_channel=True, reduce_range=True),
+    }
+    model_path = out / "model.onnx"
     with tempfile.TemporaryDirectory() as tmp:
         pruned_path = Path(tmp) / "pruned.onnx"
         prune_onnx(source_onnx, pruned_path, kept_ids, len(full_vocab))
-        model_path = out / "model.onnx"
-        quantize_dynamic(str(pruned_path), str(model_path), weight_type=QuantType.QInt8,
-                         op_types_to_quantize=["MatMul", "Gather"])
-    log(f"Modell: {model_path.stat().st_size / 1e6:.1f} MB")
-
-    vocab_path = out / "vocab.txt"
-    vocab_path.write_text("".join(f"{p}\t{s!r}\n" for p, s in vocab), encoding="utf-8", newline="\n")
+        pruned_cosines = quality(pruned_path)
+        log(f"Nur gekürzt (fp32) vs. Original: Mittel {np.mean(pruned_cosines):.4f}, Minimum {min(pruned_cosines):.4f}")
+        results = {}
+        for name, options in variants.items():
+            path = Path(tmp) / f"q{len(results)}.onnx"
+            quantize_dynamic(str(pruned_path), str(path), op_types_to_quantize=["MatMul", "Gather"], **options)
+            results[name] = (path, quality(path))
+            log(f"Quantisiert ({name}) vs. Original: Mittel {np.mean(results[name][1]):.4f}, "
+                f"Minimum {min(results[name][1]):.4f}, {path.stat().st_size / 1e6:.1f} MB")
+        quant_name = max(results, key=lambda n: np.mean(results[n][1]))
+        shutil.copyfile(results[quant_name][0], model_path)
+        cosines = results[quant_name][1]
+    log(f"Gewählt: {quant_name}; Modell {model_path.stat().st_size / 1e6:.1f} MB")
+    mean_cosine = float(np.mean(cosines))
+    worst = sorted(zip(cosines, quality_texts))[:5]
 
     # 1) Eigene Tokenizer-Umsetzung gegen den gekürzten Hugging-Face-Tokenizer.
-    ours = UnigramTokenizer([(p, float(repr(s))) for p, s in vocab])
     reference = pruned_hf_tokenizer(tokenizer_json, kept_ids)
     reference.no_padding()
     reference.enable_truncation(MAX_LENGTH)
@@ -431,14 +465,11 @@ def main() -> int:
         log(f"  abweichend: {text[:80]!r}\n    HF:   {reference.encode(text).tokens[:20]}\n"
             f"    eig.: {[vocab[i][0] for i in ours.encode(text)][:20]}")
 
-    # 2) Embedding-Qualität: gekürzt + quantisiert (eigener Tokenizer) gegen Original (HF-Tokenizer, fp32).
-    original = OnnxEmbedder(source_onnx)
+    # 2) Embedding-Qualität (oben gemessen) und Plausibilität.
     final = OnnxEmbedder(model_path)
-    original_tokenizer.enable_truncation(MAX_LENGTH)
-    quality_texts = [t for t in CURATED_TEXTS if normalize(t)] + [p for pair in SIMILARITY_PAIRS for p in pair[:2]]
-    cosines = [float(original.embed(original_tokenizer.encode(t).ids) @ final.embed(ours.encode(t))) for t in quality_texts]
-    mean_cosine = float(np.mean(cosines))
-    log(f"Embedding gekürzt+int8 vs. Original: Mittel {mean_cosine:.4f}, Minimum {min(cosines):.4f}")
+    log(f"Embedding gekürzt+quantisiert vs. Original: Mittel {mean_cosine:.4f}, Minimum {min(cosines):.4f}")
+    for c, t in worst:
+        log(f"  schwächster Text {c:.4f}: {t!r}")
     pair_lines = []
     for a, b, related in SIMILARITY_PAIRS:
         sim = float(final.embed(ours.encode(a)) @ final.embed(ours.encode(b)))
@@ -461,11 +492,16 @@ Nicht von Hand ändern - neu bauen über den Workflow `build-german-model`.
 | Revision | `{'lokal: ' + str(model_dir) if args.model_dir else args.revision + ' = ' + model_dir.name}` |
 | Korpus | {'lokal: ' + args.corpus_file if args.corpus_file else f'Wikipedia de {args.wiki_de} + en {args.wiki_en} Artikel (je {args.chars_per_article} Zeichen), plus feste Prüftexte'} |
 | Vokabular | {len(vocab)} von {len(full_vocab)} Tokens (Korpus-Abdeckung direkt {covered:.2%}) |
-| Quantisierung | dynamisch int8 (MatMul, Gather), ONNX Runtime {ort.__version__} |
+| Quantisierung | dynamisch 8 Bit (MatMul, Gather), {quant_name}, ONNX Runtime {ort.__version__} |
+| Nur gekürzt (fp32) vs. Original (Kosinus) | Mittel {np.mean(pruned_cosines):.4f}, Minimum {min(pruned_cosines):.4f} |
 | Tokenizer-Übereinstimmung mit Hugging Face | {agreement:.3%} von {len(sample)} Texten |
 | Embedding vs. Original (Kosinus) | Mittel {mean_cosine:.4f}, Minimum {min(cosines):.4f} |
 | `model.onnx` | {model_path.stat().st_size / 1e6:.1f} MB, SHA-256 `{sha256(model_path)}` |
 | `vocab.txt` | SHA-256 `{sha256(vocab_path)}` |
+
+Schwächste Prüftexte (gebautes Modell vs. Original):
+
+{chr(10).join(f"- {c:.4f}: `{t}`" for c, t in worst)}
 
 Plausibilität (Kosinus-Ähnlichkeit mit dem gebauten Modell):
 
