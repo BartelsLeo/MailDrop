@@ -1,6 +1,6 @@
 # MailDrop als Web-Add-in – Umbauskizze
 
-Stand: 2026-09-27 · Status: **Konzeptskizze, nichts davon ist umgesetzt**
+Stand: 2026-09-27 · Status: **Konzeptskizze, nichts davon ist umgesetzt** · Machbarkeitsprüfung mit Recherche: Abschnitt 10
 
 Dieses Dokument skizziert, was nötig wäre, um MailDrop vom heutigen VSTO-Add-in (VB.NET, nur klassisches
 Outlook für Windows) auf ein **Office-Web-Add-in** umzustellen, das auch im **neuen Outlook** und in Outlook im
@@ -68,7 +68,7 @@ Ablagepfade, also personenbezogene Daten.
 
 | Option | Wandert mit? | Server? | Bewertung |
 |---|---|---|---|
-| **SQLite-Datei im App-Ordner des Nutzer-OneDrive** | ja | nein | **Empfohlen.** Jede App bekommt dort einen eigenen, privaten Ordner (Berechtigung `Files.ReadWrite.AppFolder`), MailDrop sieht nur diesen. Die Datenbank bleibt SQLite (im Browser z. B. über `sql.js`/`wa-sqlite`), das Schema kann weitgehend übernommen werden. Verlauf ist automatisch auf allen Geräten da – der heutige manuelle Export („Vorschlagsdaten exportieren“) entfällt. |
+| **SQLite-Datei im App-Ordner des Nutzer-OneDrive** | ja | nein | **Empfohlen.** Jede App bekommt dort einen eigenen, privaten Ordner (`/me/drive/special/approot`, Berechtigung `Files.ReadWrite.AppFolder`). Ob das bei Geschäftskonten zuverlässig funktioniert, ist widersprüchlich dokumentiert (Abschnitt 10) – **Rückfallebene ohne Zusatzaufwand:** ein fester Ordner `Apps/MailDrop` im Nutzer-OneDrive, erreichbar über das ohnehin nötige `Files.ReadWrite.All`. Die Datenbank bleibt SQLite (im Browser z. B. über `sql.js`/`wa-sqlite`), das Schema kann weitgehend übernommen werden. Verlauf ist automatisch auf allen Geräten da – der heutige manuelle Export („Vorschlagsdaten exportieren“) entfällt. |
 | Browser-Speicher (IndexedDB) | nein | nein | Nur als **lokaler Zwischenspeicher** zusätzlich zu OneDrive; allein zu unsicher (kann gelöscht werden, pro Gerät/Outlook-Variante getrennt). |
 | Roaming Settings des Add-ins (im Postfach) | ja | nein | Zu klein (ca. 32 KB). Nur für Einstellungen. |
 | Datei/Liste auf SharePoint (gemeinsam fürs Team) | ja | nein | Nur, wenn der Verlauf bewusst **teamweit** geteilt werden soll (neue Kollegen bekommen sofort Vorschläge). Erfordert Regeln, wer welche Betreffzeilen sehen darf. |
@@ -85,30 +85,37 @@ Technische Details zur empfohlenen Variante:
 
 ### E4 – Projekte finden: Verknüpfungen im persönlichen OneDrive
 
-**Entscheidung:** Als Projekte werden die Dokumentbibliotheken angeboten, die der Nutzer per
-**„Verknüpfung zu ‚Meine Dateien‘ hinzufügen“** in sein OneDrive eingebunden hat. Das Add-in liest diese
-Verknüpfungen über Graph (Einträge im Stammordner des Nutzer-OneDrive, die auf ein anderes Laufwerk verweisen)
-und bietet sie als ProjektPfad-Liste an; ganz oben die zuletzt genutzten (aus dem Verlauf).
+**Ziel:** Als Projekte werden die Dokumentbibliotheken angeboten, die der Nutzer per
+**„Verknüpfung zu ‚Meine Dateien‘ hinzufügen“** in sein OneDrive eingebunden hat; ganz oben die zuletzt
+genutzten (aus dem Verlauf).
 
-- Kein Hub, kein Namensschema und keine Suche nötig – jeder sieht genau „seine“ Projekte.
-- Neues Projekt verfügbar machen = in SharePoint einmal „Verknüpfung hinzufügen“ klicken.
-- **Wichtig:** Nur Verknüpfungen sind über Graph sichtbar. Eine Bibliothek, die lediglich per „Synchronisieren“
-  lokal eingebunden ist, kennt Graph nicht – Nutzer müssen also die Verknüpfung verwenden (die zusätzlich lokal
-  synchronisiert sein darf).
+- Kein Hub, kein Namensschema – jeder sieht genau „seine“ Projekte. Neues Projekt = einmal „Verknüpfung hinzufügen“.
 - Gespeichert werden Laufwerk-ID und Element-ID der Bibliothek + Anzeigename statt eines Pfads.
-- Rückfallebene: Site-Adresse einfügen.
+
+**Achtung – nicht gesichert (Recherche, Abschnitt 10):** Ob Graph diese Verknüpfungen bei **Geschäftskonten**
+zuverlässig auflistet, ist widersprüchlich belegt: Verknüpfungen erscheinen als Einträge mit `remoteItem`, es
+gibt aber mehrere Berichte, dass sie in `/me/drive/root/children` bei OneDrive for Business **nicht**
+zurückgegeben werden. Das ist die **erste Frage, die der Durchstich klären muss.** Lokal nur per
+„Synchronisieren“ eingebundene Bibliotheken sind für Graph in keinem Fall sichtbar.
+
+**Rückfallebene (unabhängig von Verknüpfungen), falls die Auflistung nicht klappt:** MailDrop führt eine
+**eigene Projektliste** im Verlauf (roamt über OneDrive mit). Ein Projekt wird einmalig hinzugefügt – per
+Suche nach Sites über Graph (`/sites?search=`), aus den vom Nutzer **gefolgten Sites** (`/me/followedSites`,
+„Stern“ in SharePoint) oder durch Einfügen der Bibliotheks-Adresse – und steht danach dauerhaft in der Liste.
+Fachlich gleichwertig, nur ein anderer Weg zum Eintragen.
 
 ### E5 – Format der abgelegten Mail
 
-Office.js und Graph liefern eine Mail nur als **.eml** (MIME), **nicht als .msg**. Die .eml wird **genauso
+Office.js und Graph liefern eine Mail nur als **.eml** (MIME), **nicht als .msg**. `getAsFileAsync` setzt Requirement Set **Mailbox 1.14** voraus (Abschnitt 10: nicht auf Mobilgeräten; Berichte über Probleme in Outlook 2024 als Kaufversion). Die .eml wird **genauso
 abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinamen-Schema, nur mit Endung
 `.eml` (Feld „msg Dateiname“ wird zu „Dateiname“). Anhänge können wie heute zusätzlich einzeln abgelegt werden.
 
 - **Inhalt:** Die .eml ist die vollständige Mail inklusive Kopfzeilen, Text und **eingebetteter Anhänge** –
   fachlich gleichwertig zur .msg.
-- **Beschaffung ohne Zusatzberechtigung:** `item.getAsFileAsync()` (Office.js, Requirement Set Mailbox 1.14)
-  liefert die .eml direkt aus dem geöffneten Element. Alternative über Graph (`/messages/{id}/$value`) bräuchte
-  zusätzlich die Berechtigung `Mail.Read` – vermeiden.
+- **Beschaffung:** primär `item.getAsFileAsync()` (Office.js, Mailbox 1.14) direkt aus dem geöffneten Element.
+  **Rückfallebene** über Graph (`/me/messages/{id}/$value`, Element-ID per `convertToRestId`), wenn 1.14 im
+  jeweiligen Outlook fehlt oder fehlschlägt – dafür zusätzlich `Mail.Read` (delegiert, nur eigenes Postfach).
+  Dieselbe Rückfallebene deckt große Anhänge ab (Office.js-Anhangsabruf in neuem Outlook/Web bis ca. 25 MB).
 - **Öffnen:** Doppelklick auf eine synchronisierte/heruntergeladene .eml öffnet sie in Outlook (klassisch und
   neu – aktuellen Stand beim neuen Outlook prüfen). In der SharePoint-Weboberfläche wird eine .eml in der Regel
   heruntergeladen statt als Vorschau angezeigt.
@@ -182,7 +189,9 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 
 1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E6 festhalten.
 2. **Technischer Durchstich (Prototyp):** Anmeldung, aktuelle Mail lesen, eine Projekt-Site finden, Ordner
-   anzeigen, .eml + Anhänge hochladen. Klärt die riskanten Punkte früh (Berechtigungen, Anmeldung, Upload).
+   anzeigen, .eml + Anhänge hochladen. Muss gezielt die drei offenen Punkte aus Abschnitt 10 beantworten:
+   (a) listet Graph die OneDrive-Verknüpfungen, (b) funktioniert `getAsFileAsync` auf euren Outlook-Versionen,
+   (c) Ladezeit/Speicher des Modells im Aufgabenbereich.
 3. **Kernfunktionen:** komplette Oberfläche, Platzhalter, Validierung, Ordneraktionen, Verlauf in OneDrive.
 4. **Vorschläge:** SuggestionEngine + Embedding portieren, Abgleich mit der .NET-Version.
 5. **Pilot** mit kleiner Gruppe.
@@ -207,7 +216,7 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 **Berechtigungen und Anmeldung**
 
 7. Ist **delegierter Dateizugriff „im Namen des Nutzers“** (`Files.ReadWrite.All`, delegiert) zulässig? (Effektiv nur Nutzerrechte; nötig, um auf verknüpfte Bibliotheken zuzugreifen.)
-8. Ist der **OneDrive-App-Ordner** (`Files.ReadWrite.AppFolder`) für den Verlauf zulässig?
+8. Sind **`Files.ReadWrite.AppFolder`** (Verlauf) und **`Mail.Read`** (delegiert; Rückfallebene für .eml-Export und große Anhänge, nur eigenes Postfach) zulässig?
 9. Gibt es **Richtlinien für bedingten Zugriff** (verwaltete Geräte, MFA, Standorte), die das Add-in betreffen?
 
 **Azure und Verteilung**
@@ -215,7 +224,7 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 10. Darf eine **Azure Static Web App** im Tenant betrieben werden? Welche Subscription/Ressourcengruppe, wer ist Besitzer?
 11. Eigene Adresse (z. B. `maildrop.firma.de`) gewünscht?
 12. Wer verteilt das Add-in im **Admin-Center (Integrierte Apps)**, an welche Gruppen?
-13. Welche Outlook-Varianten sind im Einsatz (klassisch/neu/Web)? Im klassischen Outlook: sind **Outlook-Version** und **WebView2** aktuell genug für Web-Add-ins?
+13. Welche Outlook-Varianten sind im Einsatz (klassisch/neu/Web/Mobil)? Klassisches Outlook als **Microsoft-365-Abo (aktueller Kanal)** oder als **Kaufversion (2021/2024/LTSC)**? Davon hängt ab, ob Mailbox 1.14 verfügbar ist. Wird aus **freigegebenen Postfächern/Stellvertretungen** abgelegt?
 14. Müssen Adressen im **Proxy/Firewall** freigegeben werden?
 
 **Datenschutz**
@@ -237,7 +246,7 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 
 - [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
 - [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
-- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.AppFolder`, `Files.ReadWrite.All`.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`.
 - [ ] **Administrator-Zustimmung** erteilen.
 - [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
 - [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.
@@ -310,7 +319,77 @@ in das Web-Add-in zu stecken – sonst wird zweimal ausgerollt und zweimal gesch
 
 - **.eml statt .msg** (E5) – fachlich gleichwertig; Sonderfälle verschlüsselter/gekennzeichneter Mails prüfen.
 - **Berechtigungsmodell** (E2) – lehnt die IT `Files.ReadWrite.All` (delegiert) ab, funktioniert der Verknüpfungs-Ansatz nicht; Ausweichen wäre Freischaltung pro Site mit Automatisierung.
+- Die in Abschnitt 10 recherchierten Fallstricke (Verknüpfungen, Mailbox 1.14, App-Ordner, Speicher).
 - **Erster Start** mit ~90 MB Modell – ggf. kleineres Modell nötig.
 - **Vorschlagsqualität** nach Portierung – nur durch Abgleich mit der .NET-Version auf denselben Daten nachweisbar.
 - **Graph-Drosselung** bei sehr großen Bibliotheken/Ordnerbäumen – durch ebenenweises Laden entschärft.
 - **Office.js-Funktionsumfang** (Anheften, Schließen der Pane per Code, Mehrfachauswahl) hängt von den unterstützten Requirement Sets der eingesetzten Outlook-Versionen ab – vor Phase 2 prüfen.
+
+---
+
+## 10. Machbarkeitsprüfung und Fallstricke (Recherche 2026-09-27)
+
+**Gesamturteil: umsetzbar, kein K.-o.-Kriterium gefunden.** Drei Punkte sind aber nicht durch Recherche zu
+klären und müssen im Durchstich als Erstes praktisch geprüft werden; für jeden gibt es eine Rückfallebene.
+
+### Bestätigt
+
+| Annahme | Ergebnis |
+|---|---|
+| Neues Outlook unterstützt keine COM-/VSTO-Add-ins | Bestätigt. |
+| Zeitdruck durch das neue Outlook | Microsoft unterstützt das klassische Outlook bis mindestens 2029 (M365 und LTSC). Für Unternehmen ist aber eine **Opt-out-Phase ab März 2027** angekündigt, der endgültige Wechsel **nicht vor März 2028**, mit mindestens 12 Monaten Vorankündigung. → Ein VSTO-MailDrop hätte im M365-Umfeld realistisch nur ca. 1,5–3 Jahre Lebensdauer. |
+| Anmeldung per Nested App Authentication (NAA) | Bestätigt und inzwischen **Pflicht**: Die alten Exchange-Token für Add-ins sind in allen Tenants abgeschaltet. Umleitungs-URI `brk-multihub://<domain>` (nur Origin, kein Pfad), SPA-Plattform, MSAL.js mit `createNestablePublicClientApplication`. Verfügbarkeit per `isSetSupported("NestedAppAuth", "1.1")` prüfen und Rückfallebene (Dialog-Anmeldung) vorsehen. |
+| Angeheftete Pane + `ItemChanged` | Unterstützt in neuem Outlook, Web, klassischem Outlook (M365) und Mac. **Ohne Anheften schließt sich die Pane beim Wechsel der Mail** – Nutzer müssen einmal auf die Stecknadel klicken; der `ItemChanged`-Handler muss `item === null` behandeln (z. B. Mehrfachauswahl). |
+| .eml wird im neuen Outlook geöffnet | Seit März 2024 unterstützt (Doppelklick, wenn das neue Outlook Standard-App für .eml ist; sonst „Öffnen mit“). |
+| SharePoint-Grenzen | Gesamtpfad (dekodiert) max. **400 Zeichen**, einzelner Name max. 255; verboten `* " : < > ? / \ |`, führende/abschließende Leerzeichen, reservierte Namen (`CON`, `PRN`, `AUX`, `NUL`, `COM0–9`, `LPT0–9`, `_vti_`, `desktop.ini`, `~$…`, `.lock`). → Neue Regeln für `InputChecker`. |
+| Upload | Direkt bis 250 MB, darüber Upload-Session (Teile < 60 MiB, Vielfaches von 320 KiB) – für Mails unkritisch. |
+| Add-in nicht auf SharePoint hostbar | Bestätigt: Outlook-Add-ins werden von SharePoint-App-Katalogen nicht unterstützt; Webspace (Azure Static Web Apps) nötig. |
+
+### Offen – im Durchstich zu prüfen
+
+1. **Auflistung der OneDrive-Verknüpfungen (E4) – größtes Risiko.** Verknüpfungen werden als Einträge mit
+   `remoteItem` beschrieben, es gibt aber mehrere Berichte, dass sie bei OneDrive for Business **nicht** in
+   `/me/drive/root/children` erscheinen. → Rückfallebene: eigene Projektliste in MailDrop (Site-Suche,
+   gefolgte Sites, Adresse einfügen), siehe E4.
+2. **`getAsFileAsync` / Mailbox 1.14 (E5).** Nicht auf Mobilgeräten; offener Fehlerbericht, dass es in
+   **Outlook 2024 (Kaufversion)** trotz dokumentierter Unterstützung „nicht unterstützt“ meldet; im klassischen
+   Outlook weichen die erzeugten Kopfzeilen teils ab. → Rückfallebene Graph-MIME-Export mit `Mail.Read`.
+   IT-Frage 13 (Abo vs. Kaufversion) klärt, wie relevant das ist.
+3. **Modell im Aufgabenbereich (E6).** Es gibt Berichte über hohen Speicherverbrauch/Speicherlecks von WebView2
+   in Office-Add-ins; ONNX Runtime Web läuft zuverlässig single-threaded über WASM. → Modell erst bei Bedarf in
+   einem Web Worker laden, Ladezeit/Speicher messen, ggf. quantisierte Variante (~¼ Größe).
+
+### Korrigiert gegenüber der ersten Skizze
+
+- **App-Ordner (E3):** Die aktuelle Graph-Doku beschreibt den App-Ordner für OneDrive privat **und** geschäftlich
+  mit `Files.ReadWrite.AppFolder`; ältere Microsoft-Antworten sagen „nur private Konten“. → Nicht mehr als
+  gesichert behandelt; Rückfallebene fester Ordner `Apps/MailDrop` über `Files.ReadWrite.All`.
+- **`Mail.Read` zusätzlich beantragen:** Als Rückfallebene für den .eml-Export und für große Anhänge
+  (Office.js-Anhangsabruf in neuem Outlook/Web ca. 25 MB). Delegiert, nur eigenes Postfach.
+
+### Weitere Fallstricke für die Umsetzung
+
+- **Max. 3 gleichzeitige asynchrone Office.js-Aufrufe** in neuem Outlook/Web → Aufrufe (Anhänge!) nacheinander ausführen.
+- **Roaming Settings max. 32 KB** → nur für kleine Einstellungen, nicht für den Verlauf (wie geplant).
+- **Browser-Speicher (IndexedDB) kann gelöscht werden** → nur Zwischenspeicher, maßgeblich ist die Datei in OneDrive (wie geplant).
+- **Freigegebene Postfächer/Stellvertretung:** Office.js und Graph-Pfade unterscheiden sich (`/users/{id}/messages` statt `/me`) – falls genutzt, früh testen.
+- **Geschützte Mails** (S/MIME, Vertraulichkeitsbezeichnungen/Rechteverwaltung): Exportierbarkeit als .eml und spätere Lesbarkeit im Durchstich prüfen.
+- **Mobil:** Outlook mobil unterstützt Mailbox 1.14 nicht → MailDrop wäre dort nur mit Graph-Rückfallebene und stark vereinfachter Oberfläche denkbar; Ziel bleibt der Desktop.
+
+### Quellen
+
+- Mailbox 1.14 / `getAsFileAsync`: [Requirement Set 1.14](https://learn.microsoft.com/en-us/javascript/api/requirement-sets/outlook/requirement-set-1.14/outlook-requirement-set-1.14?view=common-js-preview) · [Issue #5582 (Outlook 2024)](https://github.com/OfficeDev/office-js/issues/5582) · [Issue #5635 (Kopfzeilen klassisch)](https://github.com/OfficeDev/office-js/issues/5635) · [Q&A: kein 1.14 auf Mobil](https://learn.microsoft.com/en-ca/answers/questions/5624660/what-are-the-api-options-for-retrieving-full-eml-i)
+- NAA: [Enable NAA](https://learn.microsoft.com/en-us/office/dev/add-ins/develop/enable-nested-app-authentication-in-your-add-in) · [NAA-FAQ / Legacy-Token](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/faq-nested-app-auth-outlook-legacy-tokens)
+- Verknüpfungen: [remoteItem](https://learn.microsoft.com/en-us/graph/api/resources/remoteitem?view=graph-rest-1.0) · [Q&A: Shortcuts fehlen in children](https://learn.microsoft.com/en-us/answers/questions/761174/microsoft-graph-api-how-to-get-shortcuts-when-gett) · [Tech Community: OneDrive Shortcut via Graph](https://techcommunity.microsoft.com/discussions/sharepointdev/onedrive-shortcut-via-graph/3251924)
+- App-Ordner: [Graph: App folder in OneDrive and SharePoint](https://learn.microsoft.com/en-us/graph/onedrive-sharepoint-appfolder) · [Q&A: AppFolder für Business](https://learn.microsoft.com/en-us/answers/questions/1418013/when-is-api-permission-(delegated)-files-readwrite)
+- Anheften: [Pinnable task pane](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/pinnable-taskpane)
+- Grenzen: [Limits for Outlook add-ins](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/limits-for-activation-and-javascript-api-for-outlook-add-ins) · [SharePoint limits](https://learn.microsoft.com/en-us/office365/servicedescriptions/sharepoint-online-service-description/sharepoint-online-limits) · [Upload small files](https://learn.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0) · [createUploadSession](https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0)
+- .eml im neuen Outlook: [Microsoft Support](https://support.microsoft.com/en-us/outlook/mail/open-eml-msg-and-oft-files-in-new-outlook-and-outlook-on-the-web)
+- Zeitplan klassisches Outlook: [PCWorld](https://www.pcworld.com/article/3082363/microsoft-extends-support-for-the-classic-outlook-app-again.html) · [Tech Community](https://techcommunity.microsoft.com/discussions/microsoft-365/outlook-classic-support-until-at-least-2029/4081174)
+- Hosting/App-Katalog: [Publish to SharePoint app catalog](https://learn.microsoft.com/en-us/office/dev/add-ins/publish/publish-task-pane-and-content-add-ins-to-an-add-in-catalog)
+- WebView2/ONNX: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) · [Issue #1913 WebView2-Speicher](https://github.com/OfficeDev/office-js/issues/1913)
+
+Hinweis: `learn.microsoft.com` war für direkte Seitenabrufe gesperrt; die Aussagen stützen sich auf
+Suchergebnis-Auszüge und die Spiegel der Microsoft-Doku auf GitHub. Vor der Umsetzung stichprobenartig im
+Original gegenprüfen.
+
