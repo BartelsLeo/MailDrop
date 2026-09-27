@@ -2,6 +2,8 @@
 
 MailDrop ist ein VSTO-Add-in fuer Microsoft Outlook. Es hilft dabei, E-Mails und optional deren Anhaenge strukturiert in Projektordnern abzulegen.
 
+> **Nur klassisches Outlook fuer Windows.** Das "neue Outlook" (Schalter "Neues Outlook" oben rechts) und Outlook im Browser unterstuetzen keine VSTO-/COM-Add-ins - dort fehlt der MailDrop-Button. Zurueckschalten auf das klassische Outlook bringt ihn zurueck.
+
 ## Nutzen
 
 - Schnelleres und konsistentes Ablegen von Outlook-Mails in Projektstrukturen
@@ -72,7 +74,7 @@ Details zum Vorgehen (inkl. Release-Tagging) siehe CONTRIBUTING.md.
 
 ### Voraussetzungen
 
-- Windows mit installiertem Outlook Desktop
+- Windows mit installiertem Outlook Desktop (klassisches Outlook, nicht das "neue Outlook")
 - VSTO Runtime
 - Visual Studio 2022
 - .NET Framework 4.7.2 Targeting Pack
@@ -237,6 +239,7 @@ Unterstuetzte Platzhalter in Ablageordner und msg Dateiname:
 ## Troubleshooting
 
 - MailDrop-Button fehlt im Outlook-Ribbon:
+  - Pruefen, ob das "neue Outlook" aktiv ist (Schalter oben rechts) - dort laufen keine VSTO-Add-ins; auf das klassische Outlook zurueckschalten.
   - Outlook komplett neu starten.
   - In Outlook unter COM-Add-Ins pruefen, ob MailDrop aktiviert ist.
   - In Visual Studio das Add-in einmal im Debug-Modus starten, damit Registrierung/Load-Verhalten aktualisiert wird.
