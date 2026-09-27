@@ -1,12 +1,17 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WordPieceTokenizer } from "../src/embedding/wordpiece";
 
-const vocab = readFileSync(join(__dirname, "..", "..", "Models", "vocab.txt"), "utf8");
-const tok = new WordPieceTokenizer(vocab);
+import { UnigramTokenizer } from "../src/embedding/unigram";
 
-describe("WordPieceTokenizer", () => {
+// Nur für das alte englische BERT-Vokabular; mit dem deutschfähigen Modell (Unigram) übersprungen.
+const vocabPath = join(__dirname, "..", "..", "Models", "vocab.txt");
+const vocab = existsSync(vocabPath) ? readFileSync(vocabPath, "utf8") : "";
+const isWordPiece = vocab !== "" && !UnigramTokenizer.looksLikeUnigramVocab(vocab);
+const tok = isWordPiece ? new WordPieceTokenizer(vocab) : (undefined as unknown as WordPieceTokenizer);
+
+describe.skipIf(!isWordPiece)("WordPieceTokenizer", () => {
   it("liest das komplette Vokabular", () => {
     expect(tok.vocabSize).toBe(30522);
   });

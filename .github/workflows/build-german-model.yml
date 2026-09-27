@@ -13,6 +13,10 @@ on:
   push:
     paths:
       - "tools/model/**"
+      - "tools/tokenizer-check/**"
+      - "Services/UnigramTokenizer.vb"
+      - "web/src/embedding/**"
+      - "web/test/**"
       - ".github/workflows/build-german-model.yml"
 
 permissions:
