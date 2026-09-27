@@ -48,12 +48,18 @@ Ausgangsannahmen aus den Vorgesprächen:
 | Netzlaufwerk wie heute | Nur mit **eigenem Server**, der im Auftrag des Add-ins auf die Freigaben schreibt (Anmeldung, Berechtigungsprüfung, Betrieb), oder mit einem **Hilfsprogramm auf jedem PC** (dann entfällt der Hauptvorteil des Web-Add-ins). Nicht empfohlen. |
 | Im OneDrive synchronisierte Bibliotheken | Für ein Web-Add-in **nicht nutzbar** – es sieht das lokale Dateisystem nicht. (Nur für das VSTO-MailDrop relevant, siehe Abschnitt 8.) |
 
-### E2 – Zugriff auf die Projekt-Sites (Berechtigungsmodell)
+### E2 – Zugriff auf die Projekt-Bibliotheken (Berechtigungsmodell)
+
+Grundsatz: Der Nutzer hat über seine SharePoint-Berechtigungen bereits Zugriff auf seine Projekt-Bibliotheken.
+Das Add-in ist aber eine **eigene App**, die im Namen des Nutzers auf Graph zugreift – dafür braucht die App
+eine **einmalige, tenantweite Zustimmung** (App-Registrierung + Admin-Zustimmung). Diese Zustimmung erweitert
+keine Rechte: Die App kann nur, was der angemeldete Nutzer ohnehin darf. Dass eine Bibliothek im OneDrive
+verknüpft ist, erteilt der App selbst keine Berechtigung, macht sie aber auffindbar (siehe E4).
 
 | Option | Bewertung |
 |---|---|
-| **Delegierter Zugriff auf Dateien „im Namen des Nutzers“** (z. B. `Files.ReadWrite.All`, delegiert) | **Empfohlen.** MailDrop kann nur, was der angemeldete Nutzer ohnehin darf; die Projektberechtigungen in SharePoint bleiben die einzige Zugriffssteuerung. Kein Pflegeaufwand pro neuem Projekt. Nachteil: Die Berechtigung heißt „…All“, was manche IT-Richtlinien grundsätzlich ablehnen – dann gut begründen (effektiv = Nutzerrechte). |
-| Freischaltung pro Site (`Sites.Selected`) | Minimalprinzip, aber **jede neue Projekt-Site muss einzeln für MailDrop freigeschaltet werden**. Nur praktikabel, wenn das automatisch im Prozess zum Anlegen von Projekt-Sites passiert. |
+| **Delegierter Dateizugriff im Namen des Nutzers** (`Files.ReadWrite.All`, delegiert) | **Empfohlen und für den Verknüpfungs-Ansatz (E4) nötig**: Verknüpfte Bibliotheken liegen technisch in fremden Laufwerken, dafür reicht `Files.ReadWrite` (nur eigenes OneDrive) nicht. Effektive Rechte = Nutzerrechte, **keine Freischaltung pro Projekt-Site**, kein Pflegeaufwand bei neuen Projekten. Die Bezeichnung „…All“ ggf. gegenüber der IT erläutern. |
+| ~~Freischaltung pro Site (`Sites.Selected`)~~ | Verworfen: Jede Projekt-Site müsste einzeln für die App freigeschaltet werden – unnötiger Pflegeaufwand, da die Zugriffssteuerung ohnehin über die Projektberechtigungen läuft. |
 
 ### E3 – Speicherort des Verlaufs („die SQL“)
 
@@ -77,16 +83,20 @@ Technische Details zur empfohlenen Variante:
   nie geändert – das macht die Zusammenführung einfach). `ComputedWeights` wird lokal neu berechnet, nicht
   zusammengeführt.
 
-### E4 – Projekte finden (ersetzt „anderes…“ und den Ordnerdialog)
+### E4 – Projekte finden: Verknüpfungen im persönlichen OneDrive
 
-| Option | Bewertung |
-|---|---|
-| **Hub-Site, an der alle Projekt-Sites hängen** | **Empfohlen**, falls vorhanden: MailDrop listet die Sites des Hubs und bietet eine Suche darüber. |
-| Namensschema der Sites (z. B. `P-1234 …`) | Gut, wenn einheitlich: Suche über Graph nach dem Schema. |
-| Verknüpfungen unter „Meine Dateien“ / gefolgte Sites | Ergänzend: „meine Projekte“ ohne Suche. |
-| Site-Adresse einfügen | Nur als Notlösung/Rückfallebene. |
+**Entscheidung:** Als Projekte werden die Dokumentbibliotheken angeboten, die der Nutzer per
+**„Verknüpfung zu ‚Meine Dateien‘ hinzufügen“** in sein OneDrive eingebunden hat. Das Add-in liest diese
+Verknüpfungen über Graph (Einträge im Stammordner des Nutzer-OneDrive, die auf ein anderes Laufwerk verweisen)
+und bietet sie als ProjektPfad-Liste an; ganz oben die zuletzt genutzten (aus dem Verlauf).
 
-Die Liste der zuletzt genutzten Projekte funktioniert wie im VSTO-Konzept (aus dem Verlauf), nur mit Site/Bibliothek statt Pfad.
+- Kein Hub, kein Namensschema und keine Suche nötig – jeder sieht genau „seine“ Projekte.
+- Neues Projekt verfügbar machen = in SharePoint einmal „Verknüpfung hinzufügen“ klicken.
+- **Wichtig:** Nur Verknüpfungen sind über Graph sichtbar. Eine Bibliothek, die lediglich per „Synchronisieren“
+  lokal eingebunden ist, kennt Graph nicht – Nutzer müssen also die Verknüpfung verwenden (die zusätzlich lokal
+  synchronisiert sein darf).
+- Gespeichert werden Laufwerk-ID und Element-ID der Bibliothek + Anzeigename statt eines Pfads.
+- Rückfallebene: Site-Adresse einfügen.
 
 ### E5 – Format der abgelegten Mail
 
@@ -109,13 +119,23 @@ abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinam
 - **Sonderfälle prüfen:** verschlüsselte/signierte Mails (S/MIME) und Mails mit Vertraulichkeitsbezeichnung bzw.
   Rechteverwaltung – ob und wie diese als .eml exportierbar und später lesbar sind.
 
-### E6 – KI-Modell für die Vorschläge
+### E6 – Vorschlagsansatz (SuggestionEngine + Embedding) übernehmen
 
-- Modell läuft **lokal im Browser** (ONNX Runtime Web), Daten verlassen das Gerät nicht.
-- Das heutige Modell (~90 MB) liegt mit auf dem Webspace und wird nach dem ersten Laden zwischengespeichert.
-  Prüfen, ob eine **quantisierte/kleinere Variante** ausreicht (schnellerer erster Start).
-- Tokenizer (WordPiece, `vocab.txt`) muss in TypeScript nachgebaut oder aus einer Bibliothek übernommen werden;
-  Ergebnisse gegen die .NET-Version abgleichen (gleiche Embeddings → gleiche Vorschläge).
+Der bestehende Vorhersageansatz wird **unverändert übernommen**: gewichtete Ähnlichkeit über die Features
+(Betreff semantisch, Datum, Absender, Domain, Titel, Ablageordner, ProjektPfad, ProjektstrukturPfad), aus dem
+Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Trigger.
+
+- **SuggestionEngine (~1.150 Zeilen):** reine Rechenlogik ohne Outlook-/Dateisystem-Bezug → direkte Portierung
+  nach TypeScript, per automatischer Tests gegen die Ergebnisse der VB-Version absicherbar. Neuberechnung der
+  Gewichte (O(n²)) in einem Web Worker.
+- **Betreff-Embedding:** Das heutige Verfahren ist Standard (BERT-WordPiece-Tokenizer aus `vocab.txt`,
+  384-dimensionales Modell, Mean Pooling, L2-Normalisierung). Im Browser mit ONNX Runtime Web bzw. einer
+  fertigen Bibliothek (z. B. Transformers.js), die genau diese Schritte bereits mitbringt – kaum eigener Code.
+- **Abgleich:** Einmalig Referenz-Embeddings für eine Liste typischer Betreffzeilen erzeugen und prüfen, dass
+  die Browser-Variante dieselben Werte liefert (u. a. gleiche Einstellung zur Kleinschreibung im Tokenizer).
+- **Offener Punkt Laufzeit:** ~90 MB Modell im Aufgabenbereich des (neuen) Outlook – Ladezeit beim ersten Start
+  und Speicherverbrauch im Pilot messen; bei Bedarf eine quantisierte Variante (~¼ der Größe) testen und die
+  Vorschlagsqualität vergleichen.
 
 ---
 
@@ -180,13 +200,13 @@ abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinam
 
 **Projekt-Sites**
 
-4. Hängen alle Projekt-Sites an einer **Hub-Site**? Gibt es ein festes **Namensschema**?
-5. Wie werden Projekt-Sites **angelegt** (manuell, Skript, Vorlage)? Relevant, falls pro Site freigeschaltet werden muss.
+4. Ist es in Ordnung, dass Nutzer ihre Projektbibliotheken per **„Verknüpfung zu ‚Meine Dateien‘ hinzufügen“** in ihr OneDrive einbinden (ist diese Funktion im Tenant aktiv)?
+5. Wie werden Projekt-Sites **angelegt** (Vorlage)? Relevant für optionale Metadaten-Spalten (E5).
 6. Gibt es **Aufbewahrungs-/Compliance-Richtlinien** für abgelegte Mails?
 
 **Berechtigungen und Anmeldung**
 
-7. Ist **delegierter Dateizugriff „im Namen des Nutzers“** (`Files.ReadWrite.All`, delegiert) zulässig – oder nur **Freischaltung pro Site** (`Sites.Selected`)?
+7. Ist **delegierter Dateizugriff „im Namen des Nutzers“** (`Files.ReadWrite.All`, delegiert) zulässig? (Effektiv nur Nutzerrechte; nötig, um auf verknüpfte Bibliotheken zuzugreifen.)
 8. Ist der **OneDrive-App-Ordner** (`Files.ReadWrite.AppFolder`) für den Verlauf zulässig?
 9. Gibt es **Richtlinien für bedingten Zugriff** (verwaltete Geräte, MFA, Standorte), die das Add-in betreffen?
 
@@ -217,15 +237,14 @@ abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinam
 
 - [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
 - [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
-- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.AppFolder`, und je nach E2 `Files.ReadWrite.All` **oder** `Sites.Selected`.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.AppFolder`, `Files.ReadWrite.All`.
 - [ ] **Administrator-Zustimmung** erteilen.
-- [ ] Falls `Sites.Selected`: Freischaltung für alle bestehenden Projekt-Sites durchführen und **in den Prozess zum Anlegen neuer Projekt-Sites einbauen**.
 - [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
 - [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.
 
 **SharePoint**
 
-- [ ] Projekt-Sites an Hub anbinden bzw. Namensschema sicherstellen (E4).
+- [ ] Sicherstellen, dass „Verknüpfung zu ‚Meine Dateien‘ hinzufügen“ für die Projektbibliotheken verfügbar ist (E4); Nutzer kurz anleiten.
 - [ ] Berechtigungen pro Projekt-Site wie gewohnt pflegen (bleibt die eigentliche Zugriffssteuerung).
 - [ ] Ggf. Aufbewahrungsrichtlinien für die Bibliotheken festlegen.
 - [ ] Optional: Spalten für Mail-Metadaten (Absender, Datum, Betreff) in die Vorlage der Projektbibliotheken aufnehmen (E5).
@@ -238,6 +257,27 @@ abgelegt** wie heute die .msg: gleicher Ablageordner, Dateiname aus dem Dateinam
 - [ ] Outlook-Versionen/WebView2 auf den PCs prüfen.
 - [ ] Datenschutz-Dokumentation abschließen.
 - [ ] Laufend: neue Nutzer der Gruppe hinzufügen, neue Projekt-Sites anlegen (und ggf. freischalten). Updates des Add-ins verteilen sich automatisch mit jeder Veröffentlichung.
+
+---
+
+## 7a. Aufwand (Umsetzung vollständig durch Claude Code)
+
+Der Code wird vollständig von Claude Code geschrieben. Der Aufwand verschiebt sich damit vom Programmieren auf
+**Prüfen und Testen in der echten Microsoft-365-Umgebung**, das Claude nicht selbst kann (kein Zugriff auf
+euren Tenant, kein Outlook).
+
+| Was | Wer | Einschätzung |
+|---|---|---|
+| Code schreiben (Oberfläche, Graph-Zugriff, Verlauf, Portierung Session/Platzhalter/Prüfungen/SuggestionEngine) | Claude | kein Engpass |
+| Automatische Tests der portierten Logik (Platzhalter-Beispiele, Validierung, Vorschlagsberechnung, Embedding-Abgleich) | Claude, im eigenen Container | kein Engpass – deckt die fachlich kritischen Teile ab |
+| IT-Einrichtung (Azure, App-Registrierung, Zustimmung, Verteilung) | IT | wenig Arbeit, aber **Wochen Vorlauf** möglich |
+| Testen im echten Outlook/SharePoint, Fehler zurückmelden | Nutzer | **eigentlicher Engpass**: realistisch ca. 3–5 Testrunden für den Durchstich, 10–20 Runden bis zur fertigen Version |
+| Pilot und Nachbesserungen | Nutzer + Claude | einige Runden |
+
+Grobe Kalenderdauer bei zügigen Testrunden: **Durchstich in wenigen Tagen** nach Abschluss der IT-Einrichtung,
+**fertige Version in einigen Wochen** – bestimmt durch die Zahl der Testrunden und den IT-Vorlauf, nicht durch
+das Schreiben des Codes. Unsicherheit bleibt v. a. bei Anmeldung/Berechtigungen (hängt an IT-Einstellungen) und
+beim Verhalten des Modells im Outlook-Aufgabenbereich (Ladezeit/Speicher).
 
 ---
 
@@ -269,7 +309,7 @@ in das Web-Add-in zu stecken – sonst wird zweimal ausgerollt und zweimal gesch
 ## 9. Risiken und offene Punkte
 
 - **.eml statt .msg** (E5) – fachlich gleichwertig; Sonderfälle verschlüsselter/gekennzeichneter Mails prüfen.
-- **Berechtigungsmodell** (E2) – wenn nur `Sites.Selected` erlaubt ist, hängt der Betrieb an einer zuverlässigen Automatisierung.
+- **Berechtigungsmodell** (E2) – lehnt die IT `Files.ReadWrite.All` (delegiert) ab, funktioniert der Verknüpfungs-Ansatz nicht; Ausweichen wäre Freischaltung pro Site mit Automatisierung.
 - **Erster Start** mit ~90 MB Modell – ggf. kleineres Modell nötig.
 - **Vorschlagsqualität** nach Portierung – nur durch Abgleich mit der .NET-Version auf denselben Daten nachweisbar.
 - **Graph-Drosselung** bei sehr großen Bibliotheken/Ordnerbäumen – durch ebenenweises Laden entschärft.
