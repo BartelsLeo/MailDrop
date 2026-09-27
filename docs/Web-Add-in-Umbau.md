@@ -224,7 +224,7 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 10. Darf eine **Azure Static Web App** im Tenant betrieben werden? Welche Subscription/Ressourcengruppe, wer ist Besitzer?
 11. Eigene Adresse (z. B. `maildrop.firma.de`) gewünscht?
 12. Wer verteilt das Add-in im **Admin-Center (Integrierte Apps)**, an welche Gruppen?
-13. Welche Outlook-Varianten sind im Einsatz (klassisch/neu/Web/Mobil)? Klassisches Outlook als **Microsoft-365-Abo (aktueller Kanal)** oder als **Kaufversion (2021/2024/LTSC)**? Davon hängt ab, ob Mailbox 1.14 verfügbar ist. Wird aus **freigegebenen Postfächern/Stellvertretungen** abgelegt?
+13. Welche Outlook-Varianten sind im Einsatz (klassisch/neu/Web/Mobil)? Klassisches Outlook als **Microsoft-365-Abo (aktueller Kanal)** oder als **Kaufversion (2021/2024/LTSC)**? Davon hängt ab, ob Mailbox 1.14 verfügbar ist. Wird aus **freigegebenen Postfächern/Stellvertretungen** abgelegt? (Unterstützt; dann zusätzlich `Mail.Read.Shared`.)
 14. Müssen Adressen im **Proxy/Firewall** freigegeben werden?
 
 **Datenschutz**
@@ -246,7 +246,7 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 
 - [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
 - [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
-- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`, bei Ablage aus freigegebenen Postfächern zusätzlich `Mail.Read.Shared`.
 - [ ] **Administrator-Zustimmung** erteilen.
 - [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
 - [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.
@@ -369,12 +369,12 @@ klären und müssen im Durchstich als Erstes praktisch geprüft werden; für jed
 
 ### Weitere Fallstricke für die Umsetzung
 
-- **Max. 3 gleichzeitige asynchrone Office.js-Aufrufe** in neuem Outlook/Web → Aufrufe (Anhänge!) nacheinander ausführen.
+- **Max. 3 gleichzeitige asynchrone Office.js-Aufrufe** in neuem Outlook/Web → rein interne Programmierregel: Beim **einen** Klick auf OK holt der Code die Anhänge in einer Warteschlange nacheinander (bzw. max. 3 parallel) ab. Für den Nutzer ändert sich nichts – weiterhin ein Ablagevorgang pro Mail inkl. aller Anhänge.
 - **Roaming Settings max. 32 KB** → nur für kleine Einstellungen, nicht für den Verlauf (wie geplant).
 - **Browser-Speicher (IndexedDB) kann gelöscht werden** → nur Zwischenspeicher, maßgeblich ist die Datei in OneDrive (wie geplant).
-- **Freigegebene Postfächer/Stellvertretung:** Office.js und Graph-Pfade unterscheiden sich (`/users/{id}/messages` statt `/me`) – falls genutzt, früh testen.
+- **Freigegebene Postfächer/Stellvertretung:** Wird unterstützt – der Nutzer hat ja Zugriff. Es ist nur ein anderer technischer Weg: Office.js erkennt das freigegebene Postfach (`getSharedPropertiesAsync`), die Graph-Rückfallebene greift über `/users/{postfach}/messages` statt `/me` zu und braucht dafür zusätzlich `Mail.Read.Shared` (delegiert, nur Postfächer, auf die der Nutzer ohnehin Zugriff hat). Im Durchstich mit einem echten freigegebenen Postfach testen. Der Vorschlags-Verlauf bleibt dabei der persönliche des Nutzers.
 - **Geschützte Mails** (S/MIME, Vertraulichkeitsbezeichnungen/Rechteverwaltung): Exportierbarkeit als .eml und spätere Lesbarkeit im Durchstich prüfen.
-- **Mobil:** Outlook mobil unterstützt Mailbox 1.14 nicht → MailDrop wäre dort nur mit Graph-Rückfallebene und stark vereinfachter Oberfläche denkbar; Ziel bleibt der Desktop.
+- **Zielplattformen:** Desktop (neues und klassisches Outlook) **und Outlook im Browser** – der Browser ist technisch praktisch dasselbe wie das neue Outlook (Mailbox 1.14, Anmeldung, Anheften, Modell im Browser). Einziger Browser-spezifischer Prüfpunkt: gemeldete Probleme der Anmeldung (NAA), wenn im Browser Drittanbieter-Cookies blockiert sind → im Durchstich testen, Rückfallebene Dialog-Anmeldung. **Mobil ist kein Ziel** (kein Mailbox 1.14).
 
 ### Quellen
 
