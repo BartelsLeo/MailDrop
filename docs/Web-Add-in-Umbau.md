@@ -136,10 +136,18 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
   nach TypeScript, per automatischer Tests gegen die Ergebnisse der VB-Version absicherbar. Neuberechnung der
   Gewichte (O(n²)) in einem Web Worker.
 - **Betreff-Embedding:** Das heutige Verfahren ist Standard (BERT-WordPiece-Tokenizer aus `vocab.txt`,
-  384-dimensionales Modell, Mean Pooling, L2-Normalisierung). Im Browser mit ONNX Runtime Web bzw. einer
-  fertigen Bibliothek (z. B. Transformers.js), die genau diese Schritte bereits mitbringt – kaum eigener Code.
-- **Abgleich:** Einmalig Referenz-Embeddings für eine Liste typischer Betreffzeilen erzeugen und prüfen, dass
-  die Browser-Variante dieselben Werte liefert (u. a. gleiche Einstellung zur Kleinschreibung im Tokenizer).
+  384-dimensionales Modell, Mean Pooling, L2-Normalisierung). **Im Prototyp umgesetzt** (`web/src/embedding/`):
+  eigener WordPiece-Tokenizer in TypeScript + ONNX Runtime Web (WASM), getestet in Node und im echten
+  Chromium (lokal: 86 MB Download ~3,6 s, Laden ~2,2 s, 3 Embeddings ~0,2 s, plausible Ähnlichkeiten).
+- **Kein Abgleich mit der .NET-Version nötig:** Es gibt keinen Altverlauf. Der Web-Tokenizer entfernt – wie
+  bei einem „uncased“ BERT-Modell vorgesehen – Akzente/Umlaute (ä → a). Die VSTO-Version
+  (`Microsoft.ML.Tokenizers.BertTokenizer` mit Standardoptionen) tut das vermutlich nicht, sodass deutsche
+  Umlaut-Wörter dort zu `[UNK]` werden – die Web-Variante ist hier fachlich korrekter.
+- **Nebenbefund Modell:** `vocab.txt` ist das **englische** uncased-BERT-Vokabular (30.522 Einträge), das Modell
+  also sehr wahrscheinlich ein rein englisches Satzmodell (MiniLM-Familie). Deutsche Betreffzeilen werden in
+  viele Wortstücke zerlegt, die semantische Ähnlichkeit ist dadurch schwächer als möglich. Ein mehrsprachiges
+  Modell (z. B. aus der „paraphrase-multilingual“-Familie) wäre für deutsche Mails besser, ist aber deutlich
+  größer – eigene Entscheidung, am besten mit echten Betreffzeilen vergleichen.
 - **Offener Punkt Laufzeit:** ~90 MB Modell im Aufgabenbereich des (neuen) Outlook – Ladezeit beim ersten Start
   und Speicherverbrauch im Pilot messen; bei Bedarf eine quantisierte Variante (~¼ der Größe) testen und die
   Vorschlagsqualität vergleichen.
@@ -188,10 +196,11 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 ## 5. Vorgehen in Phasen
 
 1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E6 festhalten.
-2. **Technischer Durchstich (Prototyp):** Anmeldung, aktuelle Mail lesen, eine Projekt-Site finden, Ordner
-   anzeigen, .eml + Anhänge hochladen. Muss gezielt die drei offenen Punkte aus Abschnitt 10 beantworten:
-   (a) listet Graph die OneDrive-Verknüpfungen, (b) funktioniert `getAsFileAsync` auf euren Outlook-Versionen,
-   (c) Ladezeit/Speicher des Modells im Aufgabenbereich.
+2. **Technischer Durchstich (Prototyp):** **Angelegt in `web/`** (Branch `feature/web-prototype`, Anleitung
+   `web/README.md`) als Prüfoberfläche mit neun Prüfungen: Umgebung/Requirement Sets, Anmeldung (NAA),
+   aktuelle Mail/freigegebenes Postfach, .eml-Export (Office.js + Graph), Anhänge, Projektbibliotheken
+   (Verknüpfungen + gefolgte Sites), Verlaufsspeicher (App-Ordner + Rückfallebene), Test-Upload, Modell.
+   Beantwortet gezielt die offenen Punkte aus Abschnitt 10; Ergebnis als kopierbarer Bericht.
 3. **Kernfunktionen:** komplette Oberfläche, Platzhalter, Validierung, Ordneraktionen, Verlauf in OneDrive.
 4. **Vorschläge:** SuggestionEngine + Embedding portieren, Abgleich mit der .NET-Version.
 5. **Pilot** mit kleiner Gruppe.
@@ -246,7 +255,8 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 
 - [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
 - [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
-- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`, bei Ablage aus freigegebenen Postfächern zusätzlich `Mail.Read.Shared`.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`, bei Ablage aus freigegebenen Postfächern zusätzlich `Mail.Read.Shared`; `Sites.Read.All` für die Rückfallebene „gefolgte Sites“ bei der Projektsuche (E4).
+- [ ] Für den Prototyp (`web/`): Umleitungs-URIs `brk-multihub://localhost:3000` und `https://localhost:3000/taskpane.html`; Hochladen eigener Add-ins für den Testnutzer erlauben oder Manifest `web/manifest.xml` an ihn verteilen.
 - [ ] **Administrator-Zustimmung** erteilen.
 - [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
 - [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.

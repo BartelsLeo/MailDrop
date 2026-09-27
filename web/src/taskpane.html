@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MailDrop Prototyp</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      :root {
+        --ok: #15803d; --warn: #b45309; --fail: #b91c1c; --muted: #6b7280;
+        --border: #e5e7eb; --accent: #4f46e5; --text: #111827; --bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --text: #f3f4f6; --bg: #1f2937; --border: #374151; --muted: #9ca3af; }
+      }
+      body { font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; margin: 0; padding: 12px; color: var(--text); background: var(--bg); }
+      h1 { font-size: 16px; margin: 0 0 4px; color: var(--accent); }
+      .hint { color: var(--muted); margin: 0 0 10px; }
+      .toolbar { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+      button { font: inherit; padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+      button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .check { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+      .check.ok { border-left-color: var(--ok); }
+      .check.warn { border-left-color: var(--warn); }
+      .check.fail { border-left-color: var(--fail); }
+      .check-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
+      .summary { margin: 6px 0 0; }
+      pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+      select { width: 100%; margin-top: 6px; font: inherit; }
+      #status { color: var(--muted); min-height: 1.2em; }
+      #report { width: 100%; height: 200px; font-family: monospace; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h1>MailDrop – Web-Prototyp</h1>
+    <p class="hint">
+      Prüft die offenen Punkte aus docs/Web-Add-in-Umbau.md (Abschnitt 10). Aufgabenbereich anheften (Stecknadel),
+      eine Mail mit Anhang auswählen, „Alle ausführen“, dann Prüfung 8 manuell, Bericht kopieren und zurückmelden.
+    </p>
+    <div class="toolbar">
+      <button id="run-all" class="primary">Alle ausführen</button>
+      <button id="copy">Bericht kopieren</button>
+    </div>
+    <p id="status"></p>
+    <div id="checks"></div>
+    <textarea id="report" hidden readonly></textarea>
+    <script type="module" src="./taskpane.ts"></script>
+  </body>
+</html>
