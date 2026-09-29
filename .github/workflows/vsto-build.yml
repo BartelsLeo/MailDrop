@@ -1,8 +1,7 @@
 # Übersetzt das VSTO-Add-in (Debug) auf einem Windows-Runner - reine Compile-Prüfung, damit
 # Fehler auffallen, bevor jemand in Visual Studio baut. Kein Publish, keine Artefakte.
-# Die Manifest-Signatur braucht ein Zertifikat im Speicher; dafür wird ein Wegwerf-Zertifikat
-# erzeugt und per Thumbprint übergeben. Das echte MailDrop_1_TemporaryKey.pfx liegt nie im Repo
-# (siehe CLAUDE.md, Distribution) und wird hier nicht gebraucht.
+# Nur das MSBuild-Ziel Compile (keine ClickOnce-Manifeste/Signatur), daher braucht es weder
+# das echte MailDrop_1_TemporaryKey.pfx noch ein Ersatzzertifikat.
 name: vsto-build
 
 on:
@@ -45,12 +44,9 @@ jobs:
           Write-Host "Visual Studio: $vs"
           Get-ChildItem -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets -Path "$vs\MSBuild" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Targets: $($_.FullName)" }
 
-      - name: Wegwerf-Zertifikat für die Manifest-Signatur
-        id: cert
-        shell: pwsh
-        run: |
-          $cert = New-SelfSignedCertificate -Subject "CN=MailDrop CI" -Type CodeSigningCert -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
-          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
-
-      - name: Build (Debug)
-        run: msbuild MailDrop.vbproj /p:Configuration=Debug /p:Platform=AnyCPU /p:ManifestCertificateThumbprint=${{ steps.cert.outputs.thumbprint }} /p:ManifestKeyFile= /v:minimal /nologo
+      # Nur das Compile-Ziel: der anschließende VSTO-Schritt VerifyClickOnceSigningSettings braucht
+      # Microsoft.VisualStudio.Tools.Applications.Hosting, das auf dem Runner fehlt (erster Lauf
+      # 2026-09-29: MailDrop.dll wurde gebaut, danach MSB4018). Signatur/Manifeste prüft nur ein
+      # echter Publish in Visual Studio.
+      - name: Compile (Debug)
+        run: msbuild MailDrop.vbproj /t:Compile /p:Configuration=Debug /p:Platform=AnyCPU /v:minimal /nologo
