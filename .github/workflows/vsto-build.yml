@@ -1,7 +1,7 @@
 # Übersetzt das VSTO-Add-in (Debug) auf einem Windows-Runner - reine Compile-Prüfung, damit
 # Fehler auffallen, bevor jemand in Visual Studio baut. Kein Publish, keine Artefakte.
-# Nur das MSBuild-Ziel Compile (keine ClickOnce-Manifeste/Signatur), daher braucht es weder
-# das echte MailDrop_1_TemporaryKey.pfx noch ein Ersatzzertifikat.
+# Die abschließende VSTO-Signaturprüfung scheitert auf dem Runner immer (siehe Build-Schritt) und
+# wird ausgewertet statt ausgeführt; daher braucht es auch kein Signaturzertifikat.
 name: vsto-build
 
 on:
@@ -44,9 +44,19 @@ jobs:
           Write-Host "Visual Studio: $vs"
           Get-ChildItem -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets -Path "$vs\MSBuild" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Targets: $($_.FullName)" }
 
-      # Nur das Compile-Ziel: der anschließende VSTO-Schritt VerifyClickOnceSigningSettings braucht
-      # Microsoft.VisualStudio.Tools.Applications.Hosting, das auf dem Runner fehlt (erster Lauf
-      # 2026-09-29: MailDrop.dll wurde gebaut, danach MSB4018). Signatur/Manifeste prüft nur ein
-      # echter Publish in Visual Studio.
-      - name: Compile (Debug)
-        run: msbuild MailDrop.vbproj /t:Compile /p:Configuration=Debug /p:Platform=AnyCPU /v:minimal /nologo
+      # Voller Build (nur das Ziel Compile reicht nicht: dann fehlt die XAML-Markup-Kompilierung,
+      # und alle in XAML deklarierten Controls gelten als unbekannt - Lauf 2, 2026-09-29).
+      # Auf dem Runner scheitert danach zwingend der VSTO-Schritt VerifyClickOnceSigningSettings
+      # (MSB4018, Microsoft.VisualStudio.Tools.Applications.Hosting fehlt) - Lauf 1. Deshalb gilt:
+      # grün, wenn MailDrop.dll entstanden ist und es außer genau diesem Fehler keinen gibt.
+      # Signatur/Manifeste prüft nur ein echter Build/Publish in Visual Studio.
+      - name: Build (Debug) und Auswertung
+        shell: pwsh
+        run: |
+          msbuild MailDrop.vbproj /p:Configuration=Debug /p:Platform=AnyCPU /v:minimal /nologo 2>&1 | Tee-Object -Variable out
+          # Bekannter Runner-Fehler: alle MSB4018-Zeilen aus Microsoft.VisualStudio.Tools.Office.targets(162,...)
+          $unexpected = $out | Where-Object { "$_" -match ': error ' -and "$_" -notmatch 'Office\.targets\(162,\d+\): error MSB4018' }
+          if ($unexpected) { Write-Host "Unerwartete Fehler:"; $unexpected | ForEach-Object { Write-Host $_ }; exit 1 }
+          if (-not (Test-Path bin\Debug\MailDrop.dll)) { Write-Host "MailDrop.dll wurde nicht erzeugt."; exit 1 }
+          Write-Host "MailDrop.dll kompiliert ohne Code-Fehler (bekannter Runner-Fehler der VSTO-Signaturprüfung ignoriert)."
+          exit 0
