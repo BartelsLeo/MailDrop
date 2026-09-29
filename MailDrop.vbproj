@@ -308,6 +308,7 @@
   <ItemGroup>
     <AppDesigner Include="My Project\" />
     <Compile Include="Services\EmbeddingService.vb" />
+    <Compile Include="Services\UnigramTokenizer.vb" />
     <Compile Include="UI\AttachmentRenameDialog.xaml.vb">
       <DependentUpon>AttachmentRenameDialog.xaml</DependentUpon>
     </Compile>

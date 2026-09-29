@@ -32,6 +32,7 @@ Public Class SessionDatabaseManager
             ' Tabellen immer anlegen, falls sie fehlen.
             CreateSessionTable(conn)
             CreateComputedWeightsTable(conn)
+            CreateMetaTable(conn)
 
             Dim dbVersion = GetDatabaseVersion(conn)
 
@@ -49,6 +50,58 @@ Public Class SessionDatabaseManager
         End Using
         'CreateEncodedSessionsTable()
         Debug.WriteLine($"[DatabaseManager] EnsureDatabaseExists END – {sw.ElapsedMilliseconds} ms")
+    End Sub
+
+    ' Schlüssel/Wert-Tabelle für Verwaltungsdaten (derzeit nur EmbeddingModelId, siehe
+    ' SuggestionEngine.EnsureHistoryEmbeddingsMatchModel). Rein additiv per IF NOT EXISTS wie die
+    ' anderen Tabellen, daher ohne Erhöhung von CurrentSchemaVersion: ältere Add-in-Stände
+    ' ignorieren die Tabelle und scheitern nicht an einer "neueren" Datenbankversion.
+    Private Sub CreateMetaTable(conn As SQLiteConnection)
+        Using cmd As New SQLiteCommand("CREATE TABLE IF NOT EXISTS Meta (Key TEXT PRIMARY KEY, Value TEXT)", conn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Sub
+
+    Public Function GetMetaValue(key As String) As String
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using cmd As New SQLiteCommand("SELECT Value FROM Meta WHERE Key = @key", conn)
+                cmd.Parameters.AddWithValue("@key", key)
+                Dim value = cmd.ExecuteScalar()
+                Return If(value Is Nothing OrElse value Is DBNull.Value, Nothing, value.ToString())
+            End Using
+        End Using
+    End Function
+
+    Public Sub SetMetaValue(key As String, value As String)
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using cmd As New SQLiteCommand("INSERT OR REPLACE INTO Meta (Key, Value) VALUES (@key, @value)", conn)
+                cmd.Parameters.AddWithValue("@key", key)
+                cmd.Parameters.AddWithValue("@value", value)
+                cmd.ExecuteNonQuery()
+            End Using
+        End Using
+    End Sub
+
+    ' Schreibt neu berechnete Betreff-Embeddings (Schlüssel = Sessions.ID) in einer Transaktion.
+    Public Sub UpdateBetreffEmbeddings(embeddings As Dictionary(Of Integer, Single()))
+        If embeddings Is Nothing OrElse embeddings.Count = 0 Then Return
+        Using conn As New SQLiteConnection(connectionString)
+            conn.Open()
+            Using tx = conn.BeginTransaction()
+                Using cmd As New SQLiteCommand("UPDATE Sessions SET BetreffEmbedded = @embedding WHERE ID = @id", conn, tx)
+                    Dim pEmbedding = cmd.Parameters.Add("@embedding", System.Data.DbType.Binary)
+                    Dim pId = cmd.Parameters.Add("@id", System.Data.DbType.Int32)
+                    For Each entry In embeddings
+                        pEmbedding.Value = DatabaseUtils.FloatsToBytes(entry.Value)
+                        pId.Value = entry.Key
+                        cmd.ExecuteNonQuery()
+                    Next
+                End Using
+                tx.Commit()
+            End Using
+        End Using
     End Sub
 
     Private Sub CreateComputedWeightsTable(conn As SQLiteConnection)

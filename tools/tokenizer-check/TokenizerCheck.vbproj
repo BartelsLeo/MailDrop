@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Prüfprogramm für Services/UnigramTokenizer.vb außerhalb von Visual Studio/VSTO
+       (läuft mit dem .NET SDK auf Windows und Linux, u. a. in .github/workflows/build-german-model.yml).
+       Aufruf: dotnet run -project tools/tokenizer-check -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TokenizerCheck</RootNamespace>
+    <OptionStrict>On</OptionStrict>
+    <OptionInfer>On</OptionInfer>
+    <MyType>Empty</MyType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Services\UnigramTokenizer.vb" Link="UnigramTokenizer.vb" />
+  </ItemGroup>
+</Project>

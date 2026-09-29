@@ -136,13 +136,49 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
   nach TypeScript, per automatischer Tests gegen die Ergebnisse der VB-Version absicherbar. Neuberechnung der
   Gewichte (O(n²)) in einem Web Worker.
 - **Betreff-Embedding:** Das heutige Verfahren ist Standard (BERT-WordPiece-Tokenizer aus `vocab.txt`,
-  384-dimensionales Modell, Mean Pooling, L2-Normalisierung). Im Browser mit ONNX Runtime Web bzw. einer
-  fertigen Bibliothek (z. B. Transformers.js), die genau diese Schritte bereits mitbringt – kaum eigener Code.
-- **Abgleich:** Einmalig Referenz-Embeddings für eine Liste typischer Betreffzeilen erzeugen und prüfen, dass
-  die Browser-Variante dieselben Werte liefert (u. a. gleiche Einstellung zur Kleinschreibung im Tokenizer).
-- **Offener Punkt Laufzeit:** ~90 MB Modell im Aufgabenbereich des (neuen) Outlook – Ladezeit beim ersten Start
-  und Speicherverbrauch im Pilot messen; bei Bedarf eine quantisierte Variante (~¼ der Größe) testen und die
-  Vorschlagsqualität vergleichen.
+  384-dimensionales Modell, Mean Pooling, L2-Normalisierung). **Im Prototyp umgesetzt** (`web/src/embedding/`):
+  eigener WordPiece-Tokenizer in TypeScript + ONNX Runtime Web (WASM), getestet in Node und im echten
+  Chromium (lokal: 86 MB Download ~3,6 s, Laden ~2,2 s, 3 Embeddings ~0,2 s, plausible Ähnlichkeiten).
+- **Gleichstand mit der .NET-Version:** Mit dem deutschfähigen Modell (unten) verwenden VSTO und Web denselben
+  Tokenizer und dasselbe Modell; die Gleichheit ist über gemeinsame Prüfvektoren getestet. Für das bisherige
+  englische Modell galt das nicht (der Web-Tokenizer entfernt Umlaute, `BertTokenizer` in VSTO vermutlich
+  nicht) – dank fehlendem Altverlauf war das kein Problem.
+- **Modellwahl – Entscheidung 2026-09-27: ein deutschsprachiges Modell genügt.** Das heutige Modell ist rein
+  englisch (`vocab.txt` = englisches uncased-BERT-Vokabular, 30.522 Einträge); deutsche Betreffzeilen werden in
+  viele Wortstücke zerlegt, die semantische Ähnlichkeit leidet.
+  - Rein deutsche Satzmodelle gibt es praktisch nur in großen Varianten (BERT-large-Größe, mehrere hundert MB)
+    – für den Aufgabenbereich ungeeignet.
+  - **Geplant:** `paraphrase-multilingual-MiniLM-L12-v2` (118 Mio. Parameter, 384 Dimensionen – gleiche
+    Schnittstelle wie heute). In einem deutschen Vergleich deutlich besser als GBERT-large (Korrelation 0,84 vs.
+    0,67). Das Modell ist nur deshalb groß (~470 MB), weil ~96 Mio. Parameter auf das Vokabular für 50+ Sprachen
+    entfallen. Da Deutsch genügt, wird das **Vokabular auf deutsch (+ englisch) relevante Tokens gekürzt** und
+    das Modell auf 8 Bit quantisiert → erwartet ca. 20–40 MB. Die Gewichte der behaltenen Tokens bleiben
+    unverändert, die Qualität für deutsche Texte damit praktisch gleich (per Vergleich mit dem Originalmodell
+    auf echten Betreffzeilen zu bestätigen).
+  - **Umsetzung (2026-09-27, für VSTO und Web gemeinsam):** Beide Add-ins nutzen dasselbe gekürzte Modell aus
+    `Models/`, damit die Vorschläge auf beiden Seiten gleich funktionieren.
+    - `tools/model/build_german_model.py` lädt das Originalmodell (ONNX-Fassung aus dem Hugging-Face-Repo),
+      zählt die Tokens auf einem Korpus aus 40.000 deutschen + 5.000 englischen Wikipedia-Artikelanfängen,
+      behält die häufigen Tokens (höchstens 50.000) plus alle Einzelzeichen der lateinischen Schriften,
+      schneidet die Token-Tabelle zu und quantisiert auf int8. Ausgabe unter den **bisherigen Dateinamen**
+      `Models/model.onnx` und `Models/vocab.txt` (jetzt `Token<TAB>Score` je Zeile), dazu
+      `testvectors.json` (Prüfvektoren) und `MODEL_INFO.md` (Revision, Prüfsummen, Messwerte).
+    - Der Tokenizer (SentencePiece/Unigram) ist dreimal gleich umgesetzt: `web/src/embedding/unigram.ts`,
+      `Services/UnigramTokenizer.vb`, Referenz im Build-Skript. Kein Transformers.js – eine eigene, kleine
+      Umsetzung lässt sich in VB genauso schreiben und über dieselben Prüfvektoren absichern.
+    - Das Skript bricht ab, wenn der eigene Tokenizer auf weniger als 99 % der Korpustexte vom gekürzten
+      Hugging-Face-Tokenizer abweicht oder die Embeddings im Mittel unter Kosinus 0,97 zum Originalmodell
+      fallen. Danach prüfen Web-Tests (Vitest) und `tools/tokenizer-check` (VB) die Prüfvektoren.
+    - Läuft in GitHub Actions (`.github/workflows/build-german-model.yml`, bei Änderungen unter
+      `tools/model/` oder per Hand) und checkt das Ergebnis ein – Hugging Face ist aus der Claude-Umgebung
+      gesperrt. Das Modell bleibt eingecheckt (erwartet 30–45 MB, unter der 100-MB-Grenze), damit VSTO-Build
+      und ClickOnce ohne Download-Schritt auskommen.
+    - `EmbeddingService.vb` und `embedder.ts` erkennen das Format von `vocab.txt`: bis das neue Modell
+      eingecheckt ist, läuft unverändert das englische Modell weiter.
+  - **Azure Static Web Apps:** Das kleinere Modell entschärft zugleich die Speichergrenzen (Free-Tarif 250 MB
+    gesamt; gemeldete Grenze von 100 MB pro Datei – das heutige 86-MB-Modell läge knapp darunter).
+- **Offener Punkt Laufzeit:** Ladezeit beim ersten Start und Speicherverbrauch des (gekürzten, int8-)Modells im
+  Aufgabenbereich des (neuen) Outlook im Pilot messen.
 
 ---
 
@@ -188,10 +224,11 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 ## 5. Vorgehen in Phasen
 
 1. **Absprachen mit der IT** (Abschnitt 6) und Entscheidungen E1–E6 festhalten.
-2. **Technischer Durchstich (Prototyp):** Anmeldung, aktuelle Mail lesen, eine Projekt-Site finden, Ordner
-   anzeigen, .eml + Anhänge hochladen. Muss gezielt die drei offenen Punkte aus Abschnitt 10 beantworten:
-   (a) listet Graph die OneDrive-Verknüpfungen, (b) funktioniert `getAsFileAsync` auf euren Outlook-Versionen,
-   (c) Ladezeit/Speicher des Modells im Aufgabenbereich.
+2. **Technischer Durchstich (Prototyp):** **Angelegt in `web/`** (Branch `feature/web-prototype`, Anleitung
+   `web/README.md`) als Prüfoberfläche mit neun Prüfungen: Umgebung/Requirement Sets, Anmeldung (NAA),
+   aktuelle Mail/freigegebenes Postfach, .eml-Export (Office.js + Graph), Anhänge, Projektbibliotheken
+   (Verknüpfungen + gefolgte Sites), Verlaufsspeicher (App-Ordner + Rückfallebene), Test-Upload, Modell.
+   Beantwortet gezielt die offenen Punkte aus Abschnitt 10; Ergebnis als kopierbarer Bericht.
 3. **Kernfunktionen:** komplette Oberfläche, Platzhalter, Validierung, Ordneraktionen, Verlauf in OneDrive.
 4. **Vorschläge:** SuggestionEngine + Embedding portieren, Abgleich mit der .NET-Version.
 5. **Pilot** mit kleiner Gruppe.
@@ -246,7 +283,8 @@ Verlauf gelernte Gewichte (Pearson), Kaskade und geometrischer Neuberechnungs-Tr
 
 - [ ] App-Registrierung „MailDrop“ anlegen (nur eigener Tenant).
 - [ ] Plattform „Single-Page-Anwendung“ mit den Umleitungs-URIs für Nested App Authentication (Format laut aktueller Microsoft-Doku, u. a. `brk-multihub://<add-in-domain>`) und der Add-in-Adresse.
-- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`, bei Ablage aus freigegebenen Postfächern zusätzlich `Mail.Read.Shared`.
+- [ ] Delegierte Graph-Berechtigungen eintragen: `User.Read`, `Files.ReadWrite.All`, `Files.ReadWrite.AppFolder`, `Mail.Read`, bei Ablage aus freigegebenen Postfächern zusätzlich `Mail.Read.Shared`; `Sites.Read.All` für die Rückfallebene „gefolgte Sites“ bei der Projektsuche (E4).
+- [ ] Für den Prototyp (`web/`): Umleitungs-URIs `brk-multihub://localhost:3000` und `https://localhost:3000/taskpane.html`; Hochladen eigener Add-ins für den Testnutzer erlauben oder Manifest `web/manifest.xml` an ihn verteilen.
 - [ ] **Administrator-Zustimmung** erteilen.
 - [ ] Richtlinien für bedingten Zugriff prüfen/anpassen.
 - [ ] Kein Client-Geheimnis/Zertifikat nötig – entsprechend kein Ablaufdatum zu überwachen.
