@@ -1,7 +1,7 @@
 # Übersetzt das VSTO-Add-in (Debug) auf einem Windows-Runner - reine Compile-Prüfung, damit
 # Fehler auffallen, bevor jemand in Visual Studio baut. Kein Publish, keine Artefakte.
 # Die abschließende VSTO-Signaturprüfung scheitert auf dem Runner immer (siehe Build-Schritt) und
-# wird ausgewertet statt ausgeführt; daher braucht es auch kein Signaturzertifikat.
+# wird ausgewertet; für die vorgelagerte Manifest-Signatur reicht ein Wegwerf-Zertifikat.
 name: vsto-build
 
 on:
@@ -44,6 +44,15 @@ jobs:
           Write-Host "Visual Studio: $vs"
           Get-ChildItem -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets -Path "$vs\MSBuild" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Targets: $($_.FullName)" }
 
+      # Ohne Zertifikat im Speicher bricht der Build schon vorher ab (MSB3323, Lauf 3). Ein
+      # Wegwerf-Zertifikat genügt; das echte MailDrop_1_TemporaryKey.pfx liegt nie im Repo.
+      - name: Wegwerf-Zertifikat für die Manifest-Signatur
+        id: cert
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Subject "CN=MailDrop CI" -Type CodeSigningCert -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+
       # Voller Build (nur das Ziel Compile reicht nicht: dann fehlt die XAML-Markup-Kompilierung,
       # und alle in XAML deklarierten Controls gelten als unbekannt - Lauf 2, 2026-09-29).
       # Auf dem Runner scheitert danach zwingend der VSTO-Schritt VerifyClickOnceSigningSettings
@@ -53,7 +62,7 @@ jobs:
       - name: Build (Debug) und Auswertung
         shell: pwsh
         run: |
-          msbuild MailDrop.vbproj /p:Configuration=Debug /p:Platform=AnyCPU /v:minimal /nologo 2>&1 | Tee-Object -Variable out
+          msbuild MailDrop.vbproj /p:Configuration=Debug /p:Platform=AnyCPU /p:ManifestCertificateThumbprint=${{ steps.cert.outputs.thumbprint }} /p:ManifestKeyFile= /v:minimal /nologo 2>&1 | Tee-Object -Variable out
           # Bekannter Runner-Fehler: alle MSB4018-Zeilen aus Microsoft.VisualStudio.Tools.Office.targets(162,...)
           $unexpected = $out | Where-Object { "$_" -match ': error ' -and "$_" -notmatch 'Office\.targets\(162,\d+\): error MSB4018' }
           if ($unexpected) { Write-Host "Unerwartete Fehler:"; $unexpected | ForEach-Object { Write-Host $_ }; exit 1 }
