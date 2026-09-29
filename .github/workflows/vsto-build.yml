@@ -1,0 +1,56 @@
+# Übersetzt das VSTO-Add-in (Debug) auf einem Windows-Runner - reine Compile-Prüfung, damit
+# Fehler auffallen, bevor jemand in Visual Studio baut. Kein Publish, keine Artefakte.
+# Die Manifest-Signatur braucht ein Zertifikat im Speicher; dafür wird ein Wegwerf-Zertifikat
+# erzeugt und per Thumbprint übergeben. Das echte MailDrop_1_TemporaryKey.pfx liegt nie im Repo
+# (siehe CLAUDE.md, Distribution) und wird hier nicht gebraucht.
+name: vsto-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.vb"
+      - "**/*.xaml"
+      - "**/*.xml"
+      - "MailDrop.vbproj"
+      - "MailDrop.sln"
+      - "packages.config"
+      - "app.config"
+      - ".github/workflows/vsto-build.yml"
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - uses: nuget/setup-nuget@v2
+
+      - name: NuGet-Pakete (packages.config)
+        run: nuget restore MailDrop.sln
+
+      - name: Office-/VSTO-Werkzeuge vorhanden?
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Write-Host "Visual Studio: $vs"
+          Get-ChildItem -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets -Path "$vs\MSBuild" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Targets: $($_.FullName)" }
+
+      - name: Wegwerf-Zertifikat für die Manifest-Signatur
+        id: cert
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Subject "CN=MailDrop CI" -Type CodeSigningCert -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+
+      - name: Build (Debug)
+        run: msbuild MailDrop.vbproj /p:Configuration=Debug /p:Platform=AnyCPU /p:ManifestCertificateThumbprint=${{ steps.cert.outputs.thumbprint }} /p:ManifestKeyFile= /v:minimal /nologo
