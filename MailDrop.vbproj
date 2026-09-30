@@ -417,10 +417,10 @@
     <SignManifests>true</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestKeyFile>MailDrop_1_TemporaryKey.pfx</ManifestKeyFile>
+    <ManifestKeyFile></ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>3E84998B1B3EE993EA4F0438B754B6F86F4F7AD1</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>E463D4A6965FA251CC783EF2626521E617B9C46F</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationRevision>0</ApplicationRevision>
