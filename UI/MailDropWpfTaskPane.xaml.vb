@@ -146,7 +146,10 @@ Public Class MailDropWpfTaskPane
             Case NameOf(Session.IsSuggestedAnhaengeAblegen)
                 If Session.IsSuggestedAnhaengeAblegen Then ShowSparkle(SparkleAnhaengeAblegen) Else HideSparkle(SparkleAnhaengeAblegen)
             Case NameOf(Session.AnhaengeAblegen)
-                AttachmentScrollViewer.IsEnabled = Session.AnhaengeAblegen
+                ' An CheckBoxAnhaenge koppeln (editierbar UND Anhaenge vorhanden, siehe SetEditMode) -
+                ' sonst wurde die Liste z.B. durch Reset() (AnhaengeAblegen = True) auch bei
+                ' deaktivierter Pane wieder aktiviert.
+                AttachmentScrollViewer.IsEnabled = Session.AnhaengeAblegen AndAlso CheckBoxAnhaenge.IsEnabled
         End Select
     End Sub
 
@@ -283,7 +286,7 @@ Public Class MailDropWpfTaskPane
     End Sub
 
     Private Sub ButtonAbbrechen_Click(sender As Object, e As RoutedEventArgs)
-        ' Schlie�e InfoPopup, falls offen
+        ' Schließe InfoPopup, falls offen
         If infoPopup IsNot Nothing AndAlso infoPopup.IsLoaded Then
             infoPopup.Close()
             infoPopup = Nothing
@@ -291,7 +294,7 @@ Public Class MailDropWpfTaskPane
         Try
             Globals.ThisAddIn.HideTaskPane()
         Catch
-            ' Fallback: Fenster schlie�en
+            ' Fallback: Fenster schließen
             Dim wnd = Window.GetWindow(Me)
             If wnd IsNot Nothing Then wnd.Close()
         End Try
@@ -321,7 +324,7 @@ Public Class MailDropWpfTaskPane
         Next
     End Sub
 
-    ' Gibt True zur�ck, wenn genau eine Mail selektiert ist, sonst False
+    ' Gibt True zurück, wenn genau eine Mail selektiert ist, sonst False
     Public Function SingleMailSelected() As Boolean
         ' Fest an ein geoeffnetes Mail-Fenster gebunden: dessen aktuelles Element zaehlt, nicht die
         ' (beim Binden geleerte) Explorer-Auswahl.
@@ -479,10 +482,16 @@ Public Class MailDropWpfTaskPane
             Return
         End If
 
-        If Directory.GetFileSystemEntries(selectedNode.FullPath).Length > 0 Then
-            MessageBox.Show("Der Ordner ist nicht leer und kann daher nicht gelöscht werden.", "Ordner löschen", MessageBoxButton.OK, MessageBoxImage.Warning)
+        Try
+            If Directory.GetFileSystemEntries(selectedNode.FullPath).Length > 0 Then
+                MessageBox.Show("Der Ordner ist nicht leer und kann daher nicht gelöscht werden.", "Ordner löschen", MessageBoxButton.OK, MessageBoxImage.Warning)
+                Return
+            End If
+        Catch ex As Exception
+            ' Z.B. Ordner inzwischen extern geloescht/umbenannt oder keine Leserechte.
+            MessageBox.Show("Ordner konnte nicht gelesen werden: " & ex.Message, "Ordner löschen", MessageBoxButton.OK, MessageBoxImage.Error)
             Return
-        End If
+        End Try
 
         Dim question = "Soll der Ordner wirklich gelöscht werden?" & Environment.NewLine & selectedNode.FullPath
         Dim result = MessageBox.Show(question, "Ordner löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning)

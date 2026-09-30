@@ -275,8 +275,10 @@ Public Class Session
             {"[Titel]", If(Titel, String.Empty)},
             {"[Absender]", If(Absender, String.Empty)},
             {"[Absender-Domain]", If(AbsenderDomain, String.Empty)},
-            {"[Empf�nger]", If(Empfaenger, String.Empty)},
-            {"[Empf�nger (kurz)]", If(Empfaenger, String.Empty)},
+            {"[Empfänger]", If(Empfaenger, String.Empty)},
+            {"[Empfänger (kurz)]", If(Empfaenger, String.Empty)},
+            {"[Empfaenger]", If(Empfaenger, String.Empty)},
+            {"[Empfaenger (kurz)]", If(Empfaenger, String.Empty)},
             {"[Betreff]", If(Betreff, String.Empty)},
             {"[Datum]", If(Datum <> Date.MinValue, Datum.ToString("yyyy-MM-dd"), String.Empty)},
             {"[Datum (formatiert)]", If(DatumFormatiert, String.Empty)},
@@ -361,6 +363,18 @@ Public Class Session
     Public Sub Reset()
         LastDuplicateWarning = String.Empty
         SourceMailEntryId = Nothing
+        ' Mail-Metadaten leeren: ReadMailMeta ueberschreibt sie nur, wenn genau eine Mail
+        ' verfuegbar ist - sonst blieben die Werte der vorherigen Mail stehen. Das Betreff-
+        ' Embedding ist ein Cache fuer den AKTUELLEN Betreff (GetOrCreateCurrentBetreffEmbedding);
+        ' ohne Leeren wurde das Embedding der ersten Mail fuer jede weitere Mail wiederverwendet.
+        Absender = Nothing
+        AbsenderDomain = Nothing
+        Empfaenger = Nothing
+        Betreff = Nothing
+        BetreffEmbedded = Nothing
+        Datum = Date.MinValue
+        DatumFormatiert = Nothing
+        AusfueDatum = DateTime.Now
         Anhaenge.Clear()
         OnPropertyChanged(NameOf(HasAnhaenge))
         ProjektPfad = Nothing
@@ -384,7 +398,7 @@ Public Class Session
         ' the setter's cascade guard (If _absenderKurz <> value) suppressing the next suggestion.
         _absenderKurz = String.Empty
         OnPropertyChanged(NameOf(AbsenderKurz))
-        Debug.WriteLine("[Session] Reset ausgef�hrt")
+        Debug.WriteLine("[Session] Reset ausgeführt")
     End Sub
 
     Public Property SuggestionEngineInstance As SuggestionEngine
@@ -582,7 +596,7 @@ Public Class Session
         Dim list As New List(Of String)(verzeichnisse.Take(10))
         list.Add("anderes...")
         ProjektVerzeichnisse = New ObservableCollection(Of String)(list)
-        Debug.WriteLine($"[Session] ProjektVerzeichnisse f�r Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
+        Debug.WriteLine($"[Session] ProjektVerzeichnisse für Benutzer '{Me.AusfueBenutzer}': {String.Join(", ", list)}")
     End Sub
 
     Public Sub BuildDirectoryTree()
@@ -599,13 +613,13 @@ Public Class Session
 
     Public Sub CancelSession()
         Reset()
-        Debug.WriteLine("[Session] CancelSession ausgef�hrt")
+        Debug.WriteLine("[Session] CancelSession ausgeführt")
     End Sub
 
     Public Sub HandleProjektSelection(selectedValue As String)
         If selectedValue = "anderes..." Then
             Dim dialog As New System.Windows.Forms.FolderBrowserDialog()
-            dialog.Description = "Bitte Projektordner ausw�hlen"
+            dialog.Description = "Bitte Projektordner auswählen"
             If dialog.ShowDialog() = System.Windows.Forms.DialogResult.OK Then
                 If Not ProjektVerzeichnisse.Contains(dialog.SelectedPath) Then
                     ProjektVerzeichnisse.Insert(0, dialog.SelectedPath)
@@ -681,10 +695,8 @@ Public Class Session
             Return ablageResult
         End If
         ' Prüfen ob Dateien bereits existieren; Überschreiben wird durchgeführt.
-        Dim msgPfad = checkedInput.CheckedMsgZielpfad
-        If Not msgPfad.ToLower().EndsWith(".msg") Then msgPfad &= ".msg"
-        Dim overwriteFound = File.Exists(msgPfad) OrElse
-                             checkedInput.CheckedAnhZielpfade.Any(Function(p) File.Exists(p))
+        Dim overwriteFound = File.Exists(checkedInput.CheckedMsgZielpfad) OrElse
+                             checkedInput.CheckedAnhaenge.Any(Function(a) File.Exists(a.Zielpfad))
         If overwriteFound Then
             LastOverwriteWarning = "Erfolgreich abgelegt. Existierende Dateien überschrieben."
         End If
@@ -693,11 +705,12 @@ Public Class Session
             Return mailResult
         End If
         If AnhaengeAblegen Then
-            Dim anhangResult = MailUtils.SaveMailAttachments(Me, checkedInput.CheckedAnhZielpfade)
+            Dim anhangResult = MailUtils.SaveMailAttachments(Me, checkedInput.CheckedAnhaenge)
             If anhangResult <> String.Empty Then
                 Return anhangResult
             End If
         End If
+        AusfueDatum = DateTime.Now
         Dim newRecord = Me.ToSessionRecord()
         ThisAddIn.CurrentDatabaseManager.SaveSessionRecord(newRecord)
         SuggestionEngine.GetSharedInstance().AppendHistoricalRecord(newRecord)
@@ -792,7 +805,7 @@ Public Class Session
         End Set
     End Property
 
-    <DisplayName("Empf�nger")>
+    <DisplayName("Empfänger")>
     Public Property Empfaenger As String
         Get
             Return _empfaenger
@@ -858,7 +871,7 @@ Public Class Session
     Public Property ID As Integer
 
     ' Wandelt das aktuelle Session-Objekt in ein SessionRecord-Objekt um,
-    ' sodass es f�r die Speicherung in der Datenbank oder f�r maschinelles Lernen verwendet werden kann.
+    ' sodass es für die Speicherung in der Datenbank oder für maschinelles Lernen verwendet werden kann.
     Public Function ToSessionRecord() As SessionRecord
         Dim record As New SessionRecord()
         For Each prop In GetType(SessionRecord).GetProperties()

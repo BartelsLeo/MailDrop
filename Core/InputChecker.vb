@@ -9,11 +9,20 @@ Public Module InputChecker
         End If
     End Sub
 
+    ' Ein zu speichernder Anhang: Position in mail.Attachments (1-basiert) und geprüfter Zielpfad.
+    ' Die Zuordnung per Index statt per Dateiname ist nötig, weil der Zielname vom Originalnamen
+    ' abweichen kann (Umbenennen-Dialog bei Überlänge, Nummerierung bei gleichnamigen Anhängen).
+    Public Class AnhangZiel
+        Public Property OutlookIndex As Integer
+        Public Property Zielpfad As String
+    End Class
+
     ' Hilfsklasse für die geprüften Pfade
     Public Class CheckedInputResult
         Public Property CheckedAblageOrdner As String
+        ' Immer mit Endung ".msg" (siehe CheckInput).
         Public Property CheckedMsgZielpfad As String
-        Public Property CheckedAnhZielpfade As List(Of String)
+        Public Property CheckedAnhaenge As List(Of AnhangZiel)
         Public Property ErrorMessage As String
         Public Property DuplicateWarning As String
     End Class
@@ -75,10 +84,27 @@ Public Module InputChecker
         End If
     End Function
 
+    ' Hängt " (2)", " (3)", ... vor die Endung, solange der Pfad in dieser Ablage schon vergeben ist.
+    ' Bereits auf der Platte vorhandene Dateien zählen bewusst nicht: die werden wie bisher
+    ' überschrieben (mit Hinweis "Bereits vorhanden").
+    Private Function MakeUniquePath(pfad As String, vergeben As HashSet(Of String)) As String
+        If Not vergeben.Contains(pfad) Then Return pfad
+        Dim ordner = Path.GetDirectoryName(pfad)
+        Dim name = Path.GetFileNameWithoutExtension(pfad)
+        Dim endung = Path.GetExtension(pfad)
+        Dim n = 2
+        Dim kandidat As String
+        Do
+            kandidat = Path.Combine(ordner, $"{name} ({n}){endung}")
+            n += 1
+        Loop While vergeben.Contains(kandidat)
+        Return kandidat
+    End Function
+
     ' Prüft alle Eingaben (Projektpfad, Projektstruktur, Ablageordner, msg-Dateiname)
     Public Function CheckInput(session As Session) As CheckedInputResult
         Dim result As New CheckedInputResult()
-        result.CheckedAnhZielpfade = New List(Of String)()
+        result.CheckedAnhaenge = New List(Of AnhangZiel)()
         Dim projektPfad As String = session.ProjektPfad
         If String.IsNullOrWhiteSpace(projektPfad) OrElse Not Directory.Exists(projektPfad) Then
             result.ErrorMessage = "Bitte wählen Sie einen gültigen Projektpfad aus."
@@ -113,7 +139,10 @@ Public Module InputChecker
             result.ErrorMessage = "Bitte geben Sie einen gültigen Dateinamen für die E-Mail an."
             Return result
         End If
+        ' Endung hier ergänzen statt erst beim Speichern: sonst prüfen Längen- und
+        ' "Bereits vorhanden"-Check einen Pfad ohne ".msg", der nie existiert.
         Dim msgZielPfad As String = Path.Combine(ablageOrdnerPfad, session.MsgDateinameAufgeloest)
+        If Not msgZielPfad.EndsWith(".msg", StringComparison.OrdinalIgnoreCase) Then msgZielPfad &= ".msg"
         Dim msgDateinameCheck = CheckFileNameAndPath(msgZielPfad)
         If msgDateinameCheck <> String.Empty Then
             result.ErrorMessage = msgDateinameCheck
@@ -125,15 +154,19 @@ Public Module InputChecker
         End If
         result.CheckedMsgZielpfad = msgZielPfad
         If session.AnhaengeAblegen Then
+            ' Bereits vergebene Zielpfade (inkl. .msg), damit gleichnamige Anhänge sich nicht
+            ' gegenseitig überschreiben.
+            Dim vergebenePfade As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {msgZielPfad}
             For Each item In session.Anhaenge
                 If Not item.IsSelected Then Continue For
                 Dim anhangName = item.Name
-                Dim anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
+                Dim anhangPfad = MakeUniquePath(Path.Combine(ablageOrdnerPfad, anhangName), vergebenePfade)
+                anhangName = Path.GetFileName(anhangPfad)
                 If anhangPfad.Length > 255 Then
                     Dim newName = ShowAttachmentRenameDialog(anhangName, ablageOrdnerPfad)
                     If String.IsNullOrEmpty(newName) Then Continue For
-                    anhangName = newName
-                    anhangPfad = Path.Combine(ablageOrdnerPfad, anhangName)
+                    anhangPfad = MakeUniquePath(Path.Combine(ablageOrdnerPfad, newName), vergebenePfade)
+                    anhangName = Path.GetFileName(anhangPfad)
                 End If
                 Dim anhangNameCheck = CheckFileNameAndPath(anhangPfad)
                 If anhangNameCheck <> String.Empty Then
@@ -144,18 +177,20 @@ Public Module InputChecker
                     result.ErrorMessage = $"Der Anhang '{anhangName}' würde außerhalb des Ablageordners gespeichert werden."
                     Return result
                 End If
-                result.CheckedAnhZielpfade.Add(anhangPfad)
+                vergebenePfade.Add(anhangPfad)
+                result.CheckedAnhaenge.Add(New AnhangZiel() With {.OutlookIndex = item.OutlookIndex, .Zielpfad = anhangPfad})
             Next
         End If
         Dim existingFiles As New List(Of String)()
         If File.Exists(result.CheckedMsgZielpfad) Then
             existingFiles.Add(Path.GetFileName(result.CheckedMsgZielpfad))
         End If
-        For Each anhPfad In result.CheckedAnhZielpfade
-            If File.Exists(anhPfad) Then existingFiles.Add(Path.GetFileName(anhPfad))
+        For Each anh In result.CheckedAnhaenge
+            If File.Exists(anh.Zielpfad) Then existingFiles.Add(Path.GetFileName(anh.Zielpfad))
         Next
         If existingFiles.Count > 0 Then
-            result.DuplicateWarning = "Bereits vorhanden: " & String.Join(", ", existingFiles)
+            ' Wird nur nach erfolgreicher Ablage angezeigt - die Dateien sind dann überschrieben.
+            result.DuplicateWarning = "Erfolgreich abgelegt. Überschrieben: " & String.Join(", ", existingFiles)
         End If
         Return result
     End Function

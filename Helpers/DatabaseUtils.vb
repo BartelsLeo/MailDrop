@@ -197,7 +197,7 @@ Public Class SessionDatabaseManager
             "AusfueDatum TEXT, " &
             "AusfueBenutzer TEXT, " &
             "Betreff TEXT, " &
-            "BetreffEmbedded BLOB, " & ' Enth�lt den embeddet Betreff als Vektor
+            "BetreffEmbedded BLOB, " & ' Enthält den embeddet Betreff als Vektor
             "Absender TEXT, " &
             "AbsenderDomain TEXT, " &
             "AbsenderKurz TEXT, " &
@@ -260,7 +260,7 @@ Public Class SessionDatabaseManager
     '    End Using
     'End Sub
 
-    ' Gibt alle Sessions zur�ck, die noch nicht encodiert wurden
+    ' Gibt alle Sessions zurück, die noch nicht encodiert wurden
     'Public Function GetNotEncodedSessions() As List(Of SessionRecord)
     '    Dim result As New List(Of SessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -297,7 +297,7 @@ Public Class SessionDatabaseManager
     '    Return result
     'End Function
 
-    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zur�ck
+    ' Gibt alle EncodedSessions als Liste von EncodedSessionRecord zurück
     'Public Function GetAllEncodedSessions() As List(Of EncodedSessionRecord)
     '    Dim result As New List(Of EncodedSessionRecord)()
     '    Using conn As New SQLiteConnection(connectionString)
@@ -371,7 +371,7 @@ Public Class SessionDatabaseManager
         End Using
     End Sub
 
-    ' Gibt die letzten vier eindeutigen ProjektPfad-Eintr�ge f�r einen Benutzer zur�ck (absteigend nach AusfueDatum)
+    ' Gibt die letzten vier eindeutigen ProjektPfad-Einträge für einen Benutzer zurück (absteigend nach AusfueDatum)
     Public Function GetLastProjektVerzeichnisseForUser(benutzer As String) As List(Of String)
         Dim result As New List(Of String)()
         Using conn As New SQLiteConnection(connectionString)
@@ -398,7 +398,7 @@ Public Class SessionDatabaseManager
         Return result
     End Function
 
-    ' Gibt alle Sessions als Liste von SessionRecord zur�ck
+    ' Gibt alle Sessions als Liste von SessionRecord zurück
     Public Function GetAllSessionRecords() As List(Of SessionRecord)
         Dim sw As Stopwatch = Stopwatch.StartNew()
         Debug.WriteLine("[DatabaseManager] GetAllSessionRecords BEGIN")
@@ -442,7 +442,7 @@ Public Class SessionDatabaseManager
 
 End Class
 
-' Hilfsklasse f�r EncodedSession
+' Hilfsklasse für EncodedSession
 Public Class EncodedSessionRecord
     Public Property SessionID As Integer
     Public Property AusfueBenutzer As Integer
@@ -452,7 +452,7 @@ Public Class EncodedSessionRecord
     Public Property AbsenderDomain As Integer
     Public Property AbsenderKurz As Integer
     Public Property Empfaenger As Integer
-    Public Property Datum As Integer ' Erg�nzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
+    Public Property Datum As Integer ' Ergänzt: Datum als Integer (z.B. Unix-Timestamp oder Label-encoded)
     Public Property ProjektPfad As Integer
     Public Property ProjektstrukturPfad As Integer
     Public Property Titel As Integer
@@ -463,7 +463,7 @@ Public Class EncodedSessionRecord
     Public Property AnhaengeAblegen As Integer
 End Class
 
-' Repr�sentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
+' Repräsentiert einen reinen Datenbank-Datensatz der Tabelle Sessions (ohne UI-Logik)
 Public Class SessionRecord
     Public Property ID As Integer
     Public Property AusfueDatum As DateTime

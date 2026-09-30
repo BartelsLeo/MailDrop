@@ -20,7 +20,7 @@ Public Class AttachmentRenameDialog
     Private Sub ButtonOk_Click(sender As Object, e As RoutedEventArgs)
         Dim name = TextBoxFileName.Text
         If String.IsNullOrWhiteSpace(name) OrElse name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 Then
-            MessageBox.Show("Bitte einen g�ltigen Dateinamen eingeben.", "Ung�ltiger Name", MessageBoxButton.OK, MessageBoxImage.Warning)
+            MessageBox.Show("Bitte einen gültigen Dateinamen eingeben.", "Ungültiger Name", MessageBoxButton.OK, MessageBoxImage.Warning)
             Return
         End If
         FileName = name
@@ -36,7 +36,7 @@ Public Class AttachmentRenameDialog
         Dim fullPath = Path.Combine(_basePath, TextBoxFileName.Text)
         Dim overlength As Integer = fullPath.Length - MaxPathLength
         If overlength > 0 Then
-            TextBlockOverlength.Text = $"�berl�nge von {overlength} Zeichen"
+            TextBlockOverlength.Text = $"Überlänge von {overlength} Zeichen"
             TextBlockOverlength.Visibility = Visibility.Visible
         Else
             TextBlockOverlength.Text = String.Empty

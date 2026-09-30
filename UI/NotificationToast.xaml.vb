@@ -111,7 +111,7 @@ Public Class NotificationToast
                            "Erfolgreich abgelegt. Existierende Dateien " & ChrW(&HFC) & "berschrieben.", "#92400E", True, "#92400E")
             Case Else
                 StyleToast("#FFFBEB", "#FCD34D", warnung, "#B45309",
-                           message, "#92400E", False, "#92400E")
+                           message, "#92400E", True, "#92400E")
         End Select
     End Sub
 

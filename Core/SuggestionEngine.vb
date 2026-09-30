@@ -121,6 +121,11 @@ Public Class SuggestionEngine
     End Sub
 
     Private Const EmbeddingModelIdKey As String = "EmbeddingModelId"
+    ' Wird an die Modell-ID angehaengt, um die Neuberechnung auch OHNE Modellwechsel einmalig zu
+    ' erzwingen. "+r2" (2026-09-30): bis dahin wurde das Betreff-Embedding der ersten Mail einer
+    ' Outlook-Sitzung fuer alle weiteren wiederverwendet (Session.Reset leerte den Cache nicht) und
+    ' so auch falsch gespeichert. Bei kuenftigen Fehlern dieser Art hochzaehlen.
+    Private Const HistoryEmbeddingRevision As String = "+r2"
 
     ' Gespeicherte Betreff-Embeddings stammen von dem Modell, das beim Ablegen aktiv war. Nach einem
     ' Modellwechsel (z. B. englisches -> deutschfähiges Modell oder ein neu gebautes Modell) wären sie
@@ -131,7 +136,8 @@ Public Class SuggestionEngine
     Private Sub EnsureHistoryEmbeddingsMatchModel(svc As EmbeddingService)
         Try
             Dim db = ThisAddIn.CurrentDatabaseManager
-            If db.GetMetaValue(EmbeddingModelIdKey) = svc.ModelId Then Return
+            Dim expectedId = svc.ModelId & HistoryEmbeddingRevision
+            If db.GetMetaValue(EmbeddingModelIdKey) = expectedId Then Return
             Dim sw As Stopwatch = Stopwatch.StartNew()
             Dim updates As New Dictionary(Of Integer, Single())
             ' Per Index bis zur aktuellen Länge: der UI-Thread kann parallel neue Einträge anhängen
@@ -145,7 +151,7 @@ Public Class SuggestionEngine
                 updates(record.ID) = embedding
             Next
             db.UpdateBetreffEmbeddings(updates)
-            db.SetMetaValue(EmbeddingModelIdKey, svc.ModelId)
+            db.SetMetaValue(EmbeddingModelIdKey, expectedId)
             Logger.LogInfo("Embedding-Modell", $"Betreff-Embeddings von {updates.Count} Verlaufseinträgen für Modell {svc.ModelId.Substring(0, 12)} neu berechnet in {sw.ElapsedMilliseconds} ms.")
         Catch ex As Exception
             Logger.LogError("EnsureHistoryEmbeddingsMatchModel", ex)
@@ -340,10 +346,22 @@ Public Class SuggestionEngine
 
     Private Const DefaultSchemaTemplate As String = "[Datum (formatiert)]_[Absender (kurz)]_[Titel]"
 
+    ' Viele Verlaufseintraege teilen sich denselben Pfad; ohne Cache wurde derselbe (Netz-)Pfad pro
+    ' Kandidat erneut geprueft - bei nicht erreichbaren Freigaben jeweils mit Timeout. Der Cache
+    ' gilt nur fuer einen einzelnen Vorschlagsaufruf, damit neu angelegte Ordner sofort zaehlen.
+    Private Shared Function DirectoryExistsCached(path As String, cache As Dictionary(Of String, Boolean)) As Boolean
+        Dim exists As Boolean
+        If cache.TryGetValue(path, exists) Then Return exists
+        exists = IO.Directory.Exists(path)
+        cache(path) = exists
+        Return exists
+    End Function
+
     Public Function SuggestProjektPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return String.Empty
+        Dim existsCache As New Dictionary(Of String, Boolean)(StringComparer.OrdinalIgnoreCase)
         For Each record In FindRecordsSortedByScore(Function(r) r.ProjektPfad, GetFeatureWeightsForProjektPfadSuggestion(), minScore:=SuggestionScoreThreshold)
-            If Not String.IsNullOrWhiteSpace(record.ProjektPfad) AndAlso IO.Directory.Exists(record.ProjektPfad) Then
+            If Not String.IsNullOrWhiteSpace(record.ProjektPfad) AndAlso DirectoryExistsCached(record.ProjektPfad, existsCache) Then
                 Debug.WriteLine($"[SuggestionEngine] SuggestProjektPfad: accepted '{record.ProjektPfad}'")
                 Return record.ProjektPfad
             End If
@@ -363,10 +381,11 @@ Public Class SuggestionEngine
     Public Function SuggestProjektstrukturPfad(session As Session) As String
         If session Is Nothing OrElse EnginesHistoricalSessionRecords.Count = 0 Then Return Nothing
         If String.IsNullOrWhiteSpace(session.ProjektPfad) Then Return Nothing
+        Dim existsCache As New Dictionary(Of String, Boolean)(StringComparer.OrdinalIgnoreCase)
         For Each record In FindRecordsSortedByScore(Function(r) r.ProjektstrukturPfad, GetFeatureWeightsForProjektstrukturPfadSuggestion(), requireNonEmptyField:=False, minScore:=SuggestionScoreThreshold)
             ' Path.Combine(ProjektPfad, "") = ProjektPfad selbst - existiert bereits validiert.
-            Dim fullPath = IO.Path.Combine(session.ProjektPfad, record.ProjektstrukturPfad)
-            If IO.Directory.Exists(fullPath) Then
+            Dim fullPath = IO.Path.Combine(session.ProjektPfad, If(record.ProjektstrukturPfad, String.Empty))
+            If DirectoryExistsCached(fullPath, existsCache) Then
                 Debug.WriteLine($"[SuggestionEngine] SuggestProjektstrukturPfad: accepted '{record.ProjektstrukturPfad}'")
                 Return record.ProjektstrukturPfad
             End If
@@ -858,7 +877,17 @@ Public Class SuggestionEngine
         Return False
     End Function
 
+    ' Serialisiert parallele Neuberechnungen (automatischer Trigger nach dem Speichern und der
+    ' Button im Info-Popup koennen gleichzeitig laufen).
+    Private ReadOnly _recalcLock As New Object()
+
     Public Sub RecalculateWeightsFromHistory()
+        SyncLock _recalcLock
+            RecalculateWeightsFromHistoryCore()
+        End SyncLock
+    End Sub
+
+    Private Sub RecalculateWeightsFromHistoryCore()
         Dim records As List(Of SessionRecord)
         Try
             records = ThisAddIn.CurrentDatabaseManager.GetAllSessionRecords()
@@ -875,16 +904,37 @@ Public Class SuggestionEngine
         Dim globalMaxDatumDist As Double = ComputeGlobalMaxDateDistance(records, Function(r) r.Datum)
         Dim globalMaxAusfueDatumDist As Double = ComputeGlobalMaxDateDistance(records, Function(r) r.AusfueDatum)
 
-        Dim allFeatureNames() As String = {
-            "Betreff", "Datum", "AbsenderDomain", "Absender", "AusfueBenutzer", "AusfueDatum",
-            "Titel", "Ablageordner", "ProjektPfad", "ProjektstrukturPfad"
-        }
+        Dim allFeatureNames() As String = WeightFeatureNames
         Dim targetFields() As String = {
             "ProjektPfad", "ProjektstrukturPfad", "Titel", "AbsenderKurz",
             "AblageordnerSchema", "MsgDateinameSchema", "AnhaengeAblegen"
         }
 
+        ' Zielfelder, die die Schwelle erreichen, vorab bestimmen: die Korrelationen aller dieser
+        ' Felder entstehen dann in EINEM Durchlauf ueber die Record-Paare (ComputeRawCorrelations).
+        Dim passingTargets As New List(Of String)
+        For Each targetField In targetFields
+            Dim K0, M0, t0, f0 As Integer
+            GetThresholdInfo(records, targetField, K0, M0, t0, f0)
+            If String.Equals(targetField, "AnhaengeAblegen", StringComparison.OrdinalIgnoreCase) Then
+                If t0 >= 2 AndAlso f0 >= 2 Then passingTargets.Add(targetField)
+            ElseIf K0 >= 2 Then
+                passingTargets.Add(targetField)
+            End If
+        Next
+        Dim allRawCorrs = ComputeRawCorrelations(records, passingTargets, globalMaxDatumDist, globalMaxAusfueDatumDist)
+
+        ' Mit den bisherigen Gewichten starten und nur neu berechnete Zielfelder ersetzen. Zuvor
+        ' wurde das Dictionary komplett ersetzt: Zielfelder, die diesmal unter der Schwelle lagen
+        ' oder nur Null-Korrelationen hatten, fielen im Speicher auf die festen Gewichte zurueck,
+        ' obwohl ihre gelernten Gewichte in der Datenbank blieben (und nach dem naechsten
+        ' Outlook-Start wieder galten).
         Dim newWeights As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
+        If oldWeights IsNot Nothing Then
+            For Each kvp In oldWeights
+                newWeights(kvp.Key) = kvp.Value
+            Next
+        End If
         For Each targetField In targetFields
             Dim K, M, trueCount, falseCount As Integer
             GetThresholdInfo(records, targetField, K, M, trueCount, falseCount)
@@ -905,7 +955,8 @@ Public Class SuggestionEngine
 
             Dim featureNames = GetCascadeAwareFeaturesForTarget(targetField)
             Dim rawCorrs As Dictionary(Of String, Double) = Nothing
-            Dim weights = ComputeWeightsForTarget(records, targetField, featureNames, globalMaxDatumDist, globalMaxAusfueDatumDist, rawCorrs)
+            allRawCorrs.TryGetValue(targetField, rawCorrs)
+            Dim weights = NormalizeCorrelations(rawCorrs, featureNames)
 
             Debug.WriteLine("  Pearson-Korrelationen (Cascade-Features):")
             For Each feat In featureNames
@@ -977,85 +1028,194 @@ Public Class SuggestionEngine
         Return Math.Max(1.0, (maxDate - minDate).TotalDays)
     End Function
 
-    ' featureNames: cascade-aware subset of features to evaluate (from GetCascadeAwareFeaturesForTarget).
-    ' rawCorrs: populated with raw Pearson values (before clipping; NaN = constant feature vector).
-    Private Function ComputeWeightsForTarget(records As List(Of SessionRecord),
-                                             targetField As String,
-                                             featureNames As String(),
-                                             globalMaxDatumDist As Double,
-                                             globalMaxAusfueDatumDist As Double,
-                                             ByRef rawCorrs As Dictionary(Of String, Double)) As Dictionary(Of String, Double)
-        Dim featureVectors As New Dictionary(Of String, List(Of Double))(StringComparer.OrdinalIgnoreCase)
-        For Each feat In featureNames
-            featureVectors(feat) = New List(Of Double)()
-        Next
+    Private Shared ReadOnly WeightFeatureNames() As String = {
+        "Betreff", "Datum", "AbsenderDomain", "Absender", "AusfueBenutzer", "AusfueDatum",
+        "Titel", "Ablageordner", "ProjektPfad", "ProjektstrukturPfad"
+    }
 
-        Dim labelVector As New List(Of Double)()
+    ' Pearson-Korrelation jedes Features (Aehnlichkeit eines Record-Paars) mit dem Label "beide
+    ' Records haben denselben Zielwert" - fuer ALLE uebergebenen Zielfelder in EINEM Durchlauf ueber
+    ' die O(n^2) Paare, mit laufenden Summen statt Vektoren. Zuvor wurde pro Zielfeld (bis zu 7x)
+    ' erneut ueber alle Paare iteriert, jedes Mal u.a. die 384-dimensionale Cosine-Similarity
+    ' neu berechnet, und je Feature eine Liste mit einem Double pro Paar aufgebaut (bei 1.000
+    ' Records ~500.000 Paare * 10 Features * 8 Byte = ~40 MB je Zielfeld plus Listen-Wachstum).
+    ' Ergebnis je Zielfeld: Feature -> r (Double.NaN = Feature-Vektor konstant, 0 = Label konstant),
+    ' identisch zur frueheren Berechnung bis auf Rundung. Die Werte werden relativ zum ersten Paar
+    ' verschoben aufsummiert, damit ein konstanter Feature-Vektor exakt Varianz 0 ergibt.
+    Private Function ComputeRawCorrelations(records As List(Of SessionRecord),
+                                            targetFields As List(Of String),
+                                            globalMaxDatumDist As Double,
+                                            globalMaxAusfueDatumDist As Double) As Dictionary(Of String, Dictionary(Of String, Double))
+        Dim result As New Dictionary(Of String, Dictionary(Of String, Double))(StringComparer.OrdinalIgnoreCase)
+        Dim n = records.Count
+        Dim tCount = targetFields.Count
+        If tCount = 0 OrElse n < 2 Then Return result
+        Const FeatureCount As Integer = 10
+
         Dim maxDatumUse = Math.Min(180.0, globalMaxDatumDist)
         Dim maxAusfueUse = Math.Min(180.0, globalMaxAusfueDatumDist)
         If maxDatumUse <= 0 Then maxDatumUse = 1.0
         If maxAusfueUse <= 0 Then maxAusfueUse = 1.0
 
-        Dim targetValues = GetTargetValues(records, targetField)
+        ' Je Record EINMAL vorberechnen: Embedding-Norm, Kategorie-IDs, Tokenmengen, Zielwert-IDs.
+        Dim embeddings As Single()() = New Single(n - 1)() {}
+        Dim norms(n - 1) As Double
+        For i As Integer = 0 To n - 1
+            Dim e = records(i).BetreffEmbedded
+            embeddings(i) = e
+            If e IsNot Nothing AndAlso e.Length > 0 Then
+                Dim sq As Double = 0
+                For k As Integer = 0 To e.Length - 1
+                    sq += CDbl(e(k)) * e(k)
+                Next
+                norms(i) = Math.Sqrt(sq)
+            End If
+        Next
+        Dim domainIds = GetCategoryIds(records, Function(r) r.AbsenderDomain)
+        Dim absenderIds = GetCategoryIds(records, Function(r) r.Absender)
+        Dim benutzerIds = GetCategoryIds(records, Function(r) r.AusfueBenutzer)
+        Dim projektIds = GetCategoryIds(records, Function(r) r.ProjektPfad)
+        Dim strukturIds = GetCategoryIds(records, Function(r) r.ProjektstrukturPfad)
+        Dim titelTokens = records.Select(Function(r) TokenizeToSet(r.Titel)).ToArray()
+        Dim ablageordnerTokens = records.Select(Function(r) TokenizeToSet(r.AblageordnerAufgeloest)).ToArray()
+        Dim targetIds As Integer()() = New Integer(tCount - 1)() {}
+        For t As Integer = 0 To tCount - 1
+            targetIds(t) = ToValueIds(GetTargetValues(records, targetFields(t)))
+        Next
 
-        ' Tokenmengen je Record EINMAL bilden. Zuvor wurden in der Paarschleife beide Seiten fuer
-        ' jedes der O(n^2) Paare neu tokenisiert und in ein HashSet kopiert - bei 500 Records rund
-        ' 250.000 Tokenisierungen je Textfeature, obwohl es nur 500 verschiedene Texte gibt.
-        Dim titelTokens As HashSet(Of String)() = Nothing
-        If featureVectors.ContainsKey("Titel") Then
-            titelTokens = records.Select(Function(r) TokenizeToSet(r.Titel)).ToArray()
-        End If
-        Dim ablageordnerTokens As HashSet(Of String)() = Nothing
-        If featureVectors.ContainsKey("Ablageordner") Then
-            ablageordnerTokens = records.Select(Function(r) TokenizeToSet(r.AblageordnerAufgeloest)).ToArray()
-        End If
+        Dim sx(FeatureCount - 1) As Double
+        Dim sxx(FeatureCount - 1) As Double
+        Dim shift(FeatureCount - 1) As Double
+        Dim sy(tCount - 1) As Double
+        Dim sxy(tCount - 1, FeatureCount - 1) As Double
+        Dim f(FeatureCount - 1) As Double
+        Dim pairCount As Long = 0
 
-        For i As Integer = 0 To records.Count - 2
-            Dim ri = records(i)
-            For j As Integer = i + 1 To records.Count - 1
-                Dim rj = records(j)
-                labelVector.Add(If(TargetValuesMatch(targetValues(i), targetValues(j)), 1.0, 0.0))
-                If featureVectors.ContainsKey("Betreff") Then featureVectors("Betreff").Add(CalculateCosineSimilarity(ri.BetreffEmbedded, rj.BetreffEmbedded))
-                If featureVectors.ContainsKey("Datum") Then
-                    Dim rawDatum = DateDistanceInDays(ri.Datum, rj.Datum)
-                    featureVectors("Datum").Add(If(rawDatum < 0, 0.0, Math.Max(0.0, 1.0 - rawDatum / maxDatumUse)))
-                End If
-                If featureVectors.ContainsKey("AbsenderDomain") Then featureVectors("AbsenderDomain").Add(CalculateCategoricalSimilarity(ri.AbsenderDomain, rj.AbsenderDomain))
-                If featureVectors.ContainsKey("Absender") Then featureVectors("Absender").Add(CalculateCategoricalSimilarity(ri.Absender, rj.Absender))
-                If featureVectors.ContainsKey("AusfueBenutzer") Then featureVectors("AusfueBenutzer").Add(CalculateCategoricalSimilarity(ri.AusfueBenutzer, rj.AusfueBenutzer))
-                If featureVectors.ContainsKey("AusfueDatum") Then
-                    Dim rawAusfue = DateDistanceInDays(ri.AusfueDatum, rj.AusfueDatum)
-                    featureVectors("AusfueDatum").Add(If(rawAusfue < 0, 0.0, Math.Max(0.0, 1.0 - rawAusfue / maxAusfueUse)))
-                End If
-                If titelTokens IsNot Nothing Then featureVectors("Titel").Add(JaccardSimilarity(titelTokens(i), titelTokens(j)))
-                If ablageordnerTokens IsNot Nothing Then featureVectors("Ablageordner").Add(JaccardSimilarity(ablageordnerTokens(i), ablageordnerTokens(j)))
-                If featureVectors.ContainsKey("ProjektPfad") Then featureVectors("ProjektPfad").Add(CalculateCategoricalSimilarity(ri.ProjektPfad, rj.ProjektPfad))
-                If featureVectors.ContainsKey("ProjektstrukturPfad") Then featureVectors("ProjektstrukturPfad").Add(CalculateCategoricalSimilarity(ri.ProjektstrukturPfad, rj.ProjektstrukturPfad))
+        For i As Integer = 0 To n - 2
+            For j As Integer = i + 1 To n - 1
+                f(0) = CosineWithNorms(embeddings(i), norms(i), embeddings(j), norms(j))
+                Dim rawDatum = DateDistanceInDays(records(i).Datum, records(j).Datum)
+                f(1) = If(rawDatum < 0, 0.0, Math.Max(0.0, 1.0 - rawDatum / maxDatumUse))
+                f(2) = If(domainIds(i) >= 0 AndAlso domainIds(i) = domainIds(j), 1.0, 0.0)
+                f(3) = If(absenderIds(i) >= 0 AndAlso absenderIds(i) = absenderIds(j), 1.0, 0.0)
+                f(4) = If(benutzerIds(i) >= 0 AndAlso benutzerIds(i) = benutzerIds(j), 1.0, 0.0)
+                Dim rawAusfue = DateDistanceInDays(records(i).AusfueDatum, records(j).AusfueDatum)
+                f(5) = If(rawAusfue < 0, 0.0, Math.Max(0.0, 1.0 - rawAusfue / maxAusfueUse))
+                f(6) = JaccardSimilarity(titelTokens(i), titelTokens(j))
+                f(7) = JaccardSimilarity(ablageordnerTokens(i), ablageordnerTokens(j))
+                f(8) = If(projektIds(i) >= 0 AndAlso projektIds(i) = projektIds(j), 1.0, 0.0)
+                f(9) = If(strukturIds(i) >= 0 AndAlso strukturIds(i) = strukturIds(j), 1.0, 0.0)
+
+                If pairCount = 0 Then Array.Copy(f, shift, FeatureCount)
+                pairCount += 1
+                For k As Integer = 0 To FeatureCount - 1
+                    Dim x = f(k) - shift(k)
+                    sx(k) += x
+                    sxx(k) += x * x
+                Next
+                For t As Integer = 0 To tCount - 1
+                    Dim ids = targetIds(t)
+                    If ids(i) = ids(j) Then
+                        sy(t) += 1.0
+                        For k As Integer = 0 To FeatureCount - 1
+                            sxy(t, k) += f(k) - shift(k)
+                        Next
+                    End If
+                Next
             Next
         Next
 
-        If labelVector.Count = 0 Then Return Nothing
-
-        Dim rawCorrelations As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
-        Dim clippedCorrelations As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
-        Dim allZero As Boolean = True
-        For Each kvp In featureVectors
-            Dim r = PearsonCorrelation(kvp.Value, labelVector)
-            rawCorrelations(kvp.Key) = r
-            Dim clipped = If(Double.IsNaN(r), 0.0, Math.Max(0.0, r))
-            clippedCorrelations(kvp.Key) = clipped
-            If clipped > 0.0 Then allZero = False
+        Dim np As Double = pairCount
+        For t As Integer = 0 To tCount - 1
+            Dim corrs As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+            ' Label ist binaer (y*y = y), daher Summe der Quadrate = sy.
+            Dim varY = sy(t) - sy(t) * sy(t) / np
+            For k As Integer = 0 To FeatureCount - 1
+                Dim varX = sxx(k) - sx(k) * sx(k) / np
+                Dim r As Double
+                If varX <= 0.0 Then
+                    r = Double.NaN            ' feature vector is constant → Pearson undefined
+                ElseIf varY <= 0.0 Then
+                    r = 0.0                   ' label vector is constant → degenerate case
+                Else
+                    Dim cov = sxy(t, k) - sx(k) * sy(t) / np
+                    r = Math.Max(-1.0, Math.Min(1.0, cov / Math.Sqrt(varX * varY)))
+                End If
+                corrs(WeightFeatureNames(k)) = r
+            Next
+            result(targetFields(t)) = corrs
         Next
-        rawCorrs = rawCorrelations
+        Return result
+    End Function
 
-        If allZero Then Return Nothing
-
-        Dim total = clippedCorrelations.Values.Sum()
+    ' Clippt die Roh-Korrelationen der kaskadenkonformen Features auf [0, ∞) und normiert sie auf
+    ' Summe 1. Nothing, wenn keine positive Korrelation uebrig bleibt (degenerierter Fall).
+    Private Function NormalizeCorrelations(rawCorrs As Dictionary(Of String, Double),
+                                           featureNames As String()) As Dictionary(Of String, Double)
+        If rawCorrs Is Nothing Then Return Nothing
+        Dim clipped As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
+        For Each feat In featureNames
+            Dim r As Double = Double.NaN
+            rawCorrs.TryGetValue(feat, r)
+            clipped(feat) = If(Double.IsNaN(r), 0.0, Math.Max(0.0, r))
+        Next
+        Dim total = clipped.Values.Sum()
+        If total <= 0.0 Then Return Nothing
         Dim normalized As New Dictionary(Of String, Double)(StringComparer.OrdinalIgnoreCase)
-        For Each kvp In clippedCorrelations
-            normalized(kvp.Key) = If(total > 0.0, kvp.Value / total, 0.0)
+        For Each kvp In clipped
+            normalized(kvp.Key) = kvp.Value / total
         Next
         Return normalized
+    End Function
+
+    ' Cosine-Similarity mit vorberechneten Normen; gleiche Randfaelle wie CalculateCosineSimilarity
+    ' (fehlender/leerer Vektor, ungleiche Laenge oder Norm 0 -> 0).
+    Private Shared Function CosineWithNorms(a As Single(), normA As Double, b As Single(), normB As Double) As Double
+        If a Is Nothing OrElse b Is Nothing OrElse a.Length = 0 OrElse a.Length <> b.Length Then Return 0.0
+        If normA = 0 OrElse normB = 0 Then Return 0.0
+        Dim dot As Double = 0
+        For k As Integer = 0 To a.Length - 1
+            dot += CDbl(a(k)) * b(k)
+        Next
+        Return dot / (normA * normB)
+    End Function
+
+    ' Kategorie-ID je Record (gleiche Semantik wie CalculateCategoricalSimilarity: getrimmt,
+    ' Gross-/Kleinschreibung egal); -1 fuer leere Werte, die nie uebereinstimmen.
+    Private Shared Function GetCategoryIds(records As List(Of SessionRecord), selector As Func(Of SessionRecord, String)) As Integer()
+        Dim ids(records.Count - 1) As Integer
+        Dim map As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+        For i As Integer = 0 To records.Count - 1
+            Dim v = selector(records(i))
+            If String.IsNullOrWhiteSpace(v) Then
+                ids(i) = -1
+                Continue For
+            End If
+            Dim key = v.Trim()
+            Dim id As Integer
+            If Not map.TryGetValue(key, id) Then
+                id = map.Count
+                map(key) = id
+            End If
+            ids(i) = id
+        Next
+        Return ids
+    End Function
+
+    ' Zielwert-IDs (TargetValuesMatch-Semantik: Gross-/Kleinschreibung egal, leer ist eine eigene Kategorie).
+    Private Shared Function ToValueIds(values As String()) As Integer()
+        Dim ids(values.Length - 1) As Integer
+        Dim map As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+        For i As Integer = 0 To values.Length - 1
+            Dim key = If(values(i), String.Empty)
+            Dim id As Integer
+            If Not map.TryGetValue(key, id) Then
+                id = map.Count
+                map(key) = id
+            End If
+            ids(i) = id
+        Next
+        Return ids
     End Function
 
     ' Returns which engine features (by name) are causally available as inputs when targetField is being suggested.
@@ -1152,39 +1312,6 @@ Public Class SuggestionEngine
             values(i) = If(v, String.Empty).Trim()
         Next
         Return values
-    End Function
-
-    ' Reiner Wertevergleich - GetTargetValues liefert nie mehr Nothing (auch ein leerer Zielwert
-    ' ist String.Empty, kein "unbekannt"), daher kein Nothing-Sonderfall mehr noetig.
-    Private Function TargetValuesMatch(vi As String, vj As String) As Boolean
-        Return String.Equals(vi, vj, StringComparison.OrdinalIgnoreCase)
-    End Function
-
-    Private Function PearsonCorrelation(x As List(Of Double), y As List(Of Double)) As Double
-        If x Is Nothing OrElse y Is Nothing Then Return 0.0
-        Dim n = x.Count
-        If n <> y.Count OrElse n < 2 Then Return 0.0
-
-        Dim sumX As Double = 0, sumY As Double = 0
-        For i As Integer = 0 To n - 1
-            sumX += x(i)
-            sumY += y(i)
-        Next
-        Dim meanX = sumX / n
-        Dim meanY = sumY / n
-
-        Dim cov As Double = 0, varX As Double = 0, varY As Double = 0
-        For i As Integer = 0 To n - 1
-            Dim dx = x(i) - meanX
-            Dim dy = y(i) - meanY
-            cov += dx * dy
-            varX += dx * dx
-            varY += dy * dy
-        Next
-
-        If varX = 0.0 Then Return Double.NaN  ' feature vector is constant → Pearson undefined
-        If varY = 0.0 Then Return 0.0          ' label vector is constant → degenerate case
-        Return cov / Math.Sqrt(varX * varY)
     End Function
 
 End Class

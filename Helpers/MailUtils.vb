@@ -30,7 +30,36 @@ Public Module MailUtils
         Return String.Equals(session.SourceMailEntryId, mail.EntryID, StringComparison.Ordinal)
     End Function
 
-    ' Liest die Metadaten der ausgew�hlten Mail und bef�llt die Properties der �bergebenen Session
+    ' SMTP-Adresse des Absenders. Bei Absendern aus derselben Exchange-Organisation ist
+    ' SenderEmailType "EX" und SenderEmailAddress ein X.500-Pfad ("/O=EXCHANGELABS/OU=...") ohne
+    ' "@" - AbsenderDomain blieb dann leer und das Feature war fuer alle internen Mails wertlos.
+    ' Fallback ueber AddressEntry.GetExchangeUser().PrimarySmtpAddress; schlaegt das fehl (z.B.
+    ' offline ohne Adressbuch), bleibt es beim leeren Ergebnis wie bisher.
+    Private Function GetSenderSmtpAddress(mail As Object) As String
+        Dim adresse As String = Nothing
+        Try
+            adresse = mail.SenderEmailAddress
+            If Not String.Equals(CStr(mail.SenderEmailType), "EX", StringComparison.OrdinalIgnoreCase) Then Return adresse
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] GetSenderSmtpAddress: {ex.Message}")
+            Return adresse
+        End Try
+        Dim sender As Object = Nothing
+        Dim exchangeUser As Object = Nothing
+        Try
+            sender = mail.Sender
+            If sender IsNot Nothing Then exchangeUser = sender.GetExchangeUser()
+            If exchangeUser IsNot Nothing Then Return exchangeUser.PrimarySmtpAddress
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] GetSenderSmtpAddress (Exchange): {ex.Message}")
+        Finally
+            ReleaseComObjectSafe(exchangeUser)
+            ReleaseComObjectSafe(sender)
+        End Try
+        Return adresse
+    End Function
+
+    ' Liest die Metadaten der ausgewählten Mail und befüllt die Properties der übergebenen Session
     Public Sub ReadMailMeta(session As Session)
         Dim mail As Object = Nothing
         Debug.WriteLine("[MailUtils] ReadMailMeta called.")
@@ -42,8 +71,9 @@ Public Module MailUtils
             End If
             session.SourceMailEntryId = mail.EntryID
             session.Absender = mail.SenderName
-            If mail.SenderEmailType = "SMTP" AndAlso mail.SenderEmailAddress.Contains("@") Then
-                Dim emailParts = mail.SenderEmailAddress.Split("@"c)
+            Dim smtpAdresse = GetSenderSmtpAddress(mail)
+            If Not String.IsNullOrEmpty(smtpAdresse) AndAlso smtpAdresse.Contains("@") Then
+                Dim emailParts = smtpAdresse.Split("@"c)
                 session.AbsenderDomain = emailParts(emailParts.Length - 1)
             End If
             session.Empfaenger = mail.To
@@ -117,35 +147,38 @@ Public Module MailUtils
         End Try
     End Sub
 
-    ' Speichert die selektierten Anhänge der Mail; Zuordnung per Dateiname (nicht per Index)
-    Public Function SaveMailAttachments(session As Session, anhangZielpfade As List(Of String)) As String
+    ' Speichert die selektierten Anhänge der Mail. Zuordnung per Index (AnhangZiel.OutlookIndex aus
+    ' ReadAttachmentNames), nicht per Dateiname: der Zielname kann vom Originalnamen abweichen
+    ' (Umbenennen-Dialog, Nummerierung gleichnamiger Anhänge). Zuvor wurde per Name gesucht -
+    ' umbenannte Anhänge wurden dadurch stillschweigend nicht gespeichert, und von zwei
+    ' gleichnamigen Anhängen landete zweimal der erste. Die Indizes sind stabil, weil
+    ' IsSameMailAsPrepared sicherstellt, dass es noch dieselbe Mail ist.
+    Public Function SaveMailAttachments(session As Session, anhaenge As List(Of InputChecker.AnhangZiel)) As String
         Dim mail As Object = Nothing
         Try
             mail = GetSourceMail(session)
             If mail Is Nothing Then
-                Return "Bitte w�hlen Sie eine einzelne E-Mail aus."
+                Return "Bitte wählen Sie eine einzelne E-Mail aus."
             End If
             If Not IsSameMailAsPrepared(session, mail) Then
                 Return "Die angezeigte Mail hat sich geändert. Bitte MailDrop erneut öffnen."
             End If
-            For Each anhangPfad In anhangZielpfade
-                Dim targetName = Path.GetFileName(anhangPfad)
-                For i As Integer = 1 To mail.Attachments.Count
-                    Dim att As Object = Nothing
-                    Try
-                        att = mail.Attachments(i)
-                        If String.Equals(att.FileName, targetName, StringComparison.OrdinalIgnoreCase) Then
-                            att.SaveAsFile(anhangPfad)
-                            Exit For
-                        End If
-                    Finally
-                        ReleaseComObjectSafe(att)
-                    End Try
-                Next
+            Dim anzahl As Integer = mail.Attachments.Count
+            For Each anhang In anhaenge
+                If anhang.OutlookIndex < 1 OrElse anhang.OutlookIndex > anzahl Then
+                    Return $"Anhang Nr. {anhang.OutlookIndex} wurde in der Mail nicht gefunden."
+                End If
+                Dim att As Object = Nothing
+                Try
+                    att = mail.Attachments(anhang.OutlookIndex)
+                    att.SaveAsFile(anhang.Zielpfad)
+                Finally
+                    ReleaseComObjectSafe(att)
+                End Try
             Next
             Return String.Empty
         Catch ex As Exception
-            Return $"Fehler beim Speichern der Anh�nge: {ex.Message}"
+            Return $"Fehler beim Speichern der Anhänge: {ex.Message}"
         Finally
             ReleaseComObjectSafe(mail)
             ' Explorer is intentionally NOT released: app.ActiveExplorer() returns the same RCW

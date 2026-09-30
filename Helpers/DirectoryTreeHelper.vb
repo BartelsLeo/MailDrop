@@ -2,7 +2,7 @@ Imports System.Collections.ObjectModel
 Imports System.IO
 
 Public Module DirectoryTreeHelper
-    ' Erstellt die Directory-Struktur f�r das TreeView. Das TreeView zeigt nicht direkt die
+    ' Erstellt die Directory-Struktur für das TreeView. Das TreeView zeigt nicht direkt die
     ' Kinder von ProjektPfad als Root-Ebene, sondern einen einzigen synthetischen Root-Knoten
     ' (RelativePath=String.Empty, FullPath=projektPfad, Name=der tatsaechliche Ordnername von
     ' projektPfad statt eines festen Labels - siehe GetProjektPfadDisplayName), dessen Children
@@ -68,7 +68,7 @@ Public Module DirectoryTreeHelper
                 node.Children.Add(CreateDirectoryNodeWithExpand(dir, level + 1, basePath, maxDepth, expandByDefault))
             Next
         Catch ex As Exception
-            ' Fehlerausgabe entfernt, da Debug nicht verf�gbar ist
+            ' Fehlerausgabe entfernt, da Debug nicht verfügbar ist
         End Try
         Return node
     End Function
@@ -147,5 +147,5 @@ Public Class DirectoryNode
     Public Property FullPath As String
     Public Property RelativePath As String
     Public Property Children As ObservableCollection(Of DirectoryNode)
-    Public Property IsExpanded As Boolean ' F�r automatische Expansion im TreeView
+    Public Property IsExpanded As Boolean ' Für automatische Expansion im TreeView
 End Class
