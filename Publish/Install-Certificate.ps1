@@ -81,6 +81,32 @@ function Get-MailDropCertificate {
     return New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(, $bytes)
 }
 
+# Internet-Markierung ("Mark of the Web") von allen Dateien dieses Installationsordners entfernen.
+# Kommt der Ordner aus einem heruntergeladenen ZIP (GitHub-Release, Browser, Teams, Mail), tragen
+# einzelne Dateien die Markierung "aus dem Internet" und andere nicht. ClickOnce bricht dann ab mit
+# "Die Bereitstellung und die Anwendung haben keine uebereinstimmenden Sicherheitszonen", weil
+# MailDrop.vsto und Application Files\...\MailDrop.dll.manifest verschiedenen Zonen zugeordnet werden.
+# Ohne Schreibrechte auf den Ordner (z.B. Netzlaufwerk) schlaegt das fehl - dann nur ein Hinweis.
+if (-not $Uninstall) {
+    $marked = @(Get-ChildItem -Path $PSScriptRoot -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { Get-Item -LiteralPath $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue })
+    if ($marked.Count -gt 0) {
+        $failed = 0
+        foreach ($file in $marked) {
+            try { Unblock-File -LiteralPath $file.FullName -ErrorAction Stop } catch { $failed++ }
+        }
+        if ($failed -eq 0) {
+            Write-Host "Internet-Markierung von $($marked.Count) Datei(en) in diesem Ordner entfernt." -ForegroundColor Green
+        } else {
+            Write-Warning ("$failed von $($marked.Count) Datei(en) sind als 'aus dem Internet' markiert und konnten nicht " +
+                "entsperrt werden (keine Schreibrechte?). Die Installation kann dann mit 'keine uebereinstimmenden " +
+                "Sicherheitszonen' scheitern. Abhilfe: das ZIP VOR dem Entpacken entsperren (Rechtsklick > " +
+                "Eigenschaften > 'Zulassen') oder den Ordner lokal entpacken und dort installieren.")
+        }
+        Write-Host ""
+    }
+}
+
 $cert = Get-MailDropCertificate
 Write-Host "MailDrop-Zertifikat:" -ForegroundColor Cyan
 Write-Host "  Aussteller : $($cert.Subject)"

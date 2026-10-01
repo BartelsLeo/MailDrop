@@ -110,6 +110,11 @@ fuer den aktuellen Benutzer, ohne einen privaten Schluessel zu benoetigen oder z
 powershell -ExecutionPolicy Bypass -File .\Install-Certificate.ps1
 ```
 
+Das Skript entfernt ausserdem die Markierung "aus dem Internet" von allen Dateien des Ordners. Ohne
+diesen Schritt bricht die Installation aus einem heruntergeladenen ZIP mit "Die Bereitstellung und die
+Anwendung haben keine uebereinstimmenden Sicherheitszonen" ab. Liegt der Ordner auf einem Netzlaufwerk
+ohne Schreibrechte, das ZIP vor dem Entpacken entsperren (Rechtsklick > Eigenschaften > "Zulassen").
+
 Danach `setup.exe` ausfuehren. Das Zertifikat ist bewusst 30 Jahre gueltig (bis 01.07.2056), damit
 dieser Trust-Schritt nicht periodisch fuer bereits installierte Benutzer wiederholt werden muss. Nur
 falls das Zertifikat jemals neu erzeugt wird (z.B. Kompromittierung des privaten Schluessels), muss
