@@ -106,6 +106,9 @@ in der ZIP bzw. auf dem Netzlaufwerk). Das Skript vertraut dem (oeffentlichen) M
 fuer den aktuellen Benutzer, ohne einen privaten Schluessel zu benoetigen oder zu enthalten, und
 **ohne Administratorrechte** (Zertifikatsspeicher des aktuellen Benutzers):
 
+Am einfachsten per Doppelklick auf `Install-Certificate.cmd` (ein Doppelklick auf die `.ps1` oeffnet sie
+nur im Editor). Alternativ in PowerShell im selben Ordner:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Install-Certificate.ps1
 ```

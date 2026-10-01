@@ -2,6 +2,8 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+# Batch-Dateien brauchen CRLF, sonst kann cmd.exe Zeilen falsch lesen.
+*.cmd text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

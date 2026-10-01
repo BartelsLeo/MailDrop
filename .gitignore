@@ -190,6 +190,7 @@ publish/
 /Publish/*
 # ...except the hand-written certificate-trust script, which is source, not build output.
 !/Publish/Install-Certificate.ps1
+!/Publish/Install-Certificate.cmd
 
 # Publish Web Output
 *.[Pp]ublish.xml
