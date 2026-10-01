@@ -118,41 +118,66 @@ if ($cert.NotAfter -lt (Get-Date)) {
     Write-Warning "Dieses Zertifikat ist abgelaufen. Bitte pruefen, ob im Publish-Ordner eine neuere Version dieses Skripts vorliegt."
 }
 
+# Root ist Pflicht (ohne vertrauenswuerdige Stammzertifizierung scheitert die Installation).
+# TrustedPublisher ist optional: damit installiert Office ohne Rueckfrage. In Firmenumgebungen
+# sperrt eine Richtlinie ("Vertrauenswuerdige Herausgeber nur durch Administratoren verwalten")
+# diesen Speicher fuer normale Benutzer ("Zugriff verweigert", erster Feldtest 2026-10-01) - dann
+# zeigt der Office-Installer stattdessen eine Rueckfrage, die mit "Installieren" bestaetigt wird.
+$rootOk = $true
+$publisherOk = $true
 foreach ($storeName in $storeNames) {
-    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeName, 'CurrentUser')
-    $store.Open('ReadWrite')
     try {
-        # Alte, kompromittierte Zertifikate immer entfernen (auch im normalen Install-Lauf, nicht
-        # nur bei -Uninstall) - siehe "Zertifikatsrotation" oben.
-        foreach ($oldThumbprint in $oldCompromisedThumbprints) {
-            $oldExisting = $store.Certificates | Where-Object { $_.Thumbprint -eq $oldThumbprint }
-            foreach ($oldCert in $oldExisting) {
-                $store.Remove($oldCert)
-                Write-Host "Altes, kompromittiertes Zertifikat ($oldThumbprint) aus 'CurrentUser\$storeName' entfernt." -ForegroundColor Yellow
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeName, 'CurrentUser')
+        $store.Open('ReadWrite')
+        try {
+            # Alte, kompromittierte Zertifikate immer entfernen (auch im normalen Install-Lauf, nicht
+            # nur bei -Uninstall) - siehe "Zertifikatsrotation" oben.
+            foreach ($oldThumbprint in $oldCompromisedThumbprints) {
+                $oldExisting = $store.Certificates | Where-Object { $_.Thumbprint -eq $oldThumbprint }
+                foreach ($oldCert in $oldExisting) {
+                    $store.Remove($oldCert)
+                    Write-Host "Altes, kompromittiertes Zertifikat ($oldThumbprint) aus 'CurrentUser\$storeName' entfernt." -ForegroundColor Yellow
+                }
+            }
+
+            if ($Uninstall) {
+                $existing = $store.Certificates | Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
+                if ($existing) {
+                    $store.Remove($cert)
+                    Write-Host "Entfernt aus 'CurrentUser\$storeName'." -ForegroundColor Yellow
+                } else {
+                    Write-Host "War nicht in 'CurrentUser\$storeName' vorhanden." -ForegroundColor DarkGray
+                }
+            } else {
+                $store.Add($cert)
+                Write-Host "Erfolgreich hinzugefuegt zu 'CurrentUser\$storeName'." -ForegroundColor Green
             }
         }
-
-        if ($Uninstall) {
-            $existing = $store.Certificates | Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
-            if ($existing) {
-                $store.Remove($cert)
-                Write-Host "Entfernt aus 'CurrentUser\$storeName'." -ForegroundColor Yellow
-            } else {
-                Write-Host "War nicht in 'CurrentUser\$storeName' vorhanden." -ForegroundColor DarkGray
-            }
-        } else {
-            $store.Add($cert)
-            Write-Host "Erfolgreich hinzugefuegt zu 'CurrentUser\$storeName'." -ForegroundColor Green
+        finally {
+            $store.Close()
         }
     }
-    finally {
-        $store.Close()
+    catch {
+        if ($storeName -eq 'TrustedPublisher') {
+            $publisherOk = $false
+            Write-Host "'CurrentUser\TrustedPublisher' ist auf diesem Rechner gesperrt (vermutlich Firmenrichtlinie) - nicht schlimm." -ForegroundColor Yellow
+        } else {
+            $rootOk = $false
+            Write-Host "Fehler bei 'CurrentUser\$storeName': $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
 }
 
 Write-Host ""
 if ($Uninstall) {
     Write-Host "Fertig. Das MailDrop-Zertifikat wird nicht mehr als vertrauenswuerdig eingestuft." -ForegroundColor Cyan
+} elseif (-not $rootOk) {
+    Write-Host "Das Zertifikat konnte nicht als vertrauenswuerdig eingetragen werden - die Installation wird" -ForegroundColor Red
+    Write-Host "voraussichtlich scheitern. Bitte die IT bitten, das MailDrop-Zertifikat zu verteilen." -ForegroundColor Red
+    exit 1
+} elseif (-not $publisherOk) {
+    Write-Host "Fertig. Jetzt 'setup.exe' aus diesem Ordner ausfuehren. Office fragt dabei einmal nach, ob" -ForegroundColor Cyan
+    Write-Host "MailDrop installiert werden soll - mit 'Installieren' bestaetigen." -ForegroundColor Cyan
 } else {
     Write-Host "Fertig. Die Installation von MailDrop (setup.exe / MailDrop.vsto) sollte jetzt ohne" -ForegroundColor Cyan
     Write-Host "Zertifikatswarnung funktionieren. Bitte 'setup.exe' aus diesem Ordner erneut ausfuehren." -ForegroundColor Cyan
