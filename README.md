@@ -89,6 +89,11 @@ Details zum Vorgehen (inkl. Release-Tagging) siehe CONTRIBUTING.md.
 
 ### Installation ueber ClickOnce (Endanwender)
 
+**Schritt-fuer-Schritt-Anleitung und haeufige Fehler: [docs/Installation.md](docs/Installation.md).**
+Wichtigster Punkt: Die heruntergeladene ZIP **vor dem Entpacken** freigeben (Rechtsklick >
+Eigenschaften > "Zulassen"), sonst bricht die Installation mit "keine uebereinstimmenden
+Sicherheitszonen" ab.
+
 Die Distribution erfolgt als entpackbare ZIP-Datei ueber GitHub Releases; dieselbe entpackte ZIP
 (`setup.exe`, `MailDrop.vsto`, `Application Files/`) wird zusaetzlich auf ein Netzlaufwerk gelegt.
 Wer MailDrop installieren will, kann `setup.exe` entweder aus der lokal entpackten ZIP oder direkt
