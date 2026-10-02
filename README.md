@@ -129,17 +129,20 @@ falls das Zertifikat jemals neu erzeugt wird (z.B. Kompromittierung des privaten
 das Skript neu aus `MailDrop.vsto` erzeugt werden (siehe Kommentar im Skript) und alle Benutzer muessen
 es erneut ausfuehren.
 
-#### Auto-Update
+#### Updates (kein Auto-Update)
 
-ClickOnce ist mit `UpdateEnabled=true` und ohne fest eingetragene Update-Adresse konfiguriert. Dadurch
-gilt: Der Ort, von dem aus installiert wurde, wird automatisch als Update-Quelle uebernommen.
+Das automatische Update ist abgeschaltet (`UpdateEnabled=false`, seit 2026-10-02). Grund: Beim
+Outlook-Start wurde das Update von `OUTLOOK.EXE` selbst heruntergeladen, und die Defender-Regel
+„Office-Anwendungen am Erstellen ausfuehrbarer Inhalte hindern“ blockiert genau das (Meldung
+`DeploymentDownloadException` ... `Temp\Deployment\...\MailDrop.dll` „Zugriff verweigert“, siehe
+Troubleshooting).
 
-- **Installation direkt vom Netzlaufwerk aus**: MailDrop prueft danach bei jedem Outlook-Start im
-  Hintergrund (`UpdateMode=Background`) automatisch, ob auf dem Netzlaufwerk eine neuere Version
-  liegt, und uebernimmt sie beim naechsten Neustart. Kein zusaetzlicher Schritt noetig.
-- **Installation aus einer lokal entpackten ZIP** (z.B. nach Download von GitHub Releases): Es gibt
-  keine automatische Update-Pruefung. Ein Update erfordert eine erneute manuelle Installation aus
-  einer neueren ZIP.
+- **Update einspielen:** Outlook schliessen und `setup.exe` der neuen Version (Netzlaufwerk oder neu
+  entpackte ZIP) erneut starten. `setup.exe` ist kein Office-Programm und wird von der Regel nicht
+  blockiert.
+- **Einmalig beim Umstieg:** Installationen einer aelteren Version pruefen beim Outlook-Start noch auf
+  Updates und laufen dabei weiter in den Fehler. Einmal `setup.exe` der neuen Version starten (bei
+  Problemen vorher deinstallieren) - danach gibt es keine Update-Pruefung mehr.
 
 **Hinweis:** Installation aus einem OneDrive-synchronisierten Ordner (z.B.
 `...\OneDrive - <Firma>\...\MailDrop\`) ist keine getestete/unterstuetzte dritte Variante neben
@@ -276,6 +279,12 @@ Unterstuetzte Platzhalter in Ablageordner und msg Dateiname:
   das Add-in wird direkt nach der Installation wegen Zeitueberschreitung deaktiviert, ggf. mit dieser
   Fehlermeldung: `DeploymentDownloadException` / `UnauthorizedAccessException: Der Zugriff auf den
   Pfad "...\AppData\Local\Temp\Deployment\...\MailDrop.dll" wurde verweigert`:
+  - **Bestaetigte Ursache beim Update (2026-10-02):** Die Defender-Regel „Office-Anwendungen am
+    Erstellen ausfuehrbarer Inhalte hindern“ blockiert den Download, weil das Update beim Outlook-Start
+    von `OUTLOOK.EXE` selbst heruntergeladen wird (Windows-Sicherheit → Schutzverlauf: „Aktion
+    blockiert“). `setup.exe` ist kein Office-Programm, deshalb klappt eine Neuinstallation. Abhilfe:
+    `setup.exe` vom Netzlaufwerk erneut starten oder IT um eine Ausnahme fuer
+    `%LOCALAPPDATA%\Temp\Deployment\` bitten.
   - Belegte Ursache (direkt aus dem Stacktrace ablesbar): ClickOnce schreibt heruntergeladene Dateien
     zunaechst in einen zufaellig benannten, rein lokalen Ordner unter
     `%LOCALAPPDATA%\Temp\Deployment\` und oeffnet die Datei danach erneut, um Manifest/Signatur zu

@@ -114,16 +114,18 @@ trust step never has to be repeated for already-installed users. Only if the cer
 regenerated (e.g. private key compromise) does the script need to be regenerated from `MailDrop.vsto`
 (see the comment in the script) and re-run by every user.
 
-#### Auto-update
+#### Updates (no auto-update)
 
-ClickOnce is configured with `UpdateEnabled=true` and no hard-coded update address. As a result, the
-location an install ran from automatically becomes its update source:
+Automatic updates are disabled (`UpdateEnabled=false`, since 2026-10-02). Reason: at Outlook start the
+update was downloaded by `OUTLOOK.EXE` itself, which the Microsoft Defender attack surface reduction
+rule "Block Office applications from creating executable content" blocks (`DeploymentDownloadException`
+... `Temp\Deployment\...\MailDrop.dll` access denied, see Troubleshooting).
 
-- **Installed directly from the network drive**: MailDrop then checks that network drive in the
-  background on every Outlook start (`UpdateMode=Background`) and picks up a newer version on the
-  next restart. No extra step needed.
-- **Installed from a locally extracted zip** (e.g. downloaded from GitHub Releases): there is no
-  automatic update check. Updating requires manually installing again from a newer zip.
+- **Installing an update:** close Outlook and run the new version's `setup.exe` (network drive or
+  freshly extracted zip) again. `setup.exe` is not an Office process and is not affected by the rule.
+- **One-time transition:** installs of an older version still check for updates at Outlook start and
+  keep hitting the error. Run the new version's `setup.exe` once (uninstall first if that fails) -
+  after that there is no update check anymore.
 
 **Note:** Installing from a OneDrive-synced folder (e.g. `...\OneDrive - <Org>\...\MailDrop\`) is not a
 tested/supported third option alongside the network drive/zip. Whether that's actually a contributing
