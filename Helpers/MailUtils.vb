@@ -120,17 +120,85 @@ Public Module MailUtils
         End Try
     End Function
 
-    ' Liest Anhang-Namen und -Indizes aus der selektierten Mail und befüllt session.Anhaenge
+    Private Const PR_ATTACHMENT_HIDDEN As String = "http://schemas.microsoft.com/mapi/proptag/0x7FFE000B"
+    Private Const PR_ATTACH_CONTENT_ID As String = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
+
+    ' HTML-Text der Mail, oder String.Empty bei Nicht-HTML-Mails bzw. wenn das Lesen fehlschlaegt.
+    ' Nur einmal pro Mail lesen: HTMLBody kann bei grossen Mails teuer sein.
+    Private Function GetHtmlBodySafe(mail As Outlook.MailItem) As String
+        Try
+            If mail.BodyFormat <> Outlook.OlBodyFormat.olFormatHTML Then Return String.Empty
+            Return If(mail.HTMLBody, String.Empty)
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] GetHtmlBodySafe exception: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
+
+    ' Erkennt im Mailtext eingebettete Elemente (Signatur-Logos, eingefuegte Screenshots), die keine
+    ' "echten" Anlagen sind. Kein einzelnes MAPI-Merkmal ist dafuer verlaesslich, daher:
+    '   - PR_ATTACHMENT_HIDDEN = True (von Outlook/Exchange als versteckt markiert), oder
+    '   - Content-ID vorhanden UND im HTMLBody als "cid:<id>" referenziert. Die Content-ID allein
+    '     reicht nicht: manche Clients (z.B. Apple Mail) vergeben sie auch an echte Anlagen.
+    '   - RTF-Mails: eingebettete OLE-Objekte (Attachment.Type = olOLE).
+    ' Im Zweifel (Property fehlt / Fehler) gilt der Anhang als echt - lieber ein Logo zu viel
+    ' in der Liste als eine echte Anlage, die sich nicht ablegen laesst.
+    Private Function IsEmbeddedAttachment(att As Outlook.Attachment, htmlBody As String) As Boolean
+        Try
+            If att.Type = Outlook.OlAttachmentType.olOLE Then Return True
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] IsEmbeddedAttachment Type: {ex.Message}")
+        End Try
+
+        Dim accessor As Outlook.PropertyAccessor = Nothing
+        Try
+            accessor = att.PropertyAccessor
+            Dim hidden As Object = Nothing
+            Try
+                hidden = accessor.GetProperty(PR_ATTACHMENT_HIDDEN)
+            Catch
+                ' Property nicht gesetzt - bei vielen Mails der Normalfall.
+            End Try
+            If hidden IsNot Nothing AndAlso CBool(hidden) Then Return True
+
+            If String.IsNullOrEmpty(htmlBody) Then Return False
+            Dim contentId As String = Nothing
+            Try
+                contentId = TryCast(accessor.GetProperty(PR_ATTACH_CONTENT_ID), String)
+            Catch
+                ' Keine Content-ID - kann nicht per cid: referenziert sein.
+            End Try
+            If String.IsNullOrWhiteSpace(contentId) Then Return False
+            contentId = contentId.Trim().TrimStart("<"c).TrimEnd(">"c)
+            Return htmlBody.IndexOf("cid:" & contentId, StringComparison.OrdinalIgnoreCase) >= 0
+        Catch ex As Exception
+            Debug.WriteLine($"[MailUtils] IsEmbeddedAttachment exception: {ex.Message}")
+            Return False
+        Finally
+            ReleaseComObjectSafe(accessor)
+        End Try
+    End Function
+
+    ' Liest Anhang-Namen und -Indizes aus der selektierten Mail und befüllt session.Anhaenge.
+    ' Nur echte Anlagen: eingebettete Elemente (IsEmbeddedAttachment) werden uebersprungen und sind
+    ' damit weder sichtbar noch ablegbar. OutlookIndex bleibt der Index in mail.Attachments.
     Public Sub ReadAttachmentNames(session As Session)
         Dim mail As Object = Nothing
         Try
             mail = GetSourceMail(session)
             If mail Is Nothing Then Return
             session.Anhaenge.Clear()
-            For i As Integer = 1 To mail.Attachments.Count
+            Dim anzahl As Integer = mail.Attachments.Count
+            If anzahl = 0 Then Return
+            Dim htmlBody As String = GetHtmlBodySafe(mail)
+            For i As Integer = 1 To anzahl
                 Dim att As Object = Nothing
                 Try
                     att = mail.Attachments(i)
+                    If IsEmbeddedAttachment(att, htmlBody) Then
+                        Debug.WriteLine($"[MailUtils] Eingebettetes Element übersprungen: {att.FileName}")
+                        Continue For
+                    End If
                     session.Anhaenge.Add(New AttachmentItem() With {
                         .Name = att.FileName,
                         .OutlookIndex = i,

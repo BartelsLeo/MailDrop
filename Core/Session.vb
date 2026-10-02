@@ -141,6 +141,8 @@ Public Class Session
         End Set
     End Property
 
+    ' Anhaenge enthaelt nur echte Anlagen (eingebettete Bilder filtert MailUtils.ReadAttachmentNames
+    ' heraus) - eine Mail mit nur einem Signatur-Logo gilt also als Mail ohne Anhaenge.
     Public ReadOnly Property HasAnhaenge As Boolean
         Get
             Return Anhaenge.Count > 0
