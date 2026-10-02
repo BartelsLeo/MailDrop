@@ -394,7 +394,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                          Content="{Binding DisplayName}"
+                                          Content="{Binding Name}"
                                           FontSize="11" Margin="0,2,0,0"/>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

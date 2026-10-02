@@ -10,18 +10,6 @@ Public Class AttachmentItem
     Public Property Name As String
     Public Property OutlookIndex As Integer
 
-    ' True fuer im Mailtext eingebettete Elemente (Signatur-Logos, eingefuegte Bilder, OLE-Objekte
-    ' in RTF-Mails), siehe MailUtils.IsEmbeddedAttachment. Sie werden weiter angezeigt, aber nicht
-    ' vorausgewaehlt und zaehlen nicht fuer Session.HasAnhaenge.
-    Public Property IsEmbedded As Boolean
-
-    ' Anzeigetext in der Anhang-Liste. Name bleibt der echte Dateiname (Zielpfad in InputChecker).
-    Public ReadOnly Property DisplayName As String
-        Get
-            Return If(IsEmbedded, $"{Name} (eingebettet)", Name)
-        End Get
-    End Property
-
     Private _isSelected As Boolean = True
     Public Property IsSelected As Boolean
         Get
@@ -153,10 +141,11 @@ Public Class Session
         End Set
     End Property
 
-    ' Nur echte Anlagen - eingebettete Bilder allein schalten "Anhänge ablegen" nicht frei.
+    ' Anhaenge enthaelt nur echte Anlagen (eingebettete Bilder filtert MailUtils.ReadAttachmentNames
+    ' heraus) - eine Mail mit nur einem Signatur-Logo gilt also als Mail ohne Anhaenge.
     Public ReadOnly Property HasAnhaenge As Boolean
         Get
-            Return Anhaenge.Any(Function(a) Not a.IsEmbedded)
+            Return Anhaenge.Count > 0
         End Get
     End Property
 

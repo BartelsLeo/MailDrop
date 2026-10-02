@@ -142,7 +142,7 @@ Public Module MailUtils
     '     reicht nicht: manche Clients (z.B. Apple Mail) vergeben sie auch an echte Anlagen.
     '   - RTF-Mails: eingebettete OLE-Objekte (Attachment.Type = olOLE).
     ' Im Zweifel (Property fehlt / Fehler) gilt der Anhang als echt - lieber ein Logo zu viel
-    ' vorausgewaehlt als eine echte Anlage verschwiegen.
+    ' in der Liste als eine echte Anlage, die sich nicht ablegen laesst.
     Private Function IsEmbeddedAttachment(att As Outlook.Attachment, htmlBody As String) As Boolean
         Try
             If att.Type = Outlook.OlAttachmentType.olOLE Then Return True
@@ -180,7 +180,8 @@ Public Module MailUtils
     End Function
 
     ' Liest Anhang-Namen und -Indizes aus der selektierten Mail und befüllt session.Anhaenge.
-    ' Eingebettete Elemente (IsEmbeddedAttachment) werden mit aufgefuehrt, aber nicht vorausgewaehlt.
+    ' Nur echte Anlagen: eingebettete Elemente (IsEmbeddedAttachment) werden uebersprungen und sind
+    ' damit weder sichtbar noch ablegbar. OutlookIndex bleibt der Index in mail.Attachments.
     Public Sub ReadAttachmentNames(session As Session)
         Dim mail As Object = Nothing
         Try
@@ -194,12 +195,14 @@ Public Module MailUtils
                 Dim att As Object = Nothing
                 Try
                     att = mail.Attachments(i)
-                    Dim eingebettet As Boolean = IsEmbeddedAttachment(att, htmlBody)
+                    If IsEmbeddedAttachment(att, htmlBody) Then
+                        Debug.WriteLine($"[MailUtils] Eingebettetes Element übersprungen: {att.FileName}")
+                        Continue For
+                    End If
                     session.Anhaenge.Add(New AttachmentItem() With {
                         .Name = att.FileName,
                         .OutlookIndex = i,
-                        .IsEmbedded = eingebettet,
-                        .IsSelected = Not eingebettet
+                        .IsSelected = True
                     })
                 Finally
                     ReleaseComObjectSafe(att)
