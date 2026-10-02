@@ -88,4 +88,5 @@ verteilt oder MailDrop mit einem gekauften Code-Signing-Zertifikat signiert wird
 | Rote Meldung „Zugriff verweigert“ bei `TrustedPublisher` (ältere Skriptversion) | Firmenrichtlinie sperrt „Vertrauenswürdige Herausgeber“ | Ignorieren, `setup.exe` starten, Rückfrage mit „Installieren“ bestätigen |
 | Zertifikats-/Herausgeberfehler bei `setup.exe` | `Install-Certificate` nicht ausgeführt | Schritt 4 ausführen |
 | „eine andere Version ist installiert“ | Alte Installation mit früherem Zertifikat | MailDrop unter *Apps & Features* deinstallieren, neu installieren |
+| Beim Outlook-Start: `DeploymentDownloadException` … „Zugriff auf den Pfad …\Temp\Deployment\…\MailDrop.dll wurde verweigert“ | Defender-Regel „Office-Anwendungen am Erstellen ausführbarer Inhalte hindern“ blockiert das Update, weil Outlook es selbst herunterlädt (Windows-Sicherheit → Schutzverlauf zeigt „Aktion blockiert“) | `setup.exe` von `Y:` erneut starten (Update außerhalb von Outlook); dauerhaft: IT um Ausnahme für `%LOCALAPPDATA%\Temp\Deployment\` bitten |
 | Button fehlt nach Outlook-Neustart | Add-in von Outlook deaktiviert | Siehe README, Abschnitt „Troubleshooting“ |

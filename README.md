@@ -276,6 +276,12 @@ Unterstuetzte Platzhalter in Ablageordner und msg Dateiname:
   das Add-in wird direkt nach der Installation wegen Zeitueberschreitung deaktiviert, ggf. mit dieser
   Fehlermeldung: `DeploymentDownloadException` / `UnauthorizedAccessException: Der Zugriff auf den
   Pfad "...\AppData\Local\Temp\Deployment\...\MailDrop.dll" wurde verweigert`:
+  - **Bestaetigte Ursache beim Update (2026-10-02):** Die Defender-Regel „Office-Anwendungen am
+    Erstellen ausfuehrbarer Inhalte hindern“ blockiert den Download, weil das Update beim Outlook-Start
+    von `OUTLOOK.EXE` selbst heruntergeladen wird (Windows-Sicherheit → Schutzverlauf: „Aktion
+    blockiert“). `setup.exe` ist kein Office-Programm, deshalb klappt eine Neuinstallation. Abhilfe:
+    `setup.exe` vom Netzlaufwerk erneut starten oder IT um eine Ausnahme fuer
+    `%LOCALAPPDATA%\Temp\Deployment\` bitten.
   - Belegte Ursache (direkt aus dem Stacktrace ablesbar): ClickOnce schreibt heruntergeladene Dateien
     zunaechst in einen zufaellig benannten, rein lokalen Ordner unter
     `%LOCALAPPDATA%\Temp\Deployment\` und oeffnet die Datei danach erneut, um Manifest/Signatur zu
