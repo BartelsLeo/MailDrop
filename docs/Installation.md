@@ -14,8 +14,15 @@ Netzlaufwerk `Y:` aus).
 5. **`setup.exe`** starten. Falls Office fragt, ob MailDrop installiert werden soll: **„Installieren“**.
 6. Outlook neu starten. Der Button **MailDrop** erscheint im Reiter *Start*.
 
-Pro Benutzer und Rechner einmal nötig. Spätere Updates kommen bei Installation vom Netzlaufwerk
-automatisch (siehe README, „Auto-Update“).
+Pro Benutzer und Rechner einmal nötig.
+
+## Updates
+
+Es gibt **kein automatisches Update** (abgeschaltet, siehe „Häufige Fehler“: Defender blockiert
+Updates, die Outlook selbst herunterlädt). Für eine neue Version: Outlook schließen, **`setup.exe`**
+der neuen Version erneut starten, Outlook wieder öffnen. Schritt 4 (Zertifikat) ist dafür nicht noch
+einmal nötig. Falls `setup.exe` meldet, dass schon eine andere Version installiert ist: MailDrop unter
+*Apps & Features* deinstallieren und dann `setup.exe` starten.
 
 ## Warum Schritt 2 wichtig ist
 
@@ -88,5 +95,5 @@ verteilt oder MailDrop mit einem gekauften Code-Signing-Zertifikat signiert wird
 | Rote Meldung „Zugriff verweigert“ bei `TrustedPublisher` (ältere Skriptversion) | Firmenrichtlinie sperrt „Vertrauenswürdige Herausgeber“ | Ignorieren, `setup.exe` starten, Rückfrage mit „Installieren“ bestätigen |
 | Zertifikats-/Herausgeberfehler bei `setup.exe` | `Install-Certificate` nicht ausgeführt | Schritt 4 ausführen |
 | „eine andere Version ist installiert“ | Alte Installation mit früherem Zertifikat | MailDrop unter *Apps & Features* deinstallieren, neu installieren |
-| Beim Outlook-Start: `DeploymentDownloadException` … „Zugriff auf den Pfad …\Temp\Deployment\…\MailDrop.dll wurde verweigert“ | Defender-Regel „Office-Anwendungen am Erstellen ausführbarer Inhalte hindern“ blockiert das Update, weil Outlook es selbst herunterlädt (Windows-Sicherheit → Schutzverlauf zeigt „Aktion blockiert“) | `setup.exe` von `Y:` erneut starten (Update außerhalb von Outlook); dauerhaft: IT um Ausnahme für `%LOCALAPPDATA%\Temp\Deployment\` bitten |
+| Beim Outlook-Start: `DeploymentDownloadException` … „Zugriff auf den Pfad …\Temp\Deployment\…\MailDrop.dll wurde verweigert“ | Defender-Regel „Office-Anwendungen am Erstellen ausführbarer Inhalte hindern“ blockiert das Update, weil Outlook es selbst herunterlädt (Windows-Sicherheit → Schutzverlauf zeigt „Aktion blockiert“) | Betrifft nur noch ältere Installationen, die selbst nach Updates suchen: einmal `setup.exe` der neuen Version starten (siehe „Updates“) |
 | Button fehlt nach Outlook-Neustart | Add-in von Outlook deaktiviert | Siehe README, Abschnitt „Troubleshooting“ |

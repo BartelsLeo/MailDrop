@@ -129,17 +129,20 @@ falls das Zertifikat jemals neu erzeugt wird (z.B. Kompromittierung des privaten
 das Skript neu aus `MailDrop.vsto` erzeugt werden (siehe Kommentar im Skript) und alle Benutzer muessen
 es erneut ausfuehren.
 
-#### Auto-Update
+#### Updates (kein Auto-Update)
 
-ClickOnce ist mit `UpdateEnabled=true` und ohne fest eingetragene Update-Adresse konfiguriert. Dadurch
-gilt: Der Ort, von dem aus installiert wurde, wird automatisch als Update-Quelle uebernommen.
+Das automatische Update ist abgeschaltet (`UpdateEnabled=false`, seit 2026-10-02). Grund: Beim
+Outlook-Start wurde das Update von `OUTLOOK.EXE` selbst heruntergeladen, und die Defender-Regel
+„Office-Anwendungen am Erstellen ausfuehrbarer Inhalte hindern“ blockiert genau das (Meldung
+`DeploymentDownloadException` ... `Temp\Deployment\...\MailDrop.dll` „Zugriff verweigert“, siehe
+Troubleshooting).
 
-- **Installation direkt vom Netzlaufwerk aus**: MailDrop prueft danach bei jedem Outlook-Start im
-  Hintergrund (`UpdateMode=Background`) automatisch, ob auf dem Netzlaufwerk eine neuere Version
-  liegt, und uebernimmt sie beim naechsten Neustart. Kein zusaetzlicher Schritt noetig.
-- **Installation aus einer lokal entpackten ZIP** (z.B. nach Download von GitHub Releases): Es gibt
-  keine automatische Update-Pruefung. Ein Update erfordert eine erneute manuelle Installation aus
-  einer neueren ZIP.
+- **Update einspielen:** Outlook schliessen und `setup.exe` der neuen Version (Netzlaufwerk oder neu
+  entpackte ZIP) erneut starten. `setup.exe` ist kein Office-Programm und wird von der Regel nicht
+  blockiert.
+- **Einmalig beim Umstieg:** Installationen einer aelteren Version pruefen beim Outlook-Start noch auf
+  Updates und laufen dabei weiter in den Fehler. Einmal `setup.exe` der neuen Version starten (bei
+  Problemen vorher deinstallieren) - danach gibt es keine Update-Pruefung mehr.
 
 **Hinweis:** Installation aus einem OneDrive-synchronisierten Ordner (z.B.
 `...\OneDrive - <Firma>\...\MailDrop\`) ist keine getestete/unterstuetzte dritte Variante neben
